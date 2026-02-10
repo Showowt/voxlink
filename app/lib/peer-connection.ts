@@ -17,31 +17,27 @@ export interface PeerCallbacks {
   onError?: (error: string) => void
 }
 
-// Reliable ICE configuration with multiple STUN/TURN servers
-const ICE_SERVERS: RTCIceServer[] = [
-  // Google STUN servers (free, reliable)
+// Default STUN servers (TURN fetched dynamically)
+const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun2.l.google.com:19302' },
-  { urls: 'stun:stun3.l.google.com:19302' },
-  { urls: 'stun:stun4.l.google.com:19302' },
-  // OpenRelay TURN (free, for NAT traversal)
-  {
-    urls: 'turn:openrelay.metered.ca:80',
-    username: 'openrelayproject',
-    credential: 'openrelayproject'
-  },
-  {
-    urls: 'turn:openrelay.metered.ca:443',
-    username: 'openrelayproject',
-    credential: 'openrelayproject'
-  },
-  {
-    urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-    username: 'openrelayproject',
-    credential: 'openrelayproject'
-  }
 ]
+
+// Fetch ICE servers from our API (includes working TURN)
+async function getIceServers(): Promise<RTCIceServer[]> {
+  try {
+    const response = await fetch('/api/turn')
+    if (response.ok) {
+      const data = await response.json()
+      console.log('🧊 Got ICE servers:', data.iceServers.length, 'servers')
+      return data.iceServers
+    }
+  } catch (err) {
+    console.error('Failed to fetch ICE servers:', err)
+  }
+  return DEFAULT_ICE_SERVERS
+}
 
 // Generate unique peer ID with timestamp
 function generatePeerId(roomId: string, role: 'host' | 'guest'): string {
@@ -70,6 +66,9 @@ export class PeerConnection {
   private connectionAttempts: number = 0
   private maxConnectionAttempts: number = 5
   private pollingInterval: NodeJS.Timeout | null = null
+  private keepAliveInterval: NodeJS.Timeout | null = null
+  private lastPingTime: number = 0
+  private iceServersCache: RTCIceServer[] | null = null
 
   constructor(callbacks: PeerCallbacks) {
     this.callbacks = callbacks
@@ -129,6 +128,9 @@ export class PeerConnection {
   }
 
   private async createPeer(): Promise<void> {
+    // Fetch working ICE servers (with TURN)
+    const iceServers = await getIceServers()
+
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('Timeout connecting to signaling server'))
@@ -136,7 +138,7 @@ export class PeerConnection {
 
       try {
         this.peer = new Peer(this.myPeerId, {
-          config: { iceServers: ICE_SERVERS },
+          config: { iceServers },
           debug: 1
         })
 
@@ -157,7 +159,7 @@ export class PeerConnection {
             console.log('🔄 ID taken, retrying with:', this.myPeerId)
 
             this.peer = new Peer(this.myPeerId, {
-              config: { iceServers: ICE_SERVERS },
+              config: { iceServers },
               debug: 1
             })
 
@@ -365,6 +367,9 @@ export class PeerConnection {
       // Send hello
       this.send({ type: 'hello', name: this.userName, peerId: this.myPeerId })
 
+      // Start keep-alive pings to prevent connection timeout
+      this.startKeepAlive()
+
       // If we're the guest, initiate the video call
       if (!this.isHost && this.localStream) {
         console.log('📞 Guest initiating video call...')
@@ -374,6 +379,17 @@ export class PeerConnection {
 
     conn.on('data', (data: any) => {
       if (this.destroyed) return
+
+      // Handle ping/pong for keep-alive
+      if (data?.type === 'ping') {
+        this.send({ type: 'pong', time: data.time })
+        return
+      }
+      if (data?.type === 'pong') {
+        const latency = Date.now() - data.time
+        console.log('🏓 Pong received, latency:', latency, 'ms')
+        return
+      }
 
       // Handle hello messages
       if (data?.type === 'hello') {
@@ -498,9 +514,35 @@ export class PeerConnection {
     if (this.destroyed) return
 
     console.log('🔌 Partner disconnected')
+    this.stopKeepAlive()
     this.callbacks.onPartnerLeft?.()
     this.remoteStream = null
     this.setStatus('failed', 'Conexión perdida')
+  }
+
+  private startKeepAlive(): void {
+    this.stopKeepAlive() // Clear any existing interval
+
+    // Send ping every 5 seconds to keep connection alive
+    this.keepAliveInterval = setInterval(() => {
+      if (this.destroyed || !this.dataConnection?.open) {
+        this.stopKeepAlive()
+        return
+      }
+
+      this.lastPingTime = Date.now()
+      this.send({ type: 'ping', time: this.lastPingTime })
+    }, 5000)
+
+    console.log('💓 Keep-alive started')
+  }
+
+  private stopKeepAlive(): void {
+    if (this.keepAliveInterval) {
+      clearInterval(this.keepAliveInterval)
+      this.keepAliveInterval = null
+      console.log('💔 Keep-alive stopped')
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -532,6 +574,9 @@ export class PeerConnection {
   disconnect(): void {
     console.log('🔌 Disconnecting...')
     this.destroyed = true
+
+    // Stop keep-alive
+    this.stopKeepAlive()
 
     // Clear any polling
     if (this.pollingInterval) {
