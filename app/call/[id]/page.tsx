@@ -308,10 +308,12 @@ function VideoCallContent() {
     const recognition = new SR()
     recognition.continuous = true
     recognition.interimResults = true
+    recognition.maxAlternatives = 1 // Faster processing
     recognition.lang = userLang === 'en' ? 'en-US' : 'es-ES'
 
     let finalizedText = ''
     let debounceTimer: NodeJS.Timeout | null = null
+    let lastTranslatedText = ''
 
     recognition.onresult = async (e: any) => {
       if (!mountedRef.current) return
@@ -331,17 +333,21 @@ function VideoCallContent() {
       const displayText = finalizedText + newFinal + interim
       setMyLiveText(displayText)
 
+      // ULTRA-FAST: Translate immediately with 80ms debounce
       if (debounceTimer) clearTimeout(debounceTimer)
       debounceTimer = setTimeout(async () => {
-        if (displayText.trim() && mountedRef.current) {
-          const translation = await translate(displayText.trim())
+        const textToTranslate = displayText.trim()
+        // Only translate if text changed
+        if (textToTranslate && textToTranslate !== lastTranslatedText && mountedRef.current) {
+          lastTranslatedText = textToTranslate
+          const translation = await translate(textToTranslate)
           if (mountedRef.current) {
             setMyLiveTranslation(translation)
             // Send to partner via Daily
-            callRef.current?.sendAppMessage({ type: 'caption', text: displayText.trim(), translation }, '*')
+            callRef.current?.sendAppMessage({ type: 'caption', text: textToTranslate, translation }, '*')
           }
         }
-      }, 150)
+      }, 80) // Reduced from 150ms to 80ms for faster updates
 
       if (newFinal.trim()) {
         finalizedText += newFinal
@@ -349,14 +355,16 @@ function VideoCallContent() {
         callRef.current?.sendAppMessage({ type: 'caption-final', text: finalizedText.trim(), translation }, '*')
         addToTranscript('me', userName, finalizedText.trim(), translation, userLang)
 
+        // Reset after 2 seconds (reduced from 3s)
         if (captionTimeoutRef.current) clearTimeout(captionTimeoutRef.current)
         captionTimeoutRef.current = setTimeout(() => {
           if (mountedRef.current) {
             finalizedText = ''
+            lastTranslatedText = ''
             setMyLiveText('')
             setMyLiveTranslation('')
           }
-        }, 3000)
+        }, 2000)
       }
     }
 
