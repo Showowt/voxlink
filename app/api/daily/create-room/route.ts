@@ -1,22 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-// Force dynamic rendering
+// ═══════════════════════════════════════════════════════════════════════════════
+// DAILY.CO ROOM CREATION API
+// Creates video rooms with enterprise-grade infrastructure
+// ═══════════════════════════════════════════════════════════════════════════════
+
 export const dynamic = 'force-dynamic'
 
-// Daily.co API - Get your key at https://dashboard.daily.co/developers
 const DAILY_API_KEY = process.env.DAILY_API_KEY || ''
 const DAILY_API_URL = 'https://api.daily.co/v1'
 
 // Rate limiting
 const roomCreations = new Map<string, number>()
-const MAX_ROOMS_PER_HOUR = 10
+const MAX_ROOMS_PER_HOUR = 20
 
 function checkRateLimit(ip: string): boolean {
   const now = Date.now()
   const hourAgo = now - 3600000
 
   // Clean old entries
-  for (const [key, time] of roomCreations.entries()) {
+  const entries = Array.from(roomCreations.entries())
+  for (const [key, time] of entries) {
     if (time < hourAgo) roomCreations.delete(key)
   }
 
@@ -35,25 +39,23 @@ export async function POST(req: NextRequest) {
 
   if (!checkRateLimit(ip)) {
     return NextResponse.json(
-      { error: 'Rate limit exceeded. Max 10 rooms per hour.' },
+      { error: 'Rate limit exceeded. Max 20 rooms per hour.' },
       { status: 429 }
     )
   }
 
   if (!DAILY_API_KEY) {
-    // Demo mode - return a test room URL for development
-    const roomName = `voxlink-${Date.now().toString(36)}`
-    return NextResponse.json({
-      name: roomName,
-      url: `https://voxlink.daily.co/${roomName}`,
-      demo: true,
-      message: 'Demo mode - set DAILY_API_KEY for production'
-    })
+    return NextResponse.json(
+      { error: 'Daily.co not configured' },
+      { status: 500 }
+    )
   }
 
   try {
     const body = await req.json().catch(() => ({}))
-    const roomName = body.roomName || `voxlink-${Date.now().toString(36)}`
+
+    // Generate unique room name
+    const roomName = body.roomName || `voxlink-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
 
     // Create room with Daily.co API
     const response = await fetch(`${DAILY_API_URL}/rooms`, {
@@ -67,12 +69,14 @@ export async function POST(req: NextRequest) {
         privacy: 'public',
         properties: {
           max_participants: 2,
-          enable_chat: false,
+          enable_chat: true,
           enable_knocking: false,
           enable_screenshare: false,
           enable_recording: false,
-          exp: Math.floor(Date.now() / 1000) + 3600, // Expires in 1 hour
+          exp: Math.floor(Date.now() / 1000) + 7200, // Expires in 2 hours
           eject_at_room_exp: true,
+          enable_prejoin_ui: false,
+          enable_network_ui: false,
           lang: 'en'
         }
       })
@@ -86,7 +90,7 @@ export async function POST(req: NextRequest) {
       if (error.info?.includes('already exists')) {
         return NextResponse.json({
           name: roomName,
-          url: `https://${process.env.DAILY_DOMAIN || 'voxlink'}.daily.co/${roomName}`,
+          url: `https://voxlink.daily.co/${roomName}`,
           existing: true
         })
       }
@@ -95,6 +99,7 @@ export async function POST(req: NextRequest) {
     }
 
     const room = await response.json()
+    console.log('✅ Room created:', room.name)
 
     return NextResponse.json({
       name: room.name,
@@ -117,11 +122,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (!DAILY_API_KEY) {
-    return NextResponse.json({
-      name: roomName,
-      url: `https://voxlink.daily.co/${roomName}`,
-      demo: true
-    })
+    return NextResponse.json({ error: 'Daily.co not configured' }, { status: 500 })
   }
 
   try {
@@ -143,5 +144,27 @@ export async function GET(req: NextRequest) {
     })
   } catch {
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
+  }
+}
+
+// Delete room
+export async function DELETE(req: NextRequest) {
+  const { searchParams } = new URL(req.url)
+  const roomName = searchParams.get('room')
+
+  if (!roomName || !DAILY_API_KEY) {
+    return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
+  }
+
+  try {
+    await fetch(`${DAILY_API_URL}/rooms/${roomName}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${DAILY_API_KEY}`
+      }
+    })
+    return NextResponse.json({ deleted: true })
+  } catch {
+    return NextResponse.json({ error: 'Failed to delete' }, { status: 500 })
   }
 }
