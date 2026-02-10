@@ -154,7 +154,7 @@ export class PeerConnection {
   private isDestroyed: boolean = false
 
   private reconnectAttempts = 0
-  private maxReconnects = 20 // More attempts for unreliable networks
+  private maxReconnects = 5 // Reduced - don't spam reconnections
   private reconnectTimer: NodeJS.Timeout | null = null
   private pingInterval: NodeJS.Timeout | null = null
   private connectionCheckInterval: NodeJS.Timeout | null = null
@@ -163,6 +163,11 @@ export class PeerConnection {
   // Track which server we're using
   private currentServerIndex = 0
   private serverRetryCount = 0
+
+  // Stability tracking - prevent reconnection loops
+  private lastStableConnection: number = 0
+  private reconnectCooldown: boolean = false
+  private connectionStable: boolean = false
 
   constructor(callbacks: PeerCallbacks) {
     this.callbacks = callbacks
@@ -415,6 +420,9 @@ export class PeerConnection {
       console.log('✅ Data channel open')
       this.setStatus('connected', '¡Conectado!')
       this.reconnectAttempts = 0
+      this.connectionStable = true
+      this.lastStableConnection = Date.now()
+      this.reconnectCooldown = false
       this.startPing()
       this.send({ type: 'join', name: this.userName, peerId: this.peer?.id })
     })
@@ -448,7 +456,25 @@ export class PeerConnection {
     conn.on('close', () => {
       if (this.isDestroyed) return
       console.log('📡 Data channel closed')
-      this.handlePartnerDisconnect()
+
+      // Don't immediately trigger disconnect - wait and check if media is still alive
+      // Data channel can close temporarily during network hiccups
+      setTimeout(() => {
+        if (this.isDestroyed) return
+
+        // If media stream is still active, don't disconnect
+        if (this.activeRemoteStream && this.mediaConnection) {
+          const tracks = this.activeRemoteStream.getTracks()
+          const anyLive = tracks.some(t => t.readyState === 'live')
+          if (anyLive) {
+            console.log('📺 Media still alive after data channel close, waiting...')
+            return
+          }
+        }
+
+        // Data channel truly gone and no media - handle disconnect
+        this.handlePartnerDisconnect()
+      }, 5000) // Wait 5 seconds before deciding connection is lost
     })
 
     conn.on('error', (err) => {
@@ -511,34 +537,40 @@ export class PeerConnection {
       clearTimeout(streamTimeout)
     })
 
-    // Monitor ICE state - but be less aggressive with restarts
+    // Monitor ICE state - be PATIENT with transient disconnections
     const pc = (call as any).peerConnection as RTCPeerConnection
     if (pc) {
       pc.oniceconnectionstatechange = () => {
         if (this.isDestroyed) return
         console.log('🧊 ICE state:', pc.iceConnectionState)
 
+        // Only restart ICE on actual failure, not disconnected (which is transient)
         if (pc.iceConnectionState === 'failed') {
           console.log('🧊 ICE failed, attempting restart...')
           this.attemptIceRestart(pc)
         }
 
-        // Only restart after longer disconnected period (5s instead of 3s)
+        // Disconnected is usually transient - wait 30 SECONDS before doing anything
+        // Most networks recover within 10-15 seconds
         if (pc.iceConnectionState === 'disconnected') {
           if (this.iceRestartTimer) clearTimeout(this.iceRestartTimer)
           this.iceRestartTimer = setTimeout(() => {
+            // Only restart if STILL disconnected after 30 seconds
             if (pc.iceConnectionState === 'disconnected' && !this.isDestroyed) {
-              console.log('🧊 ICE still disconnected, restarting...')
+              console.log('🧊 ICE still disconnected after 30s, attempting restart...')
               this.attemptIceRestart(pc)
             }
-          }, 5000)
+          }, 30000) // 30 seconds - much more patient
         }
 
         if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+          // Connection recovered - clear any pending restart
           if (this.iceRestartTimer) {
             clearTimeout(this.iceRestartTimer)
             this.iceRestartTimer = null
           }
+          this.connectionStable = true
+          this.lastStableConnection = Date.now()
         }
       }
 
@@ -563,6 +595,26 @@ export class PeerConnection {
   private handlePartnerDisconnect(): void {
     if (this.isDestroyed) return
 
+    // Prevent rapid-fire disconnection handling
+    if (this.reconnectCooldown) {
+      console.log('⏳ Reconnect cooldown active, ignoring disconnect')
+      return
+    }
+
+    // Check if we REALLY lost the connection or if it's just transient
+    // If media stream is still active, don't trigger full disconnect
+    if (this.activeRemoteStream && this.mediaConnection) {
+      const videoTrack = this.activeRemoteStream.getVideoTracks()[0]
+      if (videoTrack && videoTrack.readyState === 'live') {
+        console.log('📺 Media stream still alive, ignoring data channel hiccup')
+        return
+      }
+    }
+
+    console.log('🔌 Partner disconnected - starting cooldown')
+    this.reconnectCooldown = true
+
+    // Only notify partner left if we're sure they're gone
     this.stopPing()
     this.callbacks.onPartnerLeft?.()
     this.activeRemoteStream = null
@@ -574,6 +626,11 @@ export class PeerConnection {
       this.setStatus('reconnecting', 'Reconectando...')
       this.attemptReconnect(`vox-${this.mode}-${this.roomId}-host`)
     }
+
+    // Cooldown for 10 seconds before allowing another disconnect handling
+    setTimeout(() => {
+      this.reconnectCooldown = false
+    }, 10000)
   }
 
   private attemptReconnect(hostPeerId: string): void {
@@ -584,12 +641,13 @@ export class PeerConnection {
     }
 
     this.reconnectAttempts++
-    // Exponential backoff with jitter for network congestion
-    const baseDelay = Math.min(1000 * Math.pow(1.5, this.reconnectAttempts - 1), 10000)
-    const jitter = Math.random() * 1000
+    // Much longer delays - give network time to recover
+    // Start at 5 seconds, max at 30 seconds
+    const baseDelay = Math.min(5000 * Math.pow(1.5, this.reconnectAttempts - 1), 30000)
+    const jitter = Math.random() * 2000
     const delay = baseDelay + jitter
 
-    console.log(`🔄 Reconnect attempt ${this.reconnectAttempts}/${this.maxReconnects} in ${Math.round(delay)}ms`)
+    console.log(`🔄 Reconnect attempt ${this.reconnectAttempts}/${this.maxReconnects} in ${Math.round(delay / 1000)}s`)
     this.setStatus('reconnecting', `Reconectando (${this.reconnectAttempts}/${this.maxReconnects})...`)
 
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
@@ -618,7 +676,7 @@ export class PeerConnection {
       if (this._status === 'connected' && !this.isDestroyed) {
         this.send({ type: 'ping' })
       }
-    }, 8000) // Ping every 8 seconds - less aggressive for slow networks
+    }, 20000) // Ping every 20 seconds - very relaxed to avoid false disconnects
   }
 
   private stopPing(): void {
@@ -634,13 +692,22 @@ export class PeerConnection {
     this.connectionCheckInterval = setInterval(() => {
       if (this.isDestroyed) return
 
+      // Only check if we've been stable for at least 10 seconds
+      // This prevents false positives during initial connection
+      const timeSinceStable = Date.now() - this.lastStableConnection
+      if (timeSinceStable < 10000) return
+
       if (this._status === 'connected') {
+        // Only trigger disconnect if data connection is truly gone
+        // AND we're not in a cooldown period
         if (!this.dataConnection || !this.dataConnection.open) {
-          console.log('⚠️ Data connection lost')
-          this.handlePartnerDisconnect()
+          if (!this.reconnectCooldown) {
+            console.log('⚠️ Data connection lost')
+            this.handlePartnerDisconnect()
+          }
         }
       }
-    }, 15000) // Check every 15 seconds
+    }, 30000) // Check every 30 seconds - much more relaxed
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
