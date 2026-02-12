@@ -408,7 +408,14 @@ function VoxNoteTab() {
   const [copied, setCopied] = useState<'original' | 'translated' | null>(null)
   const [isOnline, setIsOnline] = useState(true)
   const [isSpeaking, setIsSpeaking] = useState(false)
-  
+  const [shared, setShared] = useState(false)
+  const [canShare, setCanShare] = useState(false)
+
+  // Check if Web Share API is available
+  useEffect(() => {
+    setCanShare(typeof navigator !== 'undefined' && !!navigator.share)
+  }, [])
+
   // Refs to avoid stale closures
   const recognitionRef = useRef<any>(null)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
@@ -662,6 +669,20 @@ function VoxNoteTab() {
     }
   }
 
+  // Share translation (Web Share API)
+  const shareTranslation = async () => {
+    if (!translatedText) return
+    try {
+      await navigator.share({ text: translatedText })
+      setShared(true)
+      setTimeout(() => setShared(false), 2000)
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        copyToClipboard(translatedText, 'translated')
+      }
+    }
+  }
+
   // Speak translation
   const speakTranslation = () => {
     if (!translatedText || isSpeaking) return
@@ -712,62 +733,62 @@ function VoxNoteTab() {
   }, [])
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2 sm:space-y-3">
       {/* Browser Compatibility Warning */}
       {!browserSupported && (
-        <div className="p-3 rounded-xl bg-orange-500/10 border border-orange-500/30 text-orange-400 text-sm text-center">
-          ⚠️ Speech recognition requires Chrome or Edge browser. Safari and Firefox are not supported.
-        </div>
-      )}
-      
-      {/* Offline Warning */}
-      {!isOnline && (
-        <div className="p-3 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-sm text-center">
-          ⚠️ You're offline. Translation requires internet.
+        <div className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-orange-500/10 border border-orange-500/30 text-orange-400 text-xs sm:text-sm text-center">
+          ⚠️ Use Chrome or Edge browser
         </div>
       )}
 
-      {/* Language Selector */}
-      <div className="flex items-center gap-2">
+      {/* Offline Warning */}
+      {!isOnline && (
+        <div className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-xs sm:text-sm text-center">
+          ⚠️ You're offline
+        </div>
+      )}
+
+      {/* Language Selector - Compact */}
+      <div className="flex items-center gap-1.5 sm:gap-2">
         <button
           onClick={() => setSourceLang(sourceLang === 'en' ? 'es' : 'en')}
           disabled={isRecording}
-          className={`flex-1 p-3 rounded-xl bg-[#1a1a2e] border border-gray-700 text-white flex items-center justify-center gap-2 transition ${
+          className={`flex-1 p-2 sm:p-3 rounded-lg sm:rounded-xl bg-[#1a1a2e] border border-gray-700 text-white flex items-center justify-center gap-1.5 sm:gap-2 transition ${
             isRecording ? 'opacity-50 cursor-not-allowed' : 'hover:border-gray-600'
           }`}
         >
-          <span className="text-xl">{sourceLang === 'en' ? '🇺🇸' : '🇪🇸'}</span>
-          <span className="font-medium">{sourceLang === 'en' ? 'English' : 'Español'}</span>
+          <span className="text-lg sm:text-xl">{sourceLang === 'en' ? '🇺🇸' : '🇪🇸'}</span>
+          <span className="font-medium text-sm sm:text-base">{sourceLang === 'en' ? 'EN' : 'ES'}</span>
         </button>
-        
+
         <button
           onClick={swapLanguages}
           disabled={isRecording}
-          className={`p-3 rounded-xl bg-[#1a1a2e] border border-gray-700 text-green-400 transition ${
+          className={`p-2 sm:p-3 rounded-lg sm:rounded-xl bg-[#1a1a2e] border border-gray-700 text-green-400 transition ${
             isRecording ? 'opacity-50 cursor-not-allowed' : 'hover:bg-green-500/10 hover:border-green-500/50'
           }`}
         >
           ⇄
         </button>
-        
+
         <button
           onClick={() => setTargetLang(targetLang === 'en' ? 'es' : 'en')}
           disabled={isRecording}
-          className={`flex-1 p-3 rounded-xl bg-[#1a1a2e] border border-gray-700 text-white flex items-center justify-center gap-2 transition ${
+          className={`flex-1 p-2 sm:p-3 rounded-lg sm:rounded-xl bg-[#1a1a2e] border border-gray-700 text-white flex items-center justify-center gap-1.5 sm:gap-2 transition ${
             isRecording ? 'opacity-50 cursor-not-allowed' : 'hover:border-gray-600'
           }`}
         >
-          <span className="text-xl">{targetLang === 'en' ? '🇺🇸' : '🇪🇸'}</span>
-          <span className="font-medium">{targetLang === 'en' ? 'English' : 'Español'}</span>
+          <span className="text-lg sm:text-xl">{targetLang === 'en' ? '🇺🇸' : '🇪🇸'}</span>
+          <span className="font-medium text-sm sm:text-base">{targetLang === 'en' ? 'EN' : 'ES'}</span>
         </button>
       </div>
 
-      {/* Recording Button */}
-      <div className="flex flex-col items-center py-6">
+      {/* Recording Button - Smaller on mobile */}
+      <div className="flex flex-col items-center py-3 sm:py-4">
         <button
           onClick={toggleRecording}
           disabled={isProcessing || !isOnline || !browserSupported}
-          className={`w-28 h-28 rounded-full flex items-center justify-center transition-all shadow-lg ${
+          className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center transition-all shadow-lg ${
             isProcessing || !browserSupported
               ? 'bg-gray-600 cursor-not-allowed'
               : isRecording
@@ -777,65 +798,57 @@ function VoxNoteTab() {
           style={isRecording ? { animation: 'pulse 1.5s ease-in-out infinite' } : {}}
         >
           {isProcessing ? (
-            <div className="w-10 h-10 border-4 border-white border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 sm:w-10 sm:h-10 border-4 border-white border-t-transparent rounded-full animate-spin" />
           ) : isRecording ? (
-            <div className="w-10 h-10 bg-white rounded-md" />
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white rounded-md" />
           ) : (
-            <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <svg className="w-10 h-10 sm:w-12 sm:h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1 1.93c-3.94-.49-7-3.85-7-7.93h2c0 3.31 2.69 6 6 6s6-2.69 6-6h2c0 4.08-3.06 7.44-7 7.93V19h4v2H8v-2h4v-3.07z"/>
             </svg>
           )}
         </button>
-        
+
         {/* Recording indicator */}
         {isRecording && (
-          <div className="mt-4 flex items-center gap-2">
-            <span className="relative flex h-3 w-3">
+          <div className="mt-2 sm:mt-3 flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5 sm:h-3 sm:w-3">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 sm:h-3 sm:w-3 bg-red-500"></span>
             </span>
-            <span className="text-red-400 font-mono text-lg">{formatTime(recordingTime)}</span>
+            <span className="text-red-400 font-mono text-base sm:text-lg">{formatTime(recordingTime)}</span>
           </div>
         )}
-        
-        <p className="text-gray-500 text-sm mt-3">
+
+        <p className="text-gray-500 text-xs sm:text-sm mt-2">
           {!browserSupported
-            ? 'Use Chrome or Edge browser'
-            : isProcessing 
-              ? 'Translating...' 
-              : isRecording 
-                ? 'Tap to stop recording' 
-                : 'Tap to record voice message'
+            ? 'Use Chrome or Edge'
+            : isProcessing
+              ? 'Translating...'
+              : isRecording
+                ? 'Tap to stop'
+                : 'Tap to record'
           }
         </p>
       </div>
 
       {/* Error */}
       {error && (
-        <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm text-center">
+        <div className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs sm:text-sm text-center">
           {error}
         </div>
       )}
 
-      {/* Original Text */}
+      {/* Original Text - Compact */}
       {displayText && (
-        <div className="space-y-2">
+        <div className="space-y-1 sm:space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-400 flex items-center gap-2">
+            <span className="text-xs sm:text-sm text-gray-400 flex items-center gap-1.5">
               <span>{sourceLang === 'en' ? '🇺🇸' : '🇪🇸'}</span>
-              Original ({sourceLang === 'en' ? 'English' : 'Español'})
-              {isRecording && <span className="text-green-400 text-xs">(listening...)</span>}
+              Original
+              {isRecording && <span className="text-green-400 text-[10px] sm:text-xs">(listening)</span>}
             </span>
-            {originalText && !isRecording && (
-              <button
-                onClick={() => copyToClipboard(originalText, 'original')}
-                className="text-xs text-cyan-400 hover:text-cyan-300 transition"
-              >
-                {copied === 'original' ? '✓ Copied!' : '📋 Copy'}
-              </button>
-            )}
           </div>
-          <div className={`p-4 rounded-xl bg-[#1a1a2e] border text-white min-h-[60px] ${
+          <div className={`p-2.5 sm:p-3 rounded-lg sm:rounded-xl bg-[#1a1a2e] border text-white text-sm sm:text-base ${
             isRecording ? 'border-green-500/50' : 'border-gray-700'
           }`}>
             {displayText}
@@ -844,57 +857,90 @@ function VoxNoteTab() {
         </div>
       )}
 
-      {/* Translated Text */}
+      {/* Translated Text - Compact with Share button */}
       {translatedText && (
-        <div className="space-y-2">
+        <div className="space-y-1.5 sm:space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-400 flex items-center gap-2">
+            <span className="text-xs sm:text-sm text-gray-400 flex items-center gap-1.5">
               <span>{targetLang === 'en' ? '🇺🇸' : '🇪🇸'}</span>
-              Translation ({targetLang === 'en' ? 'English' : 'Español'})
+              Translation
             </span>
-            <div className="flex gap-3">
-              <button
-                onClick={speakTranslation}
-                disabled={isSpeaking}
-                className={`text-xs transition ${
-                  isSpeaking ? 'text-green-400' : 'text-cyan-400 hover:text-cyan-300'
-                }`}
-              >
-                {isSpeaking ? '🔊 Playing...' : '🔊 Listen'}
-              </button>
+            <button
+              onClick={speakTranslation}
+              disabled={isSpeaking}
+              className={`text-xs transition ${
+                isSpeaking ? 'text-green-400' : 'text-cyan-400 hover:text-cyan-300'
+              }`}
+            >
+              {isSpeaking ? '🔊...' : '🔊'}
+            </button>
+          </div>
+          <div className="p-2.5 sm:p-3 rounded-lg sm:rounded-xl bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/30 text-green-100 text-sm sm:text-base">
+            {translatedText}
+          </div>
+
+          {/* Share/Copy Buttons */}
+          <div className="flex gap-2">
+            {canShare ? (
+              <>
+                <button
+                  onClick={shareTranslation}
+                  className={`flex-1 py-3 sm:py-4 rounded-lg sm:rounded-xl font-semibold text-base sm:text-lg transition shadow-lg ${
+                    shared
+                      ? 'bg-green-500 text-white shadow-green-500/25'
+                      : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-green-500/25'
+                  }`}
+                >
+                  {shared ? '✓ Shared!' : '📤 Share'}
+                </button>
+                <button
+                  onClick={() => copyToClipboard(translatedText, 'translated')}
+                  className={`py-3 sm:py-4 px-4 rounded-lg sm:rounded-xl font-semibold transition ${
+                    copied === 'translated'
+                      ? 'bg-green-500 text-white'
+                      : 'bg-[#1a1a2e] border border-gray-700 text-gray-300 hover:text-white'
+                  }`}
+                >
+                  {copied === 'translated' ? '✓' : '📋'}
+                </button>
+              </>
+            ) : (
               <button
                 onClick={() => copyToClipboard(translatedText, 'translated')}
-                className="text-xs text-cyan-400 hover:text-cyan-300 transition"
+                className={`w-full py-3 sm:py-4 rounded-lg sm:rounded-xl font-semibold text-base sm:text-lg transition shadow-lg ${
+                  copied === 'translated'
+                    ? 'bg-green-500 text-white shadow-green-500/25'
+                    : 'bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white shadow-cyan-500/25'
+                }`}
               >
                 {copied === 'translated' ? '✓ Copied!' : '📋 Copy'}
               </button>
-            </div>
-          </div>
-          <div className="p-4 rounded-xl bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/30 text-green-100 min-h-[60px]">
-            {translatedText}
+            )}
           </div>
         </div>
       )}
 
-      {/* Clear Button */}
+      {/* Clear Button - Compact */}
       {(originalText || translatedText) && !isRecording && (
         <button
           onClick={clearAll}
-          className="w-full py-3 rounded-xl bg-[#1a1a2e] border border-gray-700 text-gray-400 hover:text-white hover:border-gray-600 transition"
+          className="w-full py-2.5 sm:py-3 rounded-lg sm:rounded-xl bg-[#1a1a2e] border border-gray-700 text-gray-400 hover:text-white hover:border-gray-600 transition text-sm"
         >
-          🗑️ Clear & Start New
+          🗑️ Clear
         </button>
       )}
 
-      {/* WhatsApp Tip */}
-      <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/30">
-        <p className="text-green-400 text-sm font-medium flex items-center gap-2">
-          <span className="text-lg">💡</span> WhatsApp Voice Message Tip
-        </p>
-        <p className="text-gray-400 text-xs mt-2 leading-relaxed">
-          Play the WhatsApp voice message out loud on speaker, then tap the record button here to translate it instantly!
-        </p>
-      </div>
+      {/* WhatsApp Tip - Only show when no content */}
+      {!displayText && !translatedText && (
+        <div className="p-2.5 sm:p-4 rounded-lg sm:rounded-xl bg-green-500/10 border border-green-500/30">
+          <p className="text-green-400 text-xs sm:text-sm font-medium flex items-center gap-1.5 sm:gap-2">
+            <span>💡</span> Tip
+          </p>
+          <p className="text-gray-400 text-[10px] sm:text-xs mt-1 sm:mt-2">
+            Play a WhatsApp voice message on speaker, then tap record to translate!
+          </p>
+        </div>
+      )}
     </div>
   )
 }
