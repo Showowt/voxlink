@@ -7,6 +7,18 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
+// CORS headers for browser extension support
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+}
+
+// Handle CORS preflight
+export async function OPTIONS() {
+  return NextResponse.json({}, { headers: corsHeaders })
+}
+
 // Aggressive caching for instant responses
 const cache = new Map<string, { value: string; timestamp: number }>()
 const MAX_CACHE_SIZE = 2000
@@ -201,7 +213,7 @@ export async function POST(req: NextRequest) {
   // Rate limiting
   const ip = req.headers.get('x-forwarded-for') || 'unknown'
   if (!checkRateLimit(ip)) {
-    return NextResponse.json({ translation: '', error: 'Rate limit' }, { status: 429 })
+    return NextResponse.json({ translation: '', error: 'Rate limit' }, { status: 429, headers: corsHeaders })
   }
 
   try {
@@ -209,12 +221,12 @@ export async function POST(req: NextRequest) {
 
     // Validation
     if (!text || typeof text !== 'string') {
-      return NextResponse.json({ translation: '' })
+      return NextResponse.json({ translation: '' }, { headers: corsHeaders })
     }
 
     const cleanText = text.trim()
     if (!cleanText || sourceLang === targetLang) {
-      return NextResponse.json({ translation: cleanText })
+      return NextResponse.json({ translation: cleanText }, { headers: corsHeaders })
     }
 
     // Normalize language codes
@@ -230,7 +242,7 @@ export async function POST(req: NextRequest) {
         translation: cached,
         source: 'cache',
         latency: Date.now() - startTime
-      })
+      }, { headers: corsHeaders })
     }
 
     // 2. Dictionary lookup (INSTANT)
@@ -241,7 +253,7 @@ export async function POST(req: NextRequest) {
         translation: dictResult,
         source: 'dictionary',
         latency: Date.now() - startTime
-      })
+      }, { headers: corsHeaders })
     }
 
     // 3. Partial phrase matching for compound sentences
@@ -254,7 +266,7 @@ export async function POST(req: NextRequest) {
           translation: partial,
           source: 'dictionary',
           latency: Date.now() - startTime
-        })
+        }, { headers: corsHeaders })
       }
     }
 
@@ -294,11 +306,11 @@ export async function POST(req: NextRequest) {
       translation: finalTranslation,
       source: translation ? source : 'passthrough',
       latency: Date.now() - startTime
-    })
+    }, { headers: corsHeaders })
 
   } catch (error) {
     console.error('Translation error:', error)
-    return NextResponse.json({ translation: '', error: 'Failed' }, { status: 500 })
+    return NextResponse.json({ translation: '', error: 'Failed' }, { status: 500, headers: corsHeaders })
   }
 }
 
@@ -310,7 +322,7 @@ export async function GET(req: NextRequest) {
   const to = searchParams.get('to') || 'es'
 
   if (!text) {
-    return NextResponse.json({ error: 'Missing text' }, { status: 400 })
+    return NextResponse.json({ error: 'Missing text' }, { status: 400, headers: corsHeaders })
   }
 
   return POST(new NextRequest(req.url, {

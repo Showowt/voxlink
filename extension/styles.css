@@ -147,10 +147,16 @@
   border-color: #06b6d4;
 }
 
-/* Input */
+/* Input Row */
+#voxlink-input-row {
+  display: flex;
+  gap: 8px;
+  padding: 0 12px;
+  align-items: stretch;
+}
+
 #voxlink-input {
-  width: calc(100% - 24px);
-  margin: 0 12px;
+  flex: 1;
   padding: 12px;
   background: #252540;
   border: 1px solid #444;
@@ -169,6 +175,37 @@
 
 #voxlink-input::placeholder {
   color: #666;
+}
+
+/* Mic Button */
+#voxlink-mic {
+  width: 50px;
+  background: #252540;
+  border: 1px solid #444;
+  border-radius: 8px;
+  color: white;
+  font-size: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#voxlink-mic:hover {
+  background: #303050;
+  border-color: #22c55e;
+}
+
+#voxlink-mic.recording {
+  background: #dc2626;
+  border-color: #dc2626;
+  animation: pulse-mic 1s ease-in-out infinite;
+}
+
+@keyframes pulse-mic {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
 }
 
 /* Output */
@@ -228,10 +265,36 @@
 /* Actions */
 #voxlink-actions {
   padding: 0 12px 12px;
+  display: flex;
+  gap: 8px;
+}
+
+#voxlink-copy {
+  padding: 12px 16px;
+  background: #252540;
+  border: 1px solid #444;
+  border-radius: 8px;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+#voxlink-copy:hover:not(:disabled) {
+  background: #303050;
+  border-color: #06b6d4;
+}
+
+#voxlink-copy:disabled {
+  background: #333;
+  cursor: not-allowed;
+  color: #666;
+  border-color: #333;
 }
 
 #voxlink-send {
-  width: 100%;
+  flex: 1;
   padding: 12px;
   background: linear-gradient(135deg, #22c55e, #16a34a);
   border: none;
@@ -277,6 +340,11 @@
 
 #voxlink-status.error {
   color: #ef4444;
+}
+
+#voxlink-status.recording {
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.1);
 }
 
 #voxlink-status:empty {
