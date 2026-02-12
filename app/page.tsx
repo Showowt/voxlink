@@ -4,6 +4,386 @@ import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// VOXTYPE COMPONENT - Type & Verify Translation (Back-Translation)
+// Solves: Google Translate meaning drift, copy-paste friction
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function VoxTypeTab() {
+  // Language state
+  const [sourceLang, setSourceLang] = useState<'en' | 'es'>('en')
+  const [targetLang, setTargetLang] = useState<'en' | 'es'>('es')
+
+  // Text state
+  const [inputText, setInputText] = useState('')
+  const [translatedText, setTranslatedText] = useState('')
+  const [backTranslation, setBackTranslation] = useState('')
+
+  // UI state
+  const [isTranslating, setIsTranslating] = useState(false)
+  const [error, setError] = useState('')
+  const [copied, setCopied] = useState(false)
+  const [shared, setShared] = useState(false)
+  const [meaningMatch, setMeaningMatch] = useState<'match' | 'warning' | null>(null)
+  const [canShare, setCanShare] = useState(false)
+
+  // Check if Web Share API is available
+  useEffect(() => {
+    setCanShare(typeof navigator !== 'undefined' && !!navigator.share)
+  }, [])
+
+  // Debounce timer
+  const debounceRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Auto-sync languages
+  useEffect(() => {
+    if (sourceLang === targetLang) {
+      setTargetLang(sourceLang === 'en' ? 'es' : 'en')
+    }
+  }, [sourceLang, targetLang])
+
+  // Swap languages
+  const swapLanguages = useCallback(() => {
+    const newSource = targetLang
+    const newTarget = sourceLang
+    setSourceLang(newSource)
+    setTargetLang(newTarget)
+    setInputText('')
+    setTranslatedText('')
+    setBackTranslation('')
+    setMeaningMatch(null)
+  }, [sourceLang, targetLang])
+
+  // Translate with back-translation
+  const translateWithVerification = useCallback(async (text: string) => {
+    if (!text.trim()) {
+      setTranslatedText('')
+      setBackTranslation('')
+      setMeaningMatch(null)
+      return
+    }
+
+    setIsTranslating(true)
+    setError('')
+
+    try {
+      // Step 1: Translate to target language
+      const response1 = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: text.trim(),
+          sourceLang,
+          targetLang
+        })
+      })
+
+      if (!response1.ok) throw new Error('Translation failed')
+      const data1 = await response1.json()
+
+      if (!data1.translation) {
+        setError(data1.error || 'Translation failed')
+        return
+      }
+
+      setTranslatedText(data1.translation)
+
+      // Step 2: Back-translate to verify meaning
+      const response2 = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: data1.translation,
+          sourceLang: targetLang,
+          targetLang: sourceLang
+        })
+      })
+
+      if (!response2.ok) throw new Error('Back-translation failed')
+      const data2 = await response2.json()
+
+      if (data2.translation) {
+        setBackTranslation(data2.translation)
+
+        // Simple meaning comparison (normalize and compare)
+        const normalize = (s: string) => s.toLowerCase().replace(/[^\w\s]/g, '').trim()
+        const original = normalize(text)
+        const back = normalize(data2.translation)
+
+        // Check similarity
+        const words1 = original.split(/\s+/)
+        const words2 = back.split(/\s+/)
+        const commonWords = words1.filter(w => words2.includes(w))
+        const similarity = commonWords.length / Math.max(words1.length, words2.length)
+
+        setMeaningMatch(similarity > 0.5 ? 'match' : 'warning')
+      }
+    } catch (err) {
+      console.error('Translation error:', err)
+      setError('Translation failed. Check your connection.')
+    } finally {
+      setIsTranslating(false)
+    }
+  }, [sourceLang, targetLang])
+
+  // Debounced translation on input change
+  useEffect(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current)
+    }
+
+    if (inputText.trim()) {
+      debounceRef.current = setTimeout(() => {
+        translateWithVerification(inputText)
+      }, 500)
+    } else {
+      setTranslatedText('')
+      setBackTranslation('')
+      setMeaningMatch(null)
+    }
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [inputText, translateWithVerification])
+
+  // Copy translation
+  const copyTranslation = async () => {
+    if (!translatedText) return
+
+    try {
+      await navigator.clipboard.writeText(translatedText)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      const textarea = document.createElement('textarea')
+      textarea.value = translatedText
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  // Share translation (Web Share API)
+  const shareTranslation = async () => {
+    if (!translatedText) return
+
+    try {
+      await navigator.share({
+        text: translatedText
+      })
+      setShared(true)
+      setTimeout(() => setShared(false), 2000)
+    } catch (err: any) {
+      // User cancelled or share failed - fallback to copy
+      if (err.name !== 'AbortError') {
+        copyTranslation()
+      }
+    }
+  }
+
+  // Clear all
+  const clearAll = () => {
+    setInputText('')
+    setTranslatedText('')
+    setBackTranslation('')
+    setError('')
+    setMeaningMatch(null)
+  }
+
+  return (
+    <div className="space-y-3 sm:space-y-4">
+      {/* Header - Hidden on small mobile to save space */}
+      <div className="text-center pb-1 sm:pb-2 hidden sm:block">
+        <p className="text-gray-400 text-xs sm:text-sm">
+          Type → Translate → <span className="text-cyan-400">Verify meaning</span> → Share
+        </p>
+      </div>
+
+      {/* Language Selector - Compact */}
+      <div className="flex items-center gap-1.5 sm:gap-2">
+        <button
+          onClick={() => setSourceLang(sourceLang === 'en' ? 'es' : 'en')}
+          className="flex-1 p-2 sm:p-3 rounded-lg sm:rounded-xl bg-[#1a1a2e] border border-gray-700 text-white flex items-center justify-center gap-1.5 sm:gap-2 transition hover:border-gray-600"
+        >
+          <span className="text-lg sm:text-xl">{sourceLang === 'en' ? '🇺🇸' : '🇪🇸'}</span>
+          <span className="font-medium text-sm sm:text-base">{sourceLang === 'en' ? 'EN' : 'ES'}</span>
+        </button>
+
+        <button
+          onClick={swapLanguages}
+          className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-[#1a1a2e] border border-gray-700 text-cyan-400 transition hover:bg-cyan-500/10 hover:border-cyan-500/50"
+        >
+          ⇄
+        </button>
+
+        <button
+          onClick={() => setTargetLang(targetLang === 'en' ? 'es' : 'en')}
+          className="flex-1 p-2 sm:p-3 rounded-lg sm:rounded-xl bg-[#1a1a2e] border border-gray-700 text-white flex items-center justify-center gap-1.5 sm:gap-2 transition hover:border-gray-600"
+        >
+          <span className="text-lg sm:text-xl">{targetLang === 'en' ? '🇺🇸' : '🇪🇸'}</span>
+          <span className="font-medium text-sm sm:text-base">{targetLang === 'en' ? 'EN' : 'ES'}</span>
+        </button>
+      </div>
+
+      {/* Input Field - Compact */}
+      <div className="space-y-1.5 sm:space-y-2">
+        <label className="text-xs sm:text-sm text-gray-400 flex items-center gap-1.5 sm:gap-2">
+          <span>{sourceLang === 'en' ? '🇺🇸' : '🇪🇸'}</span>
+          Type your message
+        </label>
+        <textarea
+          value={inputText}
+          onChange={(e) => setInputText(e.target.value)}
+          placeholder={sourceLang === 'en' ? 'Type what you want to say...' : 'Escribe lo que quieres decir...'}
+          rows={2}
+          className="w-full px-3 py-2.5 sm:px-4 sm:py-3 bg-[#1a1a2e] border border-gray-700 rounded-lg sm:rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition resize-none text-base sm:text-lg"
+        />
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs sm:text-sm text-center">
+          {error}
+        </div>
+      )}
+
+      {/* Loading */}
+      {isTranslating && (
+        <div className="flex items-center justify-center gap-2 py-3 sm:py-4">
+          <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-gray-400 text-xs sm:text-sm">Translating...</span>
+        </div>
+      )}
+
+      {/* Translation Result */}
+      {translatedText && !isTranslating && (
+        <div className="space-y-1.5 sm:space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-xs sm:text-sm text-gray-400 flex items-center gap-1.5 sm:gap-2">
+              <span>{targetLang === 'en' ? '🇺🇸' : '🇪🇸'}</span>
+              Translation
+            </label>
+          </div>
+          <div className="p-3 sm:p-4 rounded-lg sm:rounded-xl bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 text-cyan-100 text-sm sm:text-base">
+            {translatedText}
+          </div>
+
+          {/* Share/Copy Buttons - Compact */}
+          <div className="flex gap-2">
+            {canShare ? (
+              <>
+                {/* Share Button - Primary on mobile */}
+                <button
+                  onClick={shareTranslation}
+                  className={`flex-1 py-3 sm:py-4 rounded-lg sm:rounded-xl font-semibold text-base sm:text-lg transition shadow-lg ${
+                    shared
+                      ? 'bg-green-500 text-white shadow-green-500/25'
+                      : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-green-500/25'
+                  }`}
+                >
+                  {shared ? '✓ Shared!' : '📤 Share'}
+                </button>
+                {/* Copy Button - Secondary */}
+                <button
+                  onClick={copyTranslation}
+                  className={`py-3 sm:py-4 px-4 sm:px-5 rounded-lg sm:rounded-xl font-semibold text-base sm:text-lg transition ${
+                    copied
+                      ? 'bg-green-500 text-white'
+                      : 'bg-[#1a1a2e] border border-gray-700 text-gray-300 hover:text-white hover:border-gray-600'
+                  }`}
+                >
+                  {copied ? '✓' : '📋'}
+                </button>
+              </>
+            ) : (
+              /* Copy Button - Primary on desktop */
+              <button
+                onClick={copyTranslation}
+                className={`w-full py-3 sm:py-4 rounded-lg sm:rounded-xl font-semibold text-base sm:text-lg transition shadow-lg ${
+                  copied
+                    ? 'bg-green-500 text-white shadow-green-500/25'
+                    : 'bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white shadow-cyan-500/25'
+                }`}
+              >
+                {copied ? '✓ Copied!' : '📋 Copy Translation'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Back-Translation Verification - Compact */}
+      {backTranslation && !isTranslating && (
+        <div className="space-y-1.5 sm:space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-xs sm:text-sm text-gray-400 flex items-center gap-1.5">
+              <span>🔄</span>
+              <span className="hidden sm:inline">Verification</span>
+              <span className="sm:hidden">Verify</span>
+            </label>
+            {meaningMatch === 'match' && (
+              <span className="text-xs text-green-400 flex items-center gap-1">
+                ✓ OK
+              </span>
+            )}
+            {meaningMatch === 'warning' && (
+              <span className="text-xs text-yellow-400 flex items-center gap-1">
+                ⚠️ Check
+              </span>
+            )}
+          </div>
+          <div className={`p-2.5 sm:p-3 rounded-lg sm:rounded-xl border text-sm sm:text-base ${
+            meaningMatch === 'match'
+              ? 'bg-green-500/10 border-green-500/30 text-green-100'
+              : meaningMatch === 'warning'
+                ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-100'
+                : 'bg-[#1a1a2e] border-gray-700 text-gray-300'
+          }`}>
+            <p className="text-[10px] sm:text-xs text-gray-500 mb-0.5 sm:mb-1">They will understand:</p>
+            <p>{backTranslation}</p>
+          </div>
+
+          {meaningMatch === 'warning' && (
+            <p className="text-[10px] sm:text-xs text-yellow-400 text-center">
+              💡 Rephrase with simpler words
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Clear Button - Compact */}
+      {inputText && (
+        <button
+          onClick={clearAll}
+          className="w-full py-2.5 sm:py-3 rounded-lg sm:rounded-xl bg-[#1a1a2e] border border-gray-700 text-gray-400 hover:text-white hover:border-gray-600 transition text-sm sm:text-base"
+        >
+          🗑️ Clear
+        </button>
+      )}
+
+      {/* WhatsApp Workflow - Hidden on mobile when there's content, always shown when empty */}
+      {!translatedText && (
+        <div className="p-3 sm:p-4 rounded-lg sm:rounded-xl bg-green-500/10 border border-green-500/30">
+          <p className="text-green-400 text-xs sm:text-sm font-medium flex items-center gap-2">
+            <span className="text-base sm:text-lg">💬</span> How it works
+          </p>
+          <ol className="text-gray-400 text-[10px] sm:text-xs mt-1.5 sm:mt-2 space-y-0.5 sm:space-y-1 list-decimal list-inside">
+            <li>Type your message</li>
+            <li>Check verification matches your intent</li>
+            <li>Tap Share or Copy</li>
+          </ol>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // VOXNOTE COMPONENT - WhatsApp Voice Message Translator
 // Fixed: Stale closure bug, cleanup on unmount, same language prevention
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -535,7 +915,7 @@ function HomeContent() {
   const [name, setName] = useState('')
   const [language, setLanguage] = useState<'en' | 'es'>('en')
   const [joinCode, setJoinCode] = useState('')
-  const [activeTab, setActiveTab] = useState<'video' | 'talk' | 'voxnote'>('voxnote')
+  const [activeTab, setActiveTab] = useState<'video' | 'talk' | 'voxnote' | 'voxtype'>('voxtype')
   const [mode, setMode] = useState<'start' | 'join'>('start')
   const [isJoining, setIsJoining] = useState(false)
 
@@ -680,37 +1060,47 @@ function HomeContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0a0a0f] via-[#0d1117] to-[#0a0a0f] flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 mb-3 shadow-lg shadow-cyan-500/25">
-            <span className="text-3xl">🔗</span>
+    <div className="min-h-[100dvh] bg-gradient-to-br from-[#0a0a0f] via-[#0d1117] to-[#0a0a0f] flex flex-col py-3 px-3 sm:py-4 sm:px-4 sm:justify-center overflow-y-auto">
+      <div className="w-full max-w-md mx-auto flex-shrink-0">
+        {/* Logo - Compact on mobile */}
+        <div className="text-center mb-3 sm:mb-6">
+          <div className="inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 mb-2 sm:mb-3 shadow-lg shadow-cyan-500/25">
+            <span className="text-2xl sm:text-3xl">🔗</span>
           </div>
-          <div className="flex items-center justify-center gap-1 mb-1">
-            <span className="text-sm font-medium text-cyan-400 tracking-wider">MACHINEMIND</span>
+          <div className="flex items-center justify-center gap-1 mb-0.5 sm:mb-1">
+            <span className="text-xs sm:text-sm font-medium text-cyan-400 tracking-wider">MACHINEMIND</span>
           </div>
-          <h1 className="text-3xl font-bold text-white mb-1">VoxLink™</h1>
-          <p className="text-gray-400 text-sm">Break Language Barriers Instantly</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-white mb-0.5 sm:mb-1">VoxLink™</h1>
+          <p className="text-gray-400 text-xs sm:text-sm">Break Language Barriers Instantly</p>
         </div>
 
         {/* Card */}
-        <div className="bg-[#12121a] rounded-2xl border border-gray-800 overflow-hidden shadow-xl">
-          {/* Mode Tabs */}
+        <div className="bg-[#12121a] rounded-xl sm:rounded-2xl border border-gray-800 overflow-hidden shadow-xl">
+          {/* Mode Tabs - Compact on mobile */}
           <div className="flex border-b border-gray-800">
             <button
-              onClick={() => setActiveTab('video')}
-              className={`flex-1 py-3 text-center font-medium transition text-sm ${
-                activeTab === 'video'
+              onClick={() => setActiveTab('voxtype')}
+              className={`flex-1 py-2.5 sm:py-3 text-center font-medium transition text-xs sm:text-sm ${
+                activeTab === 'voxtype'
                   ? 'text-cyan-400 border-b-2 border-cyan-400 bg-cyan-500/5'
                   : 'text-gray-400 hover:text-white'
               }`}
             >
-              📹 Video
+              ⌨️ Type
+            </button>
+            <button
+              onClick={() => setActiveTab('voxnote')}
+              className={`flex-1 py-2.5 sm:py-3 text-center font-medium transition text-xs sm:text-sm ${
+                activeTab === 'voxnote'
+                  ? 'text-green-400 border-b-2 border-green-400 bg-green-500/5'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              🎤 Voice
             </button>
             <button
               onClick={() => setActiveTab('talk')}
-              className={`flex-1 py-3 text-center font-medium transition text-sm ${
+              className={`flex-1 py-2.5 sm:py-3 text-center font-medium transition text-xs sm:text-sm ${
                 activeTab === 'talk'
                   ? 'text-cyan-400 border-b-2 border-cyan-400 bg-cyan-500/5'
                   : 'text-gray-400 hover:text-white'
@@ -719,20 +1109,22 @@ function HomeContent() {
               💬 Face
             </button>
             <button
-              onClick={() => setActiveTab('voxnote')}
-              className={`flex-1 py-3 text-center font-medium transition text-sm ${
-                activeTab === 'voxnote'
-                  ? 'text-green-400 border-b-2 border-green-400 bg-green-500/5'
+              onClick={() => setActiveTab('video')}
+              className={`flex-1 py-2.5 sm:py-3 text-center font-medium transition text-xs sm:text-sm ${
+                activeTab === 'video'
+                  ? 'text-cyan-400 border-b-2 border-cyan-400 bg-cyan-500/5'
                   : 'text-gray-400 hover:text-white'
               }`}
             >
-              🎤 VoxNote
+              📹 Call
             </button>
           </div>
 
-          <div className="p-5">
-            {/* VoxNote Tab - Voice Message Translator */}
-            {activeTab === 'voxnote' ? (
+          <div className="p-3 sm:p-5 max-h-[calc(100dvh-220px)] sm:max-h-none overflow-y-auto">
+            {/* VoxType Tab - Type & Verify Translation */}
+            {activeTab === 'voxtype' ? (
+              <VoxTypeTab />
+            ) : activeTab === 'voxnote' ? (
               <VoxNoteTab />
             ) : (
               <>
@@ -841,24 +1233,21 @@ function HomeContent() {
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="text-center mt-6 space-y-2">
-          <p className="text-gray-500 text-xs">
-            Works best in Chrome • Microphone required • <a href="/status" className="text-cyan-500 hover:underline">System Status</a>
+        {/* Footer - Compact on mobile */}
+        <div className="text-center mt-3 sm:mt-6 space-y-1 sm:space-y-2 pb-2">
+          <p className="text-gray-500 text-[10px] sm:text-xs">
+            Chrome recommended • <a href="/status" className="text-cyan-500 hover:underline">Status</a>
           </p>
-          <div className="pt-2 border-t border-gray-800">
-            <a 
-              href="https://machinemindconsulting.com" 
-              target="_blank" 
+          <div className="pt-1 sm:pt-2 border-t border-gray-800">
+            <a
+              href="https://machinemindconsulting.com"
+              target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-xs text-gray-400 hover:text-cyan-400 transition"
+              className="inline-flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs text-gray-400 hover:text-cyan-400 transition"
             >
               <span>Powered by</span>
               <span className="font-semibold text-cyan-500">MachineMind</span>
             </a>
-            <p className="text-[10px] text-gray-600 mt-1">
-              Need AI for your business? <a href="https://machinemindconsulting.com" target="_blank" rel="noopener noreferrer" className="text-cyan-500 hover:underline">Let&apos;s talk →</a>
-            </p>
           </div>
         </div>
       </div>
