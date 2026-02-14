@@ -78,10 +78,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ valid: false, error: "Invalid code format" });
     }
 
+    // Normalize both codes to exactly 4 characters
+    const normalizedCode = code.trim().slice(0, 4).padEnd(4, "0");
+    const normalizedAccess = ACCESS_CODE.trim().slice(0, 4).padEnd(4, "0");
+
     // Constant-time comparison to prevent timing attacks
     const isValid = crypto.timingSafeEqual(
-      Buffer.from(code.padEnd(4, "0")),
-      Buffer.from(ACCESS_CODE.padEnd(4, "0")),
+      Buffer.from(normalizedCode),
+      Buffer.from(normalizedAccess),
     );
 
     if (isValid) {
