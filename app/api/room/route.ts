@@ -1,27 +1,30 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from "next/server";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ROOM SIGNALING API - Simple room coordination for PeerJS
 // Stores host peer IDs so guests can discover them
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 // In-memory room registry (resets on cold start, but that's fine for our use case)
 // Key: roomId, Value: { hostPeerId, timestamp, hostName }
-const roomRegistry = new Map<string, {
-  hostPeerId: string
-  hostName: string
-  timestamp: number
-}>()
+const roomRegistry = new Map<
+  string,
+  {
+    hostPeerId: string;
+    hostName: string;
+    timestamp: number;
+  }
+>();
 
 // Clean up old rooms (older than 2 hours)
 function cleanupOldRooms() {
-  const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000
-  const entries = Array.from(roomRegistry.entries())
+  const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
+  const entries = Array.from(roomRegistry.entries());
   for (const [roomId, data] of entries) {
     if (data.timestamp < twoHoursAgo) {
-      roomRegistry.delete(roomId)
+      roomRegistry.delete(roomId);
     }
   }
 }
@@ -29,96 +32,112 @@ function cleanupOldRooms() {
 // POST - Host registers their peer ID
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json()
-    const { roomId, hostPeerId, hostName } = body
+    const body = await req.json();
+    const { roomId, hostPeerId, hostName } = body;
 
-    if (!roomId || !hostPeerId) {
+    // Validate roomId (alphanumeric, max 64 chars)
+    if (
+      !roomId ||
+      typeof roomId !== "string" ||
+      !/^[a-zA-Z0-9-]{1,64}$/.test(roomId)
+    ) {
       return NextResponse.json(
-        { error: 'roomId and hostPeerId required' },
-        { status: 400 }
-      )
+        { error: "Invalid roomId format" },
+        { status: 400 },
+      );
+    }
+
+    // Validate hostPeerId (alphanumeric + hyphen, max 128 chars)
+    if (
+      !hostPeerId ||
+      typeof hostPeerId !== "string" ||
+      !/^[a-zA-Z0-9-]{1,128}$/.test(hostPeerId)
+    ) {
+      return NextResponse.json(
+        { error: "Invalid hostPeerId format" },
+        { status: 400 },
+      );
+    }
+
+    // Validate hostName (optional, max 100 chars)
+    if (hostName && (typeof hostName !== "string" || hostName.length > 100)) {
+      return NextResponse.json({ error: "Invalid hostName" }, { status: 400 });
     }
 
     // Clean up old rooms periodically
-    cleanupOldRooms()
+    cleanupOldRooms();
 
     // Register the room
     roomRegistry.set(roomId, {
       hostPeerId,
-      hostName: hostName || 'Host',
-      timestamp: Date.now()
-    })
+      hostName: hostName || "Host",
+      timestamp: Date.now(),
+    });
 
-    console.log(`📍 Room registered: ${roomId} -> ${hostPeerId}`)
+    console.log(`📍 Room registered: ${roomId} -> ${hostPeerId}`);
 
     return NextResponse.json({
       success: true,
       roomId,
-      hostPeerId
-    })
+      hostPeerId,
+    });
   } catch (error) {
-    console.error('Room registration error:', error)
-    return NextResponse.json({ error: 'Server error' }, { status: 500 })
+    console.error("Room registration error:", error);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
 
 // GET - Guest looks up host's peer ID
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url)
-  const roomId = searchParams.get('roomId')
+  const { searchParams } = new URL(req.url);
+  const roomId = searchParams.get("roomId");
 
   if (!roomId) {
-    return NextResponse.json(
-      { error: 'roomId required' },
-      { status: 400 }
-    )
+    return NextResponse.json({ error: "roomId required" }, { status: 400 });
   }
 
-  const roomData = roomRegistry.get(roomId)
+  const roomData = roomRegistry.get(roomId);
 
   if (!roomData) {
     return NextResponse.json({
       found: false,
-      roomId
-    })
+      roomId,
+    });
   }
 
   // Check if room is stale (older than 30 minutes with no activity)
-  const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000
+  const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000;
   if (roomData.timestamp < thirtyMinutesAgo) {
-    roomRegistry.delete(roomId)
+    roomRegistry.delete(roomId);
     return NextResponse.json({
       found: false,
       roomId,
-      reason: 'expired'
-    })
+      reason: "expired",
+    });
   }
 
   return NextResponse.json({
     found: true,
     roomId,
     hostPeerId: roomData.hostPeerId,
-    hostName: roomData.hostName
-  })
+    hostName: roomData.hostName,
+  });
 }
 
 // DELETE - Clean up room when host leaves
 export async function DELETE(req: NextRequest) {
-  const { searchParams } = new URL(req.url)
-  const roomId = searchParams.get('roomId')
+  const { searchParams } = new URL(req.url);
+  const roomId = searchParams.get("roomId");
 
   if (!roomId) {
-    return NextResponse.json(
-      { error: 'roomId required' },
-      { status: 400 }
-    )
+    return NextResponse.json({ error: "roomId required" }, { status: 400 });
   }
 
-  roomRegistry.delete(roomId)
-  console.log(`🗑️ Room removed: ${roomId}`)
+  roomRegistry.delete(roomId);
+  console.log(`🗑️ Room removed: ${roomId}`);
 
   return NextResponse.json({
     success: true,
-    roomId
-  })
+    roomId,
+  });
 }

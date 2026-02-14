@@ -360,6 +360,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ translation: "" }, { headers: corsHeaders });
     }
 
+    // Input length validation - prevent DoS with massive payloads
+    const MAX_TEXT_LENGTH = 5000;
+    if (text.length > MAX_TEXT_LENGTH) {
+      return NextResponse.json(
+        { translation: "", error: "Text too long (max 5000 chars)" },
+        { status: 400, headers: corsHeaders },
+      );
+    }
+
     const cleanText = text.trim();
     if (!cleanText || sourceLang === targetLang) {
       return NextResponse.json(
