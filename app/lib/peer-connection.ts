@@ -361,7 +361,8 @@ export class PeerConnection {
 
     this.dataConnection = conn;
 
-    conn.on("open", () => {
+    // Handler for when data channel opens
+    const handleOpen = () => {
       if (this.destroyed) return;
       console.log("✅ Data channel open!");
 
@@ -374,12 +375,21 @@ export class PeerConnection {
       // Start keep-alive pings to prevent connection timeout
       this.startKeepAlive();
 
-      // If we're the guest, initiate the video call
+      // ONLY guest initiates the video call (prevents collision)
+      // Add small delay to ensure host is ready
       if (!this.isHost && this.localStream) {
-        console.log("📞 Guest initiating video call...");
-        this.initiateCall();
+        console.log("📞 Guest initiating video call in 300ms...");
+        setTimeout(() => this.initiateCall(), 300);
       }
-    });
+    };
+
+    conn.on("open", handleOpen);
+
+    // FIX: Check if already open (PeerJS may not fire 'open' if already connected)
+    if (conn.open) {
+      console.log("✅ Data channel already open!");
+      handleOpen();
+    }
 
     conn.on("data", (data: any) => {
       if (this.destroyed) return;
@@ -407,11 +417,8 @@ export class PeerConnection {
           peerId: this.myPeerId,
         });
 
-        // If we're host and have video, call the guest
-        if (this.isHost && this.localStream && !this.mediaConnection) {
-          console.log("📞 Host initiating video call to guest...");
-          setTimeout(() => this.initiateCall(), 500);
-        }
+        // NOTE: Only GUEST initiates video call (in handleOpen above)
+        // Host just waits and answers - prevents bidirectional call collision
         return;
       }
 

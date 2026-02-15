@@ -203,15 +203,40 @@ function VideoCallContent() {
   // ═══════════════════════════════════════════════════════════════════════════
 
   const handleDataMessage = useCallback(
-    (data: any) => {
+    async (data: any) => {
       if (data.type === "caption") {
         // Clear existing timeout
         if (theirCaptionTimeoutRef.current) {
           clearTimeout(theirCaptionTimeoutRef.current);
         }
 
+        // Show partner's original text immediately
         setTheirLiveText(data.text);
-        setTheirLiveTranslation(data.translation || "");
+
+        // FIX: Translate partner's text to OUR language (not use their translation)
+        // Partner sent their text in their language, we need it in ours
+        const needsTranslation = data.lang !== userLang;
+        if (needsTranslation && data.text) {
+          // Translate from partner's language to our language
+          try {
+            const res = await fetch("/api/translate", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                text: data.text,
+                sourceLang: data.lang,
+                targetLang: userLang,
+              }),
+            });
+            const result = await res.json();
+            setTheirLiveTranslation(result.translation || data.text);
+          } catch {
+            setTheirLiveTranslation(data.text);
+          }
+        } else {
+          // Same language, no translation needed
+          setTheirLiveTranslation(data.text);
+        }
 
         // Auto-clear after 5 seconds of no updates
         theirCaptionTimeoutRef.current = setTimeout(() => {
@@ -226,12 +251,12 @@ function VideoCallContent() {
             partnerName || "Partner",
             data.text,
             data.translation || data.text,
-            targetLang,
+            data.lang, // FIX: Use sender's language, not our targetLang
           );
         }
       }
     },
-    [partnerName, targetLang],
+    [partnerName, userLang],
   );
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -249,9 +274,14 @@ function VideoCallContent() {
           targetLang: targetLang,
         }),
       });
+      if (!res.ok) {
+        console.error("Translation API error:", res.status);
+        return text;
+      }
       const data = await res.json();
       return data.translation || text;
-    } catch {
+    } catch (err) {
+      console.error("Translation failed:", err);
       return text;
     }
   };
@@ -292,14 +322,17 @@ function VideoCallContent() {
       const translation = await translateText(text);
       setMyLiveTranslation(translation);
 
-      // Send to partner
-      peerRef.current?.send({
+      // Send to partner with error checking
+      const sent = peerRef.current?.send({
         type: "caption",
         text,
         translation,
         isFinal,
         lang: userLang,
       });
+      if (sent === false) {
+        console.warn("⚠️ Caption failed to send - data channel not ready");
+      }
 
       if (isFinal) {
         // Add to transcript
