@@ -141,7 +141,7 @@ async function sendAlert(health: HealthResponse, isRecovery: boolean = false) {
 export async function GET(request: Request) {
   // Verify cron secret (REQUIRED for security)
   const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
+  const cronSecret = process.env.CRON_SECRET?.trim(); // Trim whitespace
 
   if (!cronSecret) {
     console.error("CRON_SECRET not configured");
