@@ -5,9 +5,61 @@ import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { TalkConnection, TalkMessage } from "../../lib/talk-connection";
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// VOXLINK TALK MODE - World's First Live Translation Chat
-// Beautiful flowing captions with conversation history
+// VOXLINK TALK MODE - FaceTime-Quality Live Translation
+// Production-ready bidirectional translation with proper message sync
 // ═══════════════════════════════════════════════════════════════════════════════
+
+// Web Speech API type declarations for browser compatibility
+interface SpeechRecognitionEvent extends Event {
+  resultIndex: number;
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionResultList {
+  length: number;
+  item(index: number): SpeechRecognitionResult;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+  isFinal: boolean;
+  length: number;
+  item(index: number): SpeechRecognitionAlternative;
+  [index: number]: SpeechRecognitionAlternative;
+}
+
+interface SpeechRecognitionAlternative {
+  transcript: string;
+  confidence: number;
+}
+
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string;
+  message: string;
+}
+
+interface SpeechRecognitionInstance extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+  abort(): void;
+}
+
+interface SpeechRecognitionConstructor {
+  new (): SpeechRecognitionInstance;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  }
+}
 
 interface TranscriptEntry {
   id: string;
@@ -16,8 +68,23 @@ interface TranscriptEntry {
   original: string;
   translated: string;
   timestamp: Date;
-  lang: "en" | "es";
+  sourceLang: "en" | "es";
   emoji?: string;
+}
+
+interface LiveTextPayload {
+  text: string;
+  sourceLang: "en" | "es";
+  [key: string]: unknown;
+}
+
+interface MessagePayload {
+  id: string;
+  speaker: string;
+  original: string;
+  sourceLang: "en" | "es";
+  timestamp: number;
+  [key: string]: unknown;
 }
 
 const REACTION_EMOJIS = [
@@ -39,6 +106,7 @@ function TalkContent() {
   const router = useRouter();
   const roomId = params.id as string;
 
+  // User configuration from URL params
   const isHost = searchParams.get("host") === "true";
   const userName = searchParams.get("name") || "User";
   const userLang = (searchParams.get("lang") || "en") as "en" | "es";
@@ -49,6 +117,7 @@ function TalkContent() {
     useState<string>("Connecting...");
   const [isConnected, setIsConnected] = useState(false);
   const [partnerName, setPartnerName] = useState("");
+  const [partnerLang, setPartnerLang] = useState<"en" | "es" | null>(null);
 
   // Speech state
   const [isListening, setIsListening] = useState(false);
@@ -60,23 +129,20 @@ function TalkContent() {
   const [partnerLiveText, setPartnerLiveText] = useState("");
   const [partnerLiveTranslation, setPartnerLiveTranslation] = useState("");
 
-  // Transcript
+  // Transcript history
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
-  const [showHistory, setShowHistory] = useState(true);
 
-  // Settings
+  // Settings UI
   const [fontSize, setFontSize] = useState<"small" | "medium" | "large">(
     "medium",
   );
   const [showSettings, setShowSettings] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
-
-  // UI
   const [copied, setCopied] = useState(false);
 
-  // Refs
+  // Refs for stable callbacks
   const connectionRef = useRef<TalkConnection | null>(null);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const isListeningRef = useRef(false);
   const isHandsFreeRef = useRef(false);
   const historyEndRef = useRef<HTMLDivElement>(null);
@@ -85,28 +151,30 @@ function TalkContent() {
   const liveTextDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const myCaptionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const mountedRef = useRef(true);
+  const initRef = useRef(false);
 
-  // Font size classes
+  // Font size utility
   const fontSizeClasses = {
     small: "text-sm",
     medium: "text-base",
     large: "text-xl",
   };
 
-  // Keep refs in sync
+  // Sync refs with state
   useEffect(() => {
     isListeningRef.current = isListening;
   }, [isListening]);
+
   useEffect(() => {
     isHandsFreeRef.current = isHandsFree;
   }, [isHandsFree]);
 
-  // Auto-scroll history
+  // Auto-scroll transcript
   useEffect(() => {
-    if (showHistory && historyEndRef.current) {
+    if (historyEndRef.current) {
       historyEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [transcript, showHistory]);
+  }, [transcript]);
 
   // Haptic feedback
   const vibrate = useCallback((pattern: number | number[] = 50) => {
@@ -116,11 +184,12 @@ function TalkContent() {
   }, []);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // TRANSLATION
+  // TRANSLATION API
   // ═══════════════════════════════════════════════════════════════════════════
 
   const translate = useCallback(
     async (text: string, from: string, to: string): Promise<string> => {
+      if (!text.trim() || from === to) return text;
       try {
         const res = await fetch("/api/translate", {
           method: "POST",
@@ -130,7 +199,8 @@ function TalkContent() {
         if (!res.ok) throw new Error("Translation failed");
         const data = await res.json();
         return data.translation || text;
-      } catch {
+      } catch (err) {
+        console.error("Translation error:", err);
         return text;
       }
     },
@@ -138,31 +208,32 @@ function TalkContent() {
   );
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // SEND TO PARTNER - Stable reference
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const sendToPartner = useCallback((message: TalkMessage) => {
+    if (connectionRef.current) {
+      connectionRef.current.send(message);
+    }
+  }, []);
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // TRANSCRIPT MANAGEMENT
   // ═══════════════════════════════════════════════════════════════════════════
 
   const addToTranscript = useCallback(
-    (
-      speaker: "me" | "partner",
-      name: string,
-      original: string,
-      translated: string,
-      lang: "en" | "es",
-    ) => {
-      if (!original.trim()) return;
+    (entry: TranscriptEntry) => {
+      if (!entry.original.trim()) return;
 
-      const entry: TranscriptEntry = {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        speaker,
-        name,
-        original: original.trim(),
-        translated: translated.trim(),
-        timestamp: new Date(),
-        lang,
-      };
+      setTranscript((prev) => {
+        // Dedupe by ID
+        if (prev.some((e) => e.id === entry.id)) {
+          return prev;
+        }
+        return [...prev, entry];
+      });
 
-      setTranscript((prev) => [...prev, entry]);
-      vibrate(speaker === "partner" ? 100 : [30, 20, 30]);
+      vibrate(entry.speaker === "partner" ? 100 : [30, 20, 30]);
     },
     [vibrate],
   );
@@ -172,61 +243,137 @@ function TalkContent() {
   // ═══════════════════════════════════════════════════════════════════════════
 
   useEffect(() => {
+    // Prevent double initialization (React StrictMode)
+    if (initRef.current) return;
+    initRef.current = true;
+    mountedRef.current = true;
+
     const connection = new TalkConnection({
       onStatusChange: (status, message) => {
+        if (!mountedRef.current) return;
         setConnectionStatus(message || status);
         setIsConnected(status === "connected");
       },
-      onMessage: (msg: TalkMessage) => {
+
+      onMessage: async (msg: TalkMessage) => {
+        if (!mountedRef.current) return;
+
+        const data = msg.data as Record<string, unknown>;
+
+        // ═══════════════════════════════════════════════════════════════════
+        // COMPLETE MESSAGE FROM PARTNER
+        // ═══════════════════════════════════════════════════════════════════
         if (msg.type === "message") {
-          // Complete message from partner
-          addToTranscript(
-            "partner",
-            msg.data.speaker,
-            msg.data.original,
-            msg.data.translation,
-            msg.data.lang,
+          const payload: MessagePayload = {
+            id: String(
+              data.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            ),
+            speaker: String(data.speaker || "Partner"),
+            original: String(data.original || ""),
+            sourceLang:
+              (data.sourceLang as "en" | "es") ||
+              (data.lang as "en" | "es") ||
+              targetLang,
+            timestamp: Number(data.timestamp) || Date.now(),
+          };
+
+          // Track partner's language
+          setPartnerLang(payload.sourceLang);
+
+          // Translate FROM partner's language INTO our language
+          const translatedForUs = await translate(
+            payload.original,
+            payload.sourceLang,
+            userLang,
           );
-          // Clear partner live text
+
+          if (!mountedRef.current) return;
+
+          addToTranscript({
+            id: payload.id,
+            speaker: "partner",
+            name: payload.speaker,
+            original: payload.original,
+            translated: translatedForUs,
+            timestamp: new Date(payload.timestamp),
+            sourceLang: payload.sourceLang,
+          });
+
+          // Clear partner live preview
           setPartnerLiveText("");
           setPartnerLiveTranslation("");
         }
 
+        // ═══════════════════════════════════════════════════════════════════
+        // LIVE STREAMING TEXT FROM PARTNER
+        // ═══════════════════════════════════════════════════════════════════
         if (msg.type === "live") {
-          // Real-time streaming from partner
-          setPartnerLiveText(msg.data.text || "");
-          setPartnerLiveTranslation(msg.data.translation || "");
+          const incomingText = String(data.text || "");
+          const incomingLang = (data.sourceLang as "en" | "es") || targetLang;
 
-          // Auto-clear after 5s of no updates
-          if (liveTextTimeoutRef.current)
-            clearTimeout(liveTextTimeoutRef.current);
-          liveTextTimeoutRef.current = setTimeout(() => {
-            setPartnerLiveText("");
+          // Track partner's language
+          setPartnerLang(incomingLang);
+          setPartnerLiveText(incomingText);
+
+          // Translate into our language
+          if (incomingText.trim()) {
+            const translatedLive = await translate(
+              incomingText,
+              incomingLang,
+              userLang,
+            );
+            if (mountedRef.current) {
+              setPartnerLiveTranslation(translatedLive);
+            }
+          } else {
             setPartnerLiveTranslation("");
+          }
+
+          // Auto-clear after 5s
+          if (liveTextTimeoutRef.current) {
+            clearTimeout(liveTextTimeoutRef.current);
+          }
+          liveTextTimeoutRef.current = setTimeout(() => {
+            if (mountedRef.current) {
+              setPartnerLiveText("");
+              setPartnerLiveTranslation("");
+            }
           }, 5000);
         }
 
+        // ═══════════════════════════════════════════════════════════════════
+        // EMOJI REACTION FROM PARTNER
+        // ═══════════════════════════════════════════════════════════════════
         if (msg.type === "emoji") {
-          // Partner added emoji to a message
-          setTranscript((h) =>
-            h.map((m) =>
-              m.id === msg.data.messageId ? { ...m, emoji: msg.data.emoji } : m,
+          const messageId = String(data.messageId || "");
+          const emoji = String(data.emoji || "");
+          setTranscript((prev) =>
+            prev.map((entry) =>
+              entry.id === messageId ? { ...entry, emoji } : entry,
             ),
           );
           vibrate([20, 10, 20, 10, 50]);
         }
 
+        // ═══════════════════════════════════════════════════════════════════
+        // CLEAR REQUEST FROM PARTNER
+        // ═══════════════════════════════════════════════════════════════════
         if (msg.type === "clear") {
           setTranscript([]);
           vibrate([30, 20, 30]);
         }
       },
+
       onPartnerConnected: (name) => {
+        if (!mountedRef.current) return;
         setPartnerName(name);
         vibrate([100, 50, 100]);
       },
+
       onPartnerDisconnected: () => {
+        if (!mountedRef.current) return;
         setPartnerName("");
+        setPartnerLang(null);
         setPartnerLiveText("");
         setPartnerLiveTranslation("");
       },
@@ -237,46 +384,59 @@ function TalkContent() {
 
     return () => {
       mountedRef.current = false;
+      initRef.current = false;
       connection.disconnect();
-      if (liveTextTimeoutRef.current) clearTimeout(liveTextTimeoutRef.current);
-      if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
-      if (liveTextDebounceRef.current)
-        clearTimeout(liveTextDebounceRef.current);
-      if (myCaptionTimeoutRef.current)
-        clearTimeout(myCaptionTimeoutRef.current);
+
+      // Cleanup timers
+      [
+        liveTextTimeoutRef,
+        silenceTimeoutRef,
+        liveTextDebounceRef,
+        myCaptionTimeoutRef,
+      ].forEach((ref) => {
+        if (ref.current) {
+          clearTimeout(ref.current);
+          ref.current = null;
+        }
+      });
+
+      // Cleanup speech recognition
       if (recognitionRef.current) {
         try {
           recognitionRef.current.stop();
-        } catch {}
+        } catch {
+          // Ignore cleanup errors
+        }
+        recognitionRef.current = null;
       }
     };
-  }, [roomId, isHost, userName, vibrate, addToTranscript]);
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // SEND TO PARTNER
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  const sendToPartner = useCallback((message: TalkMessage) => {
-    // Always try to send - TalkConnection handles queuing if not connected
-    if (connectionRef.current) {
-      connectionRef.current.send(message);
-    }
-  }, []);
+  }, [
+    roomId,
+    isHost,
+    userName,
+    userLang,
+    targetLang,
+    translate,
+    vibrate,
+    addToTranscript,
+  ]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // SPEECH RECOGNITION
   // ═══════════════════════════════════════════════════════════════════════════
 
   const startListening = useCallback(() => {
-    const SpeechRecognition =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert("Speech recognition not supported. Please use Chrome.");
+    const SpeechRecognitionAPI: SpeechRecognitionConstructor | undefined =
+      typeof window !== "undefined"
+        ? window.SpeechRecognition || window.webkitSpeechRecognition
+        : undefined;
+
+    if (!SpeechRecognitionAPI) {
+      alert("Speech recognition not supported. Please use Chrome or Safari.");
       return;
     }
 
-    const recognition = new SpeechRecognition();
+    const recognition = new SpeechRecognitionAPI();
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = userLang === "en" ? "en-US" : "es-ES";
@@ -284,18 +444,19 @@ function TalkContent() {
     let finalizedText = "";
     let lastSpeechTime = Date.now();
 
-    recognition.onresult = async (event: any) => {
+    recognition.onresult = async (event: SpeechRecognitionEvent) => {
       if (!mountedRef.current) return;
 
       let interim = "";
       let newFinal = "";
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          newFinal += transcript;
+        const result = event.results[i];
+        const text = result[0].transcript;
+        if (result.isFinal) {
+          newFinal += text;
         } else {
-          interim = transcript;
+          interim = text;
         }
       }
 
@@ -305,24 +466,34 @@ function TalkContent() {
 
       // Stream live text to partner (debounced)
       if (displayText.trim()) {
-        if (liveTextDebounceRef.current)
+        if (liveTextDebounceRef.current) {
           clearTimeout(liveTextDebounceRef.current);
+        }
         liveTextDebounceRef.current = setTimeout(async () => {
           if (!mountedRef.current) return;
+
+          // Translate for our own preview
           const translated = await translate(
             displayText.trim(),
             userLang,
             targetLang,
           );
           if (!mountedRef.current) return;
+
           setMyLiveTranslation(translated);
+
+          // Send original text + source language to partner
           sendToPartner({
             type: "live",
-            data: { text: displayText.trim(), translation: translated },
+            data: {
+              text: displayText.trim(),
+              sourceLang: userLang,
+            } as LiveTextPayload,
           });
         }, 150);
       }
 
+      // Handle finalized segments
       if (newFinal.trim()) {
         finalizedText += newFinal;
         vibrate(30);
@@ -332,41 +503,49 @@ function TalkContent() {
           userLang,
           targetLang,
         );
+        if (!mountedRef.current) return;
         setMyLiveTranslation(translated);
 
-        // Stream updated text
+        // Update partner
         sendToPartner({
           type: "live",
-          data: { text: finalizedText.trim(), translation: translated },
+          data: {
+            text: finalizedText.trim(),
+            sourceLang: userLang,
+          } as LiveTextPayload,
         });
 
-        // In hands-free mode, auto-send after silence
+        // Hands-free mode: auto-send after silence
         if (isHandsFreeRef.current) {
-          if (silenceTimeoutRef.current)
+          if (silenceTimeoutRef.current) {
             clearTimeout(silenceTimeoutRef.current);
+          }
           silenceTimeoutRef.current = setTimeout(async () => {
+            if (!mountedRef.current) return;
             if (finalizedText.trim() && Date.now() - lastSpeechTime > 1500) {
-              // Add to transcript
-              addToTranscript(
-                "me",
-                userName,
-                finalizedText.trim(),
-                translated,
-                userLang,
-              );
-              // Send to partner
+              const messageId = `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+
+              addToTranscript({
+                id: messageId,
+                speaker: "me",
+                name: userName,
+                original: finalizedText.trim(),
+                translated: translated,
+                timestamp: new Date(),
+                sourceLang: userLang,
+              });
+
               sendToPartner({
                 type: "message",
                 data: {
-                  id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                  id: messageId,
                   speaker: userName,
                   original: finalizedText.trim(),
-                  translation: translated,
-                  lang: userLang,
+                  sourceLang: userLang,
                   timestamp: Date.now(),
-                },
+                } as MessagePayload,
               });
-              // Clear
+
               finalizedText = "";
               setMyLiveText("");
               setMyLiveTranslation("");
@@ -375,41 +554,55 @@ function TalkContent() {
         }
       }
 
-      // Manual mode: send on final result
+      // Manual mode: send each final segment immediately
       if (!isHandsFreeRef.current && newFinal.trim()) {
         const translated = await translate(
           newFinal.trim(),
           userLang,
           targetLang,
         );
-        // Add to transcript
-        addToTranscript("me", userName, newFinal.trim(), translated, userLang);
-        // Send to partner
+        if (!mountedRef.current) return;
+
+        const messageId = `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+
+        addToTranscript({
+          id: messageId,
+          speaker: "me",
+          name: userName,
+          original: newFinal.trim(),
+          translated: translated,
+          timestamp: new Date(),
+          sourceLang: userLang,
+        });
+
         sendToPartner({
           type: "message",
           data: {
-            id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            id: messageId,
             speaker: userName,
             original: newFinal.trim(),
-            translation: translated,
-            lang: userLang,
+            sourceLang: userLang,
             timestamp: Date.now(),
-          },
+          } as MessagePayload,
         });
-        // Clear after short delay
-        if (myCaptionTimeoutRef.current)
+
+        // Clear after visual feedback
+        if (myCaptionTimeoutRef.current) {
           clearTimeout(myCaptionTimeoutRef.current);
+        }
         myCaptionTimeoutRef.current = setTimeout(() => {
-          finalizedText = "";
-          setMyLiveText("");
-          setMyLiveTranslation("");
+          if (mountedRef.current) {
+            finalizedText = "";
+            setMyLiveText("");
+            setMyLiveTranslation("");
+          }
         }, 2000);
       }
     };
 
-    recognition.onerror = (e: any) => {
+    recognition.onerror = (e: SpeechRecognitionErrorEvent) => {
       if (e.error !== "no-speech" && e.error !== "aborted") {
-        console.error("Speech error:", e.error);
+        console.error("Speech recognition error:", e.error);
       }
     };
 
@@ -417,7 +610,9 @@ function TalkContent() {
       if (isListeningRef.current && mountedRef.current) {
         try {
           recognition.start();
-        } catch {}
+        } catch {
+          // Ignore restart errors
+        }
       }
     };
 
@@ -437,11 +632,16 @@ function TalkContent() {
 
   const stopListening = useCallback(() => {
     setIsListening(false);
-    if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+    if (silenceTimeoutRef.current) {
+      clearTimeout(silenceTimeoutRef.current);
+      silenceTimeoutRef.current = null;
+    }
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
-      } catch {}
+      } catch {
+        // Ignore stop errors
+      }
       recognitionRef.current = null;
     }
     vibrate(30);
@@ -453,8 +653,10 @@ function TalkContent() {
 
   const addEmoji = useCallback(
     (messageId: string, emoji: string) => {
-      setTranscript((h) =>
-        h.map((msg) => (msg.id === messageId ? { ...msg, emoji } : msg)),
+      setTranscript((prev) =>
+        prev.map((entry) =>
+          entry.id === messageId ? { ...entry, emoji } : entry,
+        ),
       );
       setShowEmojiPicker(null);
       vibrate([20, 10, 20, 10, 50]);
@@ -468,52 +670,59 @@ function TalkContent() {
   );
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // CONTROLS
+  // CONTROL HANDLERS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  const toggleListening = () => {
-    if (isListening) stopListening();
-    else startListening();
-  };
+  const toggleListening = useCallback(() => {
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
+    }
+  }, [isListening, startListening, stopListening]);
 
-  const toggleHandsFree = () => {
+  const toggleHandsFree = useCallback(() => {
     const newValue = !isHandsFree;
     setIsHandsFree(newValue);
     vibrate(newValue ? [50, 30, 50, 30, 50] : 50);
-    if (newValue && !isListening) startListening();
-  };
+    if (newValue && !isListening) {
+      startListening();
+    }
+  }, [isHandsFree, isListening, startListening, vibrate]);
 
-  const copyJoinLink = () => {
+  const copyJoinLink = useCallback(() => {
     navigator.clipboard.writeText(
       `${window.location.origin}/?join=talk&id=${roomId}`,
     );
     setCopied(true);
     vibrate(50);
     setTimeout(() => setCopied(false), 2000);
-  };
+  }, [roomId, vibrate]);
 
-  const endSession = () => {
+  const endSession = useCallback(() => {
     stopListening();
     connectionRef.current?.disconnect();
     router.push("/");
-  };
+  }, [stopListening, router]);
 
-  const speak = (text: string, lang: "en" | "es") => {
+  const speak = useCallback((text: string, lang: "en" | "es") => {
     speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = lang === "en" ? "en-US" : "es-ES";
     utterance.rate = 0.9;
     speechSynthesis.speak(utterance);
-  };
+  }, []);
 
-  const clearHistory = () => {
+  const clearHistory = useCallback(() => {
     setTranscript([]);
     vibrate([30, 20, 30]);
     sendToPartner({ type: "clear", data: {} });
-  };
+  }, [vibrate, sendToPartner]);
 
+  // Derived display values
   const statusColor =
     isConnected && partnerName ? "bg-green-500" : "bg-yellow-500 animate-pulse";
+  const displayPartnerLang = partnerLang || targetLang;
 
   // ═══════════════════════════════════════════════════════════════════════════
   // RENDER
@@ -534,7 +743,7 @@ function TalkContent() {
             <div className="flex items-center gap-2 bg-purple-500/20 px-3 py-1.5">
               <span className="text-purple-400 text-sm">{partnerName}</span>
               <span className="text-purple-400/50 text-xs">
-                {targetLang === "en" ? "🇺🇸" : "🇪🇸"}
+                {displayPartnerLang === "en" ? "🇺🇸" : "🇪🇸"}
               </span>
             </div>
           )}
@@ -670,7 +879,7 @@ function TalkContent() {
                     })}
                   </span>
                   <span className="text-xs">
-                    {entry.lang === "en" ? "🇺🇸" : "🇪🇸"}
+                    {entry.sourceLang === "en" ? "🇺🇸" : "🇪🇸"}
                   </span>
                 </div>
 
@@ -683,7 +892,7 @@ function TalkContent() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      speak(entry.original, entry.lang);
+                      speak(entry.original, entry.sourceLang);
                     }}
                     className="text-gray-500 hover:text-white shrink-0"
                   >
@@ -702,7 +911,7 @@ function TalkContent() {
                       e.stopPropagation();
                       speak(
                         entry.translated,
-                        entry.lang === "en" ? "es" : "en",
+                        entry.sourceLang === "en" ? "es" : "en",
                       );
                     }}
                     className="text-gray-500 hover:text-white shrink-0"
@@ -919,7 +1128,7 @@ function TalkContent() {
         </p>
       </div>
 
-      {/* Custom styles */}
+      {/* Custom animations */}
       <style jsx>{`
         @keyframes fade-in {
           from {

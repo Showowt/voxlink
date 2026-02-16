@@ -355,9 +355,19 @@ export async function POST(req: NextRequest) {
   try {
     const { text, sourceLang, targetLang } = await req.json();
 
-    // Validation
+    // Validation - check all required fields
     if (!text || typeof text !== "string") {
-      return NextResponse.json({ translation: "" }, { headers: corsHeaders });
+      return NextResponse.json(
+        { translation: "", error: "Missing or invalid text" },
+        { status: 400, headers: corsHeaders },
+      );
+    }
+
+    if (!sourceLang || !targetLang) {
+      return NextResponse.json(
+        { translation: "", error: "Missing sourceLang or targetLang" },
+        { status: 400, headers: corsHeaders },
+      );
     }
 
     // Input length validation - prevent DoS with massive payloads
@@ -370,16 +380,27 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanText = text.trim();
-    if (!cleanText || sourceLang === targetLang) {
+    if (!cleanText) {
+      return NextResponse.json({ translation: "" }, { headers: corsHeaders });
+    }
+
+    // Normalize language codes FIRST, then check if same language
+    const from =
+      sourceLang === "en" || sourceLang === "en-US" || sourceLang === "english"
+        ? "en"
+        : "es";
+    const to =
+      targetLang === "en" || targetLang === "en-US" || targetLang === "english"
+        ? "en"
+        : "es";
+
+    // Skip translation if normalized languages are the same
+    if (from === to) {
       return NextResponse.json(
-        { translation: cleanText },
+        { translation: cleanText, source: "same-language" },
         { headers: corsHeaders },
       );
     }
-
-    // Normalize language codes
-    const from = sourceLang === "en" ? "en" : "es";
-    const to = targetLang === "en" ? "en" : "es";
     const langPair = `${from}-${to}`;
 
     // 1. Check cache first (INSTANT)
