@@ -1,8 +1,8 @@
-'use client'
+"use client";
 
-import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
-import { useParams, useSearchParams, useRouter } from 'next/navigation'
-import { TalkConnection, TalkMessage } from '../../lib/talk-connection'
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
+import { TalkConnection, TalkMessage } from "../../lib/talk-connection";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // VOXLINK TALK MODE - World's First Live Translation Chat
@@ -10,138 +10,162 @@ import { TalkConnection, TalkMessage } from '../../lib/talk-connection'
 // ═══════════════════════════════════════════════════════════════════════════════
 
 interface TranscriptEntry {
-  id: string
-  speaker: 'me' | 'partner'
-  name: string
-  original: string
-  translated: string
-  timestamp: Date
-  lang: 'en' | 'es'
-  emoji?: string
+  id: string;
+  speaker: "me" | "partner";
+  name: string;
+  original: string;
+  translated: string;
+  timestamp: Date;
+  lang: "en" | "es";
+  emoji?: string;
 }
 
-const REACTION_EMOJIS = ['😊', '😂', '❤️', '👍', '🎉', '🔥', '😍', '🙌', '💯', '✨']
+const REACTION_EMOJIS = [
+  "😊",
+  "😂",
+  "❤️",
+  "👍",
+  "🎉",
+  "🔥",
+  "😍",
+  "🙌",
+  "💯",
+  "✨",
+];
 
 function TalkContent() {
-  const params = useParams()
-  const searchParams = useSearchParams()
-  const router = useRouter()
-  const roomId = params.id as string
+  const params = useParams();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const roomId = params.id as string;
 
-  const isHost = searchParams.get('host') === 'true'
-  const userName = searchParams.get('name') || 'User'
-  const userLang = (searchParams.get('lang') || 'en') as 'en' | 'es'
-  const targetLang = userLang === 'en' ? 'es' : 'en'
+  const isHost = searchParams.get("host") === "true";
+  const userName = searchParams.get("name") || "User";
+  const userLang = (searchParams.get("lang") || "en") as "en" | "es";
+  const targetLang = userLang === "en" ? "es" : "en";
 
   // Connection state
-  const [connectionStatus, setConnectionStatus] = useState<string>('Connecting...')
-  const [isConnected, setIsConnected] = useState(false)
-  const [partnerName, setPartnerName] = useState('')
+  const [connectionStatus, setConnectionStatus] =
+    useState<string>("Connecting...");
+  const [isConnected, setIsConnected] = useState(false);
+  const [partnerName, setPartnerName] = useState("");
 
   // Speech state
-  const [isListening, setIsListening] = useState(false)
-  const [isHandsFree, setIsHandsFree] = useState(false)
+  const [isListening, setIsListening] = useState(false);
+  const [isHandsFree, setIsHandsFree] = useState(false);
 
   // Live caption state
-  const [myLiveText, setMyLiveText] = useState('')
-  const [myLiveTranslation, setMyLiveTranslation] = useState('')
-  const [partnerLiveText, setPartnerLiveText] = useState('')
-  const [partnerLiveTranslation, setPartnerLiveTranslation] = useState('')
+  const [myLiveText, setMyLiveText] = useState("");
+  const [myLiveTranslation, setMyLiveTranslation] = useState("");
+  const [partnerLiveText, setPartnerLiveText] = useState("");
+  const [partnerLiveTranslation, setPartnerLiveTranslation] = useState("");
 
   // Transcript
-  const [transcript, setTranscript] = useState<TranscriptEntry[]>([])
-  const [showHistory, setShowHistory] = useState(true)
+  const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
+  const [showHistory, setShowHistory] = useState(true);
 
   // Settings
-  const [fontSize, setFontSize] = useState<'small' | 'medium' | 'large'>('medium')
-  const [showSettings, setShowSettings] = useState(false)
-  const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null)
+  const [fontSize, setFontSize] = useState<"small" | "medium" | "large">(
+    "medium",
+  );
+  const [showSettings, setShowSettings] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
 
   // UI
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState(false);
 
   // Refs
-  const connectionRef = useRef<TalkConnection | null>(null)
-  const recognitionRef = useRef<any>(null)
-  const isListeningRef = useRef(false)
-  const isHandsFreeRef = useRef(false)
-  const historyEndRef = useRef<HTMLDivElement>(null)
-  const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const liveTextTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const liveTextDebounceRef = useRef<NodeJS.Timeout | null>(null)
-  const myCaptionTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const mountedRef = useRef(true)
+  const connectionRef = useRef<TalkConnection | null>(null);
+  const recognitionRef = useRef<any>(null);
+  const isListeningRef = useRef(false);
+  const isHandsFreeRef = useRef(false);
+  const historyEndRef = useRef<HTMLDivElement>(null);
+  const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const liveTextTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const liveTextDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const myCaptionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const mountedRef = useRef(true);
 
   // Font size classes
   const fontSizeClasses = {
-    small: 'text-sm',
-    medium: 'text-base',
-    large: 'text-xl'
-  }
+    small: "text-sm",
+    medium: "text-base",
+    large: "text-xl",
+  };
 
   // Keep refs in sync
-  useEffect(() => { isListeningRef.current = isListening }, [isListening])
-  useEffect(() => { isHandsFreeRef.current = isHandsFree }, [isHandsFree])
+  useEffect(() => {
+    isListeningRef.current = isListening;
+  }, [isListening]);
+  useEffect(() => {
+    isHandsFreeRef.current = isHandsFree;
+  }, [isHandsFree]);
 
   // Auto-scroll history
   useEffect(() => {
     if (showHistory && historyEndRef.current) {
-      historyEndRef.current.scrollIntoView({ behavior: 'smooth' })
+      historyEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [transcript, showHistory])
+  }, [transcript, showHistory]);
 
   // Haptic feedback
   const vibrate = useCallback((pattern: number | number[] = 50) => {
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      navigator.vibrate(pattern)
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      navigator.vibrate(pattern);
     }
-  }, [])
+  }, []);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // TRANSLATION
   // ═══════════════════════════════════════════════════════════════════════════
 
-  const translate = useCallback(async (text: string, from: string, to: string): Promise<string> => {
-    try {
-      const res = await fetch('/api/translate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, sourceLang: from, targetLang: to })
-      })
-      if (!res.ok) throw new Error('Translation failed')
-      const data = await res.json()
-      return data.translation || text
-    } catch {
-      return text
-    }
-  }, [])
+  const translate = useCallback(
+    async (text: string, from: string, to: string): Promise<string> => {
+      try {
+        const res = await fetch("/api/translate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, sourceLang: from, targetLang: to }),
+        });
+        if (!res.ok) throw new Error("Translation failed");
+        const data = await res.json();
+        return data.translation || text;
+      } catch {
+        return text;
+      }
+    },
+    [],
+  );
 
   // ═══════════════════════════════════════════════════════════════════════════
   // TRANSCRIPT MANAGEMENT
   // ═══════════════════════════════════════════════════════════════════════════
 
-  const addToTranscript = useCallback((
-    speaker: 'me' | 'partner',
-    name: string,
-    original: string,
-    translated: string,
-    lang: 'en' | 'es'
-  ) => {
-    if (!original.trim()) return
+  const addToTranscript = useCallback(
+    (
+      speaker: "me" | "partner",
+      name: string,
+      original: string,
+      translated: string,
+      lang: "en" | "es",
+    ) => {
+      if (!original.trim()) return;
 
-    const entry: TranscriptEntry = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      speaker,
-      name,
-      original: original.trim(),
-      translated: translated.trim(),
-      timestamp: new Date(),
-      lang
-    }
+      const entry: TranscriptEntry = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        speaker,
+        name,
+        original: original.trim(),
+        translated: translated.trim(),
+        timestamp: new Date(),
+        lang,
+      };
 
-    setTranscript(prev => [...prev, entry])
-    vibrate(speaker === 'partner' ? 100 : [30, 20, 30])
-  }, [vibrate])
+      setTranscript((prev) => [...prev, entry]);
+      vibrate(speaker === "partner" ? 100 : [30, 20, 30]);
+    },
+    [vibrate],
+  );
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PEERJS CONNECTION
@@ -150,297 +174,346 @@ function TalkContent() {
   useEffect(() => {
     const connection = new TalkConnection({
       onStatusChange: (status, message) => {
-        setConnectionStatus(message || status)
-        setIsConnected(status === 'connected')
+        setConnectionStatus(message || status);
+        setIsConnected(status === "connected");
       },
       onMessage: (msg: TalkMessage) => {
-        if (msg.type === 'message') {
+        if (msg.type === "message") {
           // Complete message from partner
           addToTranscript(
-            'partner',
+            "partner",
             msg.data.speaker,
             msg.data.original,
             msg.data.translation,
-            msg.data.lang
-          )
+            msg.data.lang,
+          );
           // Clear partner live text
-          setPartnerLiveText('')
-          setPartnerLiveTranslation('')
+          setPartnerLiveText("");
+          setPartnerLiveTranslation("");
         }
 
-        if (msg.type === 'live') {
+        if (msg.type === "live") {
           // Real-time streaming from partner
-          setPartnerLiveText(msg.data.text || '')
-          setPartnerLiveTranslation(msg.data.translation || '')
+          setPartnerLiveText(msg.data.text || "");
+          setPartnerLiveTranslation(msg.data.translation || "");
 
           // Auto-clear after 5s of no updates
-          if (liveTextTimeoutRef.current) clearTimeout(liveTextTimeoutRef.current)
+          if (liveTextTimeoutRef.current)
+            clearTimeout(liveTextTimeoutRef.current);
           liveTextTimeoutRef.current = setTimeout(() => {
-            setPartnerLiveText('')
-            setPartnerLiveTranslation('')
-          }, 5000)
+            setPartnerLiveText("");
+            setPartnerLiveTranslation("");
+          }, 5000);
         }
 
-        if (msg.type === 'emoji') {
+        if (msg.type === "emoji") {
           // Partner added emoji to a message
-          setTranscript(h => h.map(m =>
-            m.id === msg.data.messageId ? { ...m, emoji: msg.data.emoji } : m
-          ))
-          vibrate([20, 10, 20, 10, 50])
+          setTranscript((h) =>
+            h.map((m) =>
+              m.id === msg.data.messageId ? { ...m, emoji: msg.data.emoji } : m,
+            ),
+          );
+          vibrate([20, 10, 20, 10, 50]);
         }
 
-        if (msg.type === 'clear') {
-          setTranscript([])
-          vibrate([30, 20, 30])
+        if (msg.type === "clear") {
+          setTranscript([]);
+          vibrate([30, 20, 30]);
         }
       },
       onPartnerConnected: (name) => {
-        setPartnerName(name)
-        vibrate([100, 50, 100])
+        setPartnerName(name);
+        vibrate([100, 50, 100]);
       },
       onPartnerDisconnected: () => {
-        setPartnerName('')
-        setPartnerLiveText('')
-        setPartnerLiveTranslation('')
-      }
-    })
+        setPartnerName("");
+        setPartnerLiveText("");
+        setPartnerLiveTranslation("");
+      },
+    });
 
-    connectionRef.current = connection
-    connection.initialize(roomId, isHost, userName)
+    connectionRef.current = connection;
+    connection.initialize(roomId, isHost, userName);
 
     return () => {
-      mountedRef.current = false
-      connection.disconnect()
-      if (liveTextTimeoutRef.current) clearTimeout(liveTextTimeoutRef.current)
-      if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current)
-      if (liveTextDebounceRef.current) clearTimeout(liveTextDebounceRef.current)
-      if (myCaptionTimeoutRef.current) clearTimeout(myCaptionTimeoutRef.current)
+      mountedRef.current = false;
+      connection.disconnect();
+      if (liveTextTimeoutRef.current) clearTimeout(liveTextTimeoutRef.current);
+      if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+      if (liveTextDebounceRef.current)
+        clearTimeout(liveTextDebounceRef.current);
+      if (myCaptionTimeoutRef.current)
+        clearTimeout(myCaptionTimeoutRef.current);
       if (recognitionRef.current) {
-        try { recognitionRef.current.stop() } catch {}
+        try {
+          recognitionRef.current.stop();
+        } catch {}
       }
-    }
-  }, [roomId, isHost, userName, vibrate, addToTranscript])
+    };
+  }, [roomId, isHost, userName, vibrate, addToTranscript]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // SEND TO PARTNER
   // ═══════════════════════════════════════════════════════════════════════════
 
   const sendToPartner = useCallback((message: TalkMessage) => {
-    if (connectionRef.current?.isConnected) {
-      connectionRef.current.send(message)
+    // Always try to send - TalkConnection handles queuing if not connected
+    if (connectionRef.current) {
+      connectionRef.current.send(message);
     }
-  }, [])
+  }, []);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // SPEECH RECOGNITION
   // ═══════════════════════════════════════════════════════════════════════════
 
   const startListening = useCallback(() => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    const SpeechRecognition =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert('Speech recognition not supported. Please use Chrome.')
-      return
+      alert("Speech recognition not supported. Please use Chrome.");
+      return;
     }
 
-    const recognition = new SpeechRecognition()
-    recognition.continuous = true
-    recognition.interimResults = true
-    recognition.lang = userLang === 'en' ? 'en-US' : 'es-ES'
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = userLang === "en" ? "en-US" : "es-ES";
 
-    let finalizedText = ''
-    let lastSpeechTime = Date.now()
+    let finalizedText = "";
+    let lastSpeechTime = Date.now();
 
     recognition.onresult = async (event: any) => {
-      if (!mountedRef.current) return
+      if (!mountedRef.current) return;
 
-      let interim = ''
-      let newFinal = ''
+      let interim = "";
+      let newFinal = "";
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript
+        const transcript = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
-          newFinal += transcript
+          newFinal += transcript;
         } else {
-          interim = transcript
+          interim = transcript;
         }
       }
 
-      lastSpeechTime = Date.now()
-      const displayText = finalizedText + newFinal + interim
-      setMyLiveText(displayText)
+      lastSpeechTime = Date.now();
+      const displayText = finalizedText + newFinal + interim;
+      setMyLiveText(displayText);
 
       // Stream live text to partner (debounced)
       if (displayText.trim()) {
-        if (liveTextDebounceRef.current) clearTimeout(liveTextDebounceRef.current)
+        if (liveTextDebounceRef.current)
+          clearTimeout(liveTextDebounceRef.current);
         liveTextDebounceRef.current = setTimeout(async () => {
-          if (!mountedRef.current) return
-          const translated = await translate(displayText.trim(), userLang, targetLang)
-          if (!mountedRef.current) return
-          setMyLiveTranslation(translated)
+          if (!mountedRef.current) return;
+          const translated = await translate(
+            displayText.trim(),
+            userLang,
+            targetLang,
+          );
+          if (!mountedRef.current) return;
+          setMyLiveTranslation(translated);
           sendToPartner({
-            type: 'live',
-            data: { text: displayText.trim(), translation: translated }
-          })
-        }, 150)
+            type: "live",
+            data: { text: displayText.trim(), translation: translated },
+          });
+        }, 150);
       }
 
       if (newFinal.trim()) {
-        finalizedText += newFinal
-        vibrate(30)
+        finalizedText += newFinal;
+        vibrate(30);
 
-        const translated = await translate(finalizedText.trim(), userLang, targetLang)
-        setMyLiveTranslation(translated)
+        const translated = await translate(
+          finalizedText.trim(),
+          userLang,
+          targetLang,
+        );
+        setMyLiveTranslation(translated);
 
         // Stream updated text
         sendToPartner({
-          type: 'live',
-          data: { text: finalizedText.trim(), translation: translated }
-        })
+          type: "live",
+          data: { text: finalizedText.trim(), translation: translated },
+        });
 
         // In hands-free mode, auto-send after silence
         if (isHandsFreeRef.current) {
-          if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current)
+          if (silenceTimeoutRef.current)
+            clearTimeout(silenceTimeoutRef.current);
           silenceTimeoutRef.current = setTimeout(async () => {
             if (finalizedText.trim() && Date.now() - lastSpeechTime > 1500) {
               // Add to transcript
-              addToTranscript('me', userName, finalizedText.trim(), translated, userLang)
+              addToTranscript(
+                "me",
+                userName,
+                finalizedText.trim(),
+                translated,
+                userLang,
+              );
               // Send to partner
               sendToPartner({
-                type: 'message',
+                type: "message",
                 data: {
                   id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
                   speaker: userName,
                   original: finalizedText.trim(),
                   translation: translated,
                   lang: userLang,
-                  timestamp: Date.now()
-                }
-              })
+                  timestamp: Date.now(),
+                },
+              });
               // Clear
-              finalizedText = ''
-              setMyLiveText('')
-              setMyLiveTranslation('')
+              finalizedText = "";
+              setMyLiveText("");
+              setMyLiveTranslation("");
             }
-          }, 1800)
+          }, 1800);
         }
       }
 
       // Manual mode: send on final result
       if (!isHandsFreeRef.current && newFinal.trim()) {
-        const translated = await translate(newFinal.trim(), userLang, targetLang)
+        const translated = await translate(
+          newFinal.trim(),
+          userLang,
+          targetLang,
+        );
         // Add to transcript
-        addToTranscript('me', userName, newFinal.trim(), translated, userLang)
+        addToTranscript("me", userName, newFinal.trim(), translated, userLang);
         // Send to partner
         sendToPartner({
-          type: 'message',
+          type: "message",
           data: {
             id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
             speaker: userName,
             original: newFinal.trim(),
             translation: translated,
             lang: userLang,
-            timestamp: Date.now()
-          }
-        })
+            timestamp: Date.now(),
+          },
+        });
         // Clear after short delay
-        if (myCaptionTimeoutRef.current) clearTimeout(myCaptionTimeoutRef.current)
+        if (myCaptionTimeoutRef.current)
+          clearTimeout(myCaptionTimeoutRef.current);
         myCaptionTimeoutRef.current = setTimeout(() => {
-          finalizedText = ''
-          setMyLiveText('')
-          setMyLiveTranslation('')
-        }, 2000)
+          finalizedText = "";
+          setMyLiveText("");
+          setMyLiveTranslation("");
+        }, 2000);
       }
-    }
+    };
 
     recognition.onerror = (e: any) => {
-      if (e.error !== 'no-speech' && e.error !== 'aborted') {
-        console.error('Speech error:', e.error)
+      if (e.error !== "no-speech" && e.error !== "aborted") {
+        console.error("Speech error:", e.error);
       }
-    }
+    };
 
     recognition.onend = () => {
       if (isListeningRef.current && mountedRef.current) {
-        try { recognition.start() } catch {}
+        try {
+          recognition.start();
+        } catch {}
       }
-    }
+    };
 
-    recognitionRef.current = recognition
-    recognition.start()
-    setIsListening(true)
-    vibrate([50, 30, 50])
-  }, [userLang, targetLang, translate, vibrate, sendToPartner, addToTranscript, userName])
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsListening(true);
+    vibrate([50, 30, 50]);
+  }, [
+    userLang,
+    targetLang,
+    translate,
+    vibrate,
+    sendToPartner,
+    addToTranscript,
+    userName,
+  ]);
 
   const stopListening = useCallback(() => {
-    setIsListening(false)
-    if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current)
+    setIsListening(false);
+    if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
     if (recognitionRef.current) {
-      try { recognitionRef.current.stop() } catch {}
-      recognitionRef.current = null
+      try {
+        recognitionRef.current.stop();
+      } catch {}
+      recognitionRef.current = null;
     }
-    vibrate(30)
-  }, [vibrate])
+    vibrate(30);
+  }, [vibrate]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // EMOJI REACTIONS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  const addEmoji = useCallback((messageId: string, emoji: string) => {
-    setTranscript(h => h.map(msg =>
-      msg.id === messageId ? { ...msg, emoji } : msg
-    ))
-    setShowEmojiPicker(null)
-    vibrate([20, 10, 20, 10, 50])
+  const addEmoji = useCallback(
+    (messageId: string, emoji: string) => {
+      setTranscript((h) =>
+        h.map((msg) => (msg.id === messageId ? { ...msg, emoji } : msg)),
+      );
+      setShowEmojiPicker(null);
+      vibrate([20, 10, 20, 10, 50]);
 
-    sendToPartner({
-      type: 'emoji',
-      data: { messageId, emoji }
-    })
-  }, [vibrate, sendToPartner])
+      sendToPartner({
+        type: "emoji",
+        data: { messageId, emoji },
+      });
+    },
+    [vibrate, sendToPartner],
+  );
 
   // ═══════════════════════════════════════════════════════════════════════════
   // CONTROLS
   // ═══════════════════════════════════════════════════════════════════════════
 
   const toggleListening = () => {
-    if (isListening) stopListening()
-    else startListening()
-  }
+    if (isListening) stopListening();
+    else startListening();
+  };
 
   const toggleHandsFree = () => {
-    const newValue = !isHandsFree
-    setIsHandsFree(newValue)
-    vibrate(newValue ? [50, 30, 50, 30, 50] : 50)
-    if (newValue && !isListening) startListening()
-  }
+    const newValue = !isHandsFree;
+    setIsHandsFree(newValue);
+    vibrate(newValue ? [50, 30, 50, 30, 50] : 50);
+    if (newValue && !isListening) startListening();
+  };
 
   const copyJoinLink = () => {
-    navigator.clipboard.writeText(`${window.location.origin}/?join=talk&id=${roomId}`)
-    setCopied(true)
-    vibrate(50)
-    setTimeout(() => setCopied(false), 2000)
-  }
+    navigator.clipboard.writeText(
+      `${window.location.origin}/?join=talk&id=${roomId}`,
+    );
+    setCopied(true);
+    vibrate(50);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const endSession = () => {
-    stopListening()
-    connectionRef.current?.disconnect()
-    router.push('/')
-  }
+    stopListening();
+    connectionRef.current?.disconnect();
+    router.push("/");
+  };
 
-  const speak = (text: string, lang: 'en' | 'es') => {
-    speechSynthesis.cancel()
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.lang = lang === 'en' ? 'en-US' : 'es-ES'
-    utterance.rate = 0.9
-    speechSynthesis.speak(utterance)
-  }
+  const speak = (text: string, lang: "en" | "es") => {
+    speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = lang === "en" ? "en-US" : "es-ES";
+    utterance.rate = 0.9;
+    speechSynthesis.speak(utterance);
+  };
 
   const clearHistory = () => {
-    setTranscript([])
-    vibrate([30, 20, 30])
-    sendToPartner({ type: 'clear', data: {} })
-  }
+    setTranscript([]);
+    vibrate([30, 20, 30]);
+    sendToPartner({ type: "clear", data: {} });
+  };
 
-  const statusColor = isConnected && partnerName ? 'bg-green-500' : 'bg-yellow-500 animate-pulse'
+  const statusColor =
+    isConnected && partnerName ? "bg-green-500" : "bg-yellow-500 animate-pulse";
 
   // ═══════════════════════════════════════════════════════════════════════════
   // RENDER
@@ -460,19 +533,24 @@ function TalkContent() {
           {partnerName && (
             <div className="flex items-center gap-2 bg-purple-500/20 px-3 py-1.5">
               <span className="text-purple-400 text-sm">{partnerName}</span>
-              <span className="text-purple-400/50 text-xs">{targetLang === 'en' ? '🇺🇸' : '🇪🇸'}</span>
+              <span className="text-purple-400/50 text-xs">
+                {targetLang === "en" ? "🇺🇸" : "🇪🇸"}
+              </span>
             </div>
           )}
         </div>
 
         <div className="flex items-center gap-2">
-          <button onClick={copyJoinLink} className="bg-white/5 px-3 py-1.5 text-cyan-400 text-sm">
-            {copied ? '✓ Copied' : '🔗 Share'}
+          <button
+            onClick={copyJoinLink}
+            className="bg-white/5 px-3 py-1.5 text-cyan-400 text-sm"
+          >
+            {copied ? "✓ Copied" : "🔗 Share"}
           </button>
 
           <button
             onClick={() => setShowSettings(!showSettings)}
-            className={`bg-white/5 px-3 py-1.5 text-sm ${showSettings ? 'text-cyan-400' : 'text-white'}`}
+            className={`bg-white/5 px-3 py-1.5 text-sm ${showSettings ? "text-cyan-400" : "text-white"}`}
           >
             ⚙️
           </button>
@@ -481,11 +559,11 @@ function TalkContent() {
             onClick={toggleHandsFree}
             className={`px-3 py-1.5 text-sm font-medium ${
               isHandsFree
-                ? 'bg-green-500/20 text-green-400 border border-green-500/50'
-                : 'bg-white/5 text-gray-400'
+                ? "bg-green-500/20 text-green-400 border border-green-500/50"
+                : "bg-white/5 text-gray-400"
             }`}
           >
-            {isHandsFree ? '🎙️ Auto' : '👆 Tap'}
+            {isHandsFree ? "🎙️ Auto" : "👆 Tap"}
           </button>
         </div>
       </div>
@@ -495,14 +573,14 @@ function TalkContent() {
         <div className="bg-black/90 backdrop-blur-xl border-b border-white/10 px-4 py-3 flex items-center gap-4">
           <span className="text-white text-sm">Caption Size:</span>
           <div className="flex gap-2">
-            {(['small', 'medium', 'large'] as const).map(size => (
+            {(["small", "medium", "large"] as const).map((size) => (
               <button
                 key={size}
                 onClick={() => setFontSize(size)}
                 className={`px-3 py-1.5 text-sm capitalize ${
                   fontSize === size
-                    ? 'bg-cyan-500 text-white'
-                    : 'bg-white/10 text-gray-300 hover:bg-white/20'
+                    ? "bg-cyan-500 text-white"
+                    : "bg-white/10 text-gray-300 hover:bg-white/20"
                 }`}
               >
                 {size}
@@ -521,10 +599,10 @@ function TalkContent() {
 
       {/* Language indicator */}
       <div className="bg-white/5 px-4 py-2 flex items-center justify-center gap-3 flex-shrink-0">
-        <span className="text-xl">{userLang === 'en' ? '🇺🇸' : '🇪🇸'}</span>
+        <span className="text-xl">{userLang === "en" ? "🇺🇸" : "🇪🇸"}</span>
         <span className="text-white font-medium">{userName}</span>
         <span className="text-gray-500">→</span>
-        <span className="text-xl">{targetLang === 'en' ? '🇺🇸' : '🇪🇸'}</span>
+        <span className="text-xl">{targetLang === "en" ? "🇺🇸" : "🇪🇸"}</span>
       </div>
 
       {/* Conversation area */}
@@ -539,13 +617,17 @@ function TalkContent() {
               <div className="text-center py-12">
                 <div className="text-6xl mb-4">💬</div>
                 <p className="text-gray-400 text-lg mb-2">
-                  {isHandsFree ? 'Just start speaking!' : 'Tap the microphone to speak'}
+                  {isHandsFree
+                    ? "Just start speaking!"
+                    : "Tap the microphone to speak"}
                 </p>
                 <p className="text-gray-500 text-sm">
                   Your words translate instantly
                 </p>
                 {!isConnected && (
-                  <p className="text-yellow-400 text-sm mt-4">{connectionStatus}</p>
+                  <p className="text-yellow-400 text-sm mt-4">
+                    {connectionStatus}
+                  </p>
                 )}
               </div>
             </div>
@@ -554,17 +636,19 @@ function TalkContent() {
           {transcript.map((entry) => (
             <div
               key={entry.id}
-              className={`max-w-[85%] md:max-w-[75%] ${entry.speaker === 'me' ? 'ml-auto' : 'mr-auto'}`}
+              className={`max-w-[85%] md:max-w-[75%] ${entry.speaker === "me" ? "ml-auto" : "mr-auto"}`}
             >
               <div
                 className={`relative p-4 ${
-                  entry.speaker === 'me'
-                    ? 'bg-cyan-500/10 border border-cyan-500/30'
-                    : 'bg-purple-500/10 border border-purple-500/30'
+                  entry.speaker === "me"
+                    ? "bg-cyan-500/10 border border-cyan-500/30"
+                    : "bg-purple-500/10 border border-purple-500/30"
                 }`}
                 onClick={(e) => {
-                  e.stopPropagation()
-                  setShowEmojiPicker(showEmojiPicker === entry.id ? null : entry.id)
+                  e.stopPropagation();
+                  setShowEmojiPicker(
+                    showEmojiPicker === entry.id ? null : entry.id,
+                  );
                 }}
               >
                 {entry.emoji && (
@@ -574,21 +658,33 @@ function TalkContent() {
                 )}
 
                 <div className="flex items-center gap-2 mb-2">
-                  <span className={`text-xs font-medium ${entry.speaker === 'me' ? 'text-cyan-400' : 'text-purple-400'}`}>
+                  <span
+                    className={`text-xs font-medium ${entry.speaker === "me" ? "text-cyan-400" : "text-purple-400"}`}
+                  >
                     {entry.name}
                   </span>
                   <span className="text-gray-600 text-xs">
-                    {entry.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {entry.timestamp.toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
                   </span>
-                  <span className="text-xs">{entry.lang === 'en' ? '🇺🇸' : '🇪🇸'}</span>
+                  <span className="text-xs">
+                    {entry.lang === "en" ? "🇺🇸" : "🇪🇸"}
+                  </span>
                 </div>
 
                 <div className="flex items-start justify-between gap-3">
-                  <p className={`text-white ${fontSizeClasses[fontSize]} leading-relaxed`}>
+                  <p
+                    className={`text-white ${fontSizeClasses[fontSize]} leading-relaxed`}
+                  >
                     {entry.original}
                   </p>
                   <button
-                    onClick={(e) => { e.stopPropagation(); speak(entry.original, entry.lang) }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      speak(entry.original, entry.lang);
+                    }}
                     className="text-gray-500 hover:text-white shrink-0"
                   >
                     🔊
@@ -596,11 +692,19 @@ function TalkContent() {
                 </div>
 
                 <div className="mt-2 pt-2 border-t border-white/10 flex items-start justify-between gap-3">
-                  <p className={`${entry.speaker === 'me' ? 'text-cyan-300' : 'text-purple-300'} ${fontSizeClasses[fontSize]}`}>
+                  <p
+                    className={`${entry.speaker === "me" ? "text-cyan-300" : "text-purple-300"} ${fontSizeClasses[fontSize]}`}
+                  >
                     → {entry.translated}
                   </p>
                   <button
-                    onClick={(e) => { e.stopPropagation(); speak(entry.translated, entry.lang === 'en' ? 'es' : 'en') }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      speak(
+                        entry.translated,
+                        entry.lang === "en" ? "es" : "en",
+                      );
+                    }}
                     className="text-gray-500 hover:text-white shrink-0"
                   >
                     🔊
@@ -644,19 +748,29 @@ function TalkContent() {
               <div className="max-w-[85%] md:max-w-[70%]">
                 <div className="bg-purple-500/20 backdrop-blur-xl border border-purple-500/30 border-dashed px-4 py-3">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-purple-400 text-xs font-medium">{partnerName || 'Partner'}</span>
+                    <span className="text-purple-400 text-xs font-medium">
+                      {partnerName || "Partner"}
+                    </span>
                     <div className="flex gap-0.5">
-                      {[0,1,2].map(i => (
-                        <div key={i} className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-pulse" style={{animationDelay: `${i * 0.15}s`}} />
+                      {[0, 1, 2].map((i) => (
+                        <div
+                          key={i}
+                          className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-pulse"
+                          style={{ animationDelay: `${i * 0.15}s` }}
+                        />
                       ))}
                     </div>
                     <span className="text-purple-500 text-xs">speaking...</span>
                   </div>
-                  <p className={`text-white ${fontSizeClasses[fontSize]} leading-relaxed`}>
+                  <p
+                    className={`text-white ${fontSizeClasses[fontSize]} leading-relaxed`}
+                  >
                     {partnerLiveText}
                   </p>
                   {partnerLiveTranslation && (
-                    <p className={`text-purple-300 ${fontSizeClasses[fontSize]} mt-2`}>
+                    <p
+                      className={`text-purple-300 ${fontSizeClasses[fontSize]} mt-2`}
+                    >
                       → {partnerLiveTranslation}
                     </p>
                   )}
@@ -671,24 +785,36 @@ function TalkContent() {
               <div className="max-w-[85%] md:max-w-[70%]">
                 <div className="bg-cyan-500/20 backdrop-blur-xl border border-cyan-500/30 border-dashed px-4 py-3">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-cyan-400 text-xs font-medium">You</span>
+                    <span className="text-cyan-400 text-xs font-medium">
+                      You
+                    </span>
                     <div className="flex gap-0.5">
-                      {[0,1,2].map(i => (
-                        <div key={i} className="w-1 h-2 bg-cyan-400 rounded-full animate-pulse" style={{animationDelay: `${i * 0.15}s`}} />
+                      {[0, 1, 2].map((i) => (
+                        <div
+                          key={i}
+                          className="w-1 h-2 bg-cyan-400 rounded-full animate-pulse"
+                          style={{ animationDelay: `${i * 0.15}s` }}
+                        />
                       ))}
                     </div>
                   </div>
-                  <p className={`text-white ${fontSizeClasses[fontSize]} leading-relaxed`}>
+                  <p
+                    className={`text-white ${fontSizeClasses[fontSize]} leading-relaxed`}
+                  >
                     {myLiveText}
                     <span className="inline-block w-0.5 h-4 bg-white ml-1 animate-blink" />
                   </p>
                   {myLiveTranslation && (
-                    <p className={`text-cyan-300 ${fontSizeClasses[fontSize]} mt-2`}>
+                    <p
+                      className={`text-cyan-300 ${fontSizeClasses[fontSize]} mt-2`}
+                    >
                       → {myLiveTranslation}
                     </p>
                   )}
                   <p className="text-gray-500 text-xs mt-2">
-                    {isHandsFree ? 'Pause to send automatically' : 'Speaking...'}
+                    {isHandsFree
+                      ? "Pause to send automatically"
+                      : "Speaking..."}
                   </p>
                 </div>
               </div>
@@ -711,11 +837,11 @@ function TalkContent() {
             onClick={toggleHandsFree}
             className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${
               isHandsFree
-                ? 'bg-green-500/30 text-green-400 border-2 border-green-500'
-                : 'bg-white/10 text-gray-400'
+                ? "bg-green-500/30 text-green-400 border-2 border-green-500"
+                : "bg-white/10 text-gray-400"
             }`}
           >
-            {isHandsFree ? '🙌' : '👆'}
+            {isHandsFree ? "🙌" : "👆"}
           </button>
 
           {/* Main mic button */}
@@ -724,10 +850,10 @@ function TalkContent() {
             disabled={!isConnected && !isHost}
             className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all ${
               !isConnected && !isHost
-                ? 'bg-gray-700 text-gray-500'
+                ? "bg-gray-700 text-gray-500"
                 : isListening
-                  ? 'bg-gradient-to-br from-green-400 to-emerald-600 text-white shadow-lg shadow-green-500/50'
-                  : 'bg-gradient-to-br from-cyan-400 to-blue-600 text-white shadow-lg shadow-cyan-500/50'
+                  ? "bg-gradient-to-br from-green-400 to-emerald-600 text-white shadow-lg shadow-green-500/50"
+                  : "bg-gradient-to-br from-cyan-400 to-blue-600 text-white shadow-lg shadow-cyan-500/50"
             }`}
           >
             {isListening && (
@@ -738,31 +864,34 @@ function TalkContent() {
             )}
             {isListening ? (
               <div className="flex items-center gap-1 z-10">
-                {[0,1,2,3,4].map(i => (
+                {[0, 1, 2, 3, 4].map((i) => (
                   <div
                     key={i}
                     className="w-1 bg-white rounded-full animate-soundwave"
                     style={{
                       height: `${14 + Math.sin(i * 0.8) * 10}px`,
-                      animationDelay: `${i * 0.1}s`
+                      animationDelay: `${i * 0.1}s`,
                     }}
                   />
                 ))}
               </div>
             ) : (
               <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1 1.93c-3.94-.49-7-3.85-7-7.93h2c0 3.31 2.69 6 6 6s6-2.69 6-6h2c0 4.08-3.06 7.44-7 7.93V19h4v2H8v-2h4v-3.07z"/>
+                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1 1.93c-3.94-.49-7-3.85-7-7.93h2c0 3.31 2.69 6 6 6s6-2.69 6-6h2c0 4.08-3.06 7.44-7 7.93V19h4v2H8v-2h4v-3.07z" />
               </svg>
             )}
           </button>
 
           <button
-            onClick={() => transcript.length > 0 && setShowEmojiPicker(transcript[transcript.length - 1]?.id)}
+            onClick={() =>
+              transcript.length > 0 &&
+              setShowEmojiPicker(transcript[transcript.length - 1]?.id)
+            }
             disabled={transcript.length === 0}
             className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${
               transcript.length > 0
-                ? 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30'
-                : 'bg-white/5 text-gray-600'
+                ? "bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30"
+                : "bg-white/5 text-gray-600"
             }`}
           >
             😊
@@ -782,10 +911,10 @@ function TalkContent() {
           ) : isListening ? (
             <span className="text-green-400 flex items-center justify-center gap-2">
               <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-              {isHandsFree ? 'Hands-free • Speak naturally' : 'Listening...'}
+              {isHandsFree ? "Hands-free • Speak naturally" : "Listening..."}
             </span>
           ) : (
-            'Tap the mic to speak'
+            "Tap the mic to speak"
           )}
         </p>
       </div>
@@ -793,39 +922,58 @@ function TalkContent() {
       {/* Custom styles */}
       <style jsx>{`
         @keyframes fade-in {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
+          from {
+            opacity: 0;
+            transform: translateY(10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
         }
         .animate-fade-in {
           animation: fade-in 0.3s ease-out;
         }
         @keyframes blink {
-          0%, 50% { opacity: 1; }
-          51%, 100% { opacity: 0; }
+          0%,
+          50% {
+            opacity: 1;
+          }
+          51%,
+          100% {
+            opacity: 0;
+          }
         }
         .animate-blink {
           animation: blink 1s infinite;
         }
         @keyframes soundwave {
-          0%, 100% { transform: scaleY(0.5); }
-          50% { transform: scaleY(1); }
+          0%,
+          100% {
+            transform: scaleY(0.5);
+          }
+          50% {
+            transform: scaleY(1);
+          }
         }
         .animate-soundwave {
           animation: soundwave 0.5s ease-in-out infinite;
         }
       `}</style>
     </div>
-  )
+  );
 }
 
 export default function TalkPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
-        <div className="w-16 h-16 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+          <div className="w-16 h-16 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
       <TalkContent />
     </Suspense>
-  )
+  );
 }
