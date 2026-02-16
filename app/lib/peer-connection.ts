@@ -129,10 +129,11 @@ export class PeerConnection {
       await this.createPeer();
 
       if (isHost) {
-        // Host: Register with signaling API and wait
+        // Host: FIRST setup listeners, THEN register
+        // CRITICAL: Listeners MUST be ready before guest tries to connect
+        this.setupPeerListeners();
         await this.registerAsHost();
         this.setStatus("waiting", "Esperando...");
-        this.setupPeerListeners();
       } else {
         // Guest: Look up host and connect
         this.setStatus("connecting", "Buscando anfitrión...");
@@ -273,7 +274,10 @@ export class PeerConnection {
       if (this.destroyed) return;
       console.log("📞 Incoming call from:", call.peer);
 
-      // Answer with our stream
+      // CRITICAL: Setup handlers BEFORE answering to catch ICE state transitions
+      this.handleMediaConnection(call);
+
+      // NOW answer with our stream (handlers are ready)
       if (this.localStream) {
         console.log("📞 Answering with our stream...");
         call.answer(this.localStream);
@@ -281,8 +285,6 @@ export class PeerConnection {
         console.log("📞 Answering without stream (audio only mode)");
         call.answer();
       }
-
-      this.handleMediaConnection(call);
     });
 
     // Handle disconnection from signaling server
@@ -376,10 +378,10 @@ export class PeerConnection {
       this.startKeepAlive();
 
       // ONLY guest initiates the video call (prevents collision)
-      // Add small delay to ensure host is ready
+      // Increased delay to ensure host listeners are ready
       if (!this.isHost && this.localStream) {
-        console.log("📞 Guest initiating video call in 300ms...");
-        setTimeout(() => this.initiateCall(), 300);
+        console.log("📞 Guest initiating video call in 500ms...");
+        setTimeout(() => this.initiateCall(), 500);
       }
     };
 
@@ -440,9 +442,9 @@ export class PeerConnection {
   private initiateCall(): void {
     if (!this.peer || !this.partnerPeerId || this.destroyed) return;
 
-    // Don't create duplicate calls
-    if (this.mediaConnection && !this.mediaConnection.open) {
-      console.log("📞 Call already in progress, skipping");
+    // Don't create duplicate calls - FIX: Check if connection IS open, not NOT open
+    if (this.mediaConnection?.open) {
+      console.log("📞 Call already connected, skipping");
       return;
     }
 
@@ -451,7 +453,42 @@ export class PeerConnection {
     if (this.localStream) {
       const call = this.peer.call(this.partnerPeerId, this.localStream);
       this.handleMediaConnection(call);
+
+      // Add timeout for media connection establishment
+      this.setupMediaConnectionTimeout();
     }
+  }
+
+  private mediaConnectionTimeout: NodeJS.Timeout | null = null;
+
+  private setupMediaConnectionTimeout(): void {
+    // Clear any existing timeout
+    if (this.mediaConnectionTimeout) {
+      clearTimeout(this.mediaConnectionTimeout);
+    }
+
+    // Set 10 second timeout for media connection
+    this.mediaConnectionTimeout = setTimeout(() => {
+      if (this.destroyed) return;
+
+      // Check if we have remote stream (connection successful)
+      if (this.remoteStream) {
+        console.log("📺 Media connection established successfully");
+        return;
+      }
+
+      // No stream after 10 seconds - try ICE restart
+      console.log("⚠️ Media connection timeout - attempting ICE restart");
+      const pc = (this.mediaConnection as any)
+        ?.peerConnection as RTCPeerConnection;
+      if (pc) {
+        try {
+          pc.restartIce?.();
+        } catch (err) {
+          console.error("ICE restart failed:", err);
+        }
+      }
+    }, 10000);
   }
 
   private handleMediaConnection(call: MediaConnection): void {
@@ -484,6 +521,12 @@ export class PeerConnection {
       console.log("   Video tracks:", stream.getVideoTracks().length);
       console.log("   Audio tracks:", stream.getAudioTracks().length);
 
+      // Clear media connection timeout - we're good!
+      if (this.mediaConnectionTimeout) {
+        clearTimeout(this.mediaConnectionTimeout);
+        this.mediaConnectionTimeout = null;
+      }
+
       this.remoteStream = stream;
       this.callbacks.onRemoteStream?.(stream);
     });
@@ -505,8 +548,11 @@ export class PeerConnection {
 
         if (pc.iceConnectionState === "failed") {
           console.log("🧊 ICE failed, attempting ICE restart...");
-          // Try ICE restart
-          pc.restartIce?.();
+          try {
+            pc.restartIce?.();
+          } catch (err) {
+            console.error("ICE restart failed:", err);
+          }
         }
 
         if (pc.iceConnectionState === "disconnected") {
@@ -515,9 +561,17 @@ export class PeerConnection {
           setTimeout(() => {
             if (pc.iceConnectionState === "disconnected" && !this.destroyed) {
               console.log("🧊 ICE still disconnected, restarting...");
-              pc.restartIce?.();
+              try {
+                pc.restartIce?.();
+              } catch (err) {
+                console.error("ICE restart failed:", err);
+              }
             }
           }, 3000);
+        }
+
+        if (pc.iceConnectionState === "connected") {
+          console.log("🧊 ICE connected successfully!");
         }
       };
 
@@ -567,11 +621,22 @@ export class PeerConnection {
   // ═══════════════════════════════════════════════════════════════════════════
 
   send(data: any): boolean {
-    if (!this.dataConnection?.open || this.destroyed) return false;
+    if (!this.dataConnection?.open || this.destroyed) {
+      if (data?.type !== "ping" && data?.type !== "pong") {
+        console.warn("⚠️ Send failed: data channel not open", {
+          hasConnection: !!this.dataConnection,
+          isOpen: this.dataConnection?.open,
+          destroyed: this.destroyed,
+          dataType: data?.type,
+        });
+      }
+      return false;
+    }
     try {
       this.dataConnection.send(data);
       return true;
-    } catch {
+    } catch (err) {
+      console.error("⚠️ Send error:", err);
       return false;
     }
   }
@@ -595,6 +660,12 @@ export class PeerConnection {
 
     // Stop keep-alive
     this.stopKeepAlive();
+
+    // Clear media connection timeout
+    if (this.mediaConnectionTimeout) {
+      clearTimeout(this.mediaConnectionTimeout);
+      this.mediaConnectionTimeout = null;
+    }
 
     // Clear any polling
     if (this.pollingInterval) {
