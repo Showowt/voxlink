@@ -26,40 +26,26 @@ export interface TalkConnectionCallbacks {
   onPartnerDisconnected?: () => void;
 }
 
-// Multiple STUN/TURN servers for reliability
-const ICE_SERVERS: RTCIceServer[] = [
-  // Google STUN - highly reliable
+// Default ICE servers (STUN only - TURN fetched from API)
+const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
-  { urls: "stun:stun2.l.google.com:19302" },
-
-  // Twilio STUN
   { urls: "stun:global.stun.twilio.com:3478" },
-
-  // Metered TURN - Free tier with good reliability
-  {
-    urls: "turn:a.relay.metered.ca:80",
-    username: "e8dd65b92c62d5e91f3ce421",
-    credential: "uWdWNmkhvyqTmFGp",
-  },
-  {
-    urls: "turn:a.relay.metered.ca:443",
-    username: "e8dd65b92c62d5e91f3ce421",
-    credential: "uWdWNmkhvyqTmFGp",
-  },
-  {
-    urls: "turn:a.relay.metered.ca:443?transport=tcp",
-    username: "e8dd65b92c62d5e91f3ce421",
-    credential: "uWdWNmkhvyqTmFGp",
-  },
-
-  // OpenRelay backup
-  {
-    urls: "turn:openrelay.metered.ca:443",
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
 ];
+
+// Fetch ICE servers from secure API (includes TURN credentials)
+async function getIceServers(): Promise<RTCIceServer[]> {
+  try {
+    const res = await fetch("/api/turn");
+    if (res.ok) {
+      const data = await res.json();
+      return data.iceServers || DEFAULT_ICE_SERVERS;
+    }
+  } catch (err) {
+    console.warn("[VoxLink] Failed to fetch TURN credentials:", err);
+  }
+  return DEFAULT_ICE_SERVERS;
+}
 
 export class TalkConnection {
   private peer: Peer | null = null;
@@ -128,6 +114,9 @@ export class TalkConnection {
     this.setStatus("initializing", "Connecting to server...");
 
     try {
+      // Fetch ICE servers (TURN credentials from server)
+      const iceServers = await getIceServers();
+
       // Create peer with explicit PeerJS cloud configuration
       this.peer = new Peer(this._peerId, {
         // Use PeerJS cloud with explicit config
@@ -136,7 +125,7 @@ export class TalkConnection {
         secure: true,
         path: "/",
         config: {
-          iceServers: ICE_SERVERS,
+          iceServers,
           iceCandidatePoolSize: 10,
         },
         debug: 2, // More verbose logging for debugging

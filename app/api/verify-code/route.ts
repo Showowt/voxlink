@@ -1,104 +1,40 @@
-import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
+import { NextResponse } from "next/server";
+import { randomBytes } from "crypto";
 
-// Force dynamic rendering
-export const dynamic = "force-dynamic";
+// ═══════════════════════════════════════════════════════════════════════════════
+// VERIFY CODE API - VoxLink Access Gate
+// Validates 4-digit access code and returns session token
+// ═══════════════════════════════════════════════════════════════════════════════
 
-// Access code from environment - NO DEFAULT (must be set in Vercel)
-const ACCESS_CODE = process.env.VOXLINK_ACCESS_CODE;
-if (!ACCESS_CODE) {
-  console.error("CRITICAL: VOXLINK_ACCESS_CODE environment variable not set");
-}
+const ACCESS_CODE = "2468";
 
-// Rate limiting: max 5 attempts per IP per minute
-const attempts = new Map<string, { count: number; resetAt: number }>();
-
-function getRateLimitKey(req: NextRequest): string {
-  return (
-    req.headers.get("x-forwarded-for") ||
-    req.headers.get("x-real-ip") ||
-    "unknown"
-  );
-}
-
-function checkRateLimit(key: string): { allowed: boolean; remaining: number } {
-  const now = Date.now();
-  const record = attempts.get(key);
-
-  if (!record || now > record.resetAt) {
-    attempts.set(key, { count: 1, resetAt: now + 60000 });
-    return { allowed: true, remaining: 4 };
-  }
-
-  if (record.count >= 5) {
-    return { allowed: false, remaining: 0 };
-  }
-
-  record.count++;
-  return { allowed: true, remaining: 5 - record.count };
-}
-
-// Clean up old entries on each request (lightweight)
-function cleanAttempts() {
-  const now = Date.now();
-  Array.from(attempts.entries()).forEach(([key, record]) => {
-    if (now > record.resetAt) {
-      attempts.delete(key);
-    }
-  });
-}
-
-export async function POST(req: NextRequest) {
-  // Clean old attempts
-  cleanAttempts();
-
-  const ip = getRateLimitKey(req);
-  const rateLimit = checkRateLimit(ip);
-
-  if (!rateLimit.allowed) {
-    return NextResponse.json(
-      { valid: false, error: "Too many attempts. Try again in 1 minute." },
-      { status: 429 },
-    );
-  }
-
+export async function POST(request: Request) {
   try {
-    // Fail if ACCESS_CODE not configured
-    if (!ACCESS_CODE) {
-      console.error("ACCESS_CODE not configured");
+    const { code } = await request.json();
+
+    // Validate input
+    if (!code || typeof code !== "string" || code.length !== 4) {
       return NextResponse.json(
-        { valid: false, error: "Server misconfigured" },
-        { status: 500 },
+        { valid: false, error: "Invalid code format" },
+        { status: 400 },
       );
     }
 
-    const { code } = await req.json();
+    // Check code
+    if (code === ACCESS_CODE) {
+      // Generate secure session token
+      const token = randomBytes(32).toString("hex");
 
-    if (!code || typeof code !== "string" || code.length !== 4) {
-      return NextResponse.json({ valid: false, error: "Invalid code format" });
+      return NextResponse.json({
+        valid: true,
+        token,
+      });
     }
 
-    // Normalize both codes to exactly 4 characters
-    const normalizedCode = code.trim().slice(0, 4).padEnd(4, "0");
-    const normalizedAccess = ACCESS_CODE.trim().slice(0, 4).padEnd(4, "0");
-
-    // Constant-time comparison to prevent timing attacks
-    const isValid = crypto.timingSafeEqual(
-      Buffer.from(normalizedCode),
-      Buffer.from(normalizedAccess),
+    return NextResponse.json(
+      { valid: false, error: "Incorrect code" },
+      { status: 401 },
     );
-
-    if (isValid) {
-      // Generate a session token
-      const token = crypto.randomBytes(32).toString("hex");
-      return NextResponse.json({ valid: true, token });
-    }
-
-    return NextResponse.json({
-      valid: false,
-      error: "Invalid code",
-      remaining: rateLimit.remaining,
-    });
   } catch {
     return NextResponse.json(
       { valid: false, error: "Server error" },

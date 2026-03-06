@@ -47,14 +47,18 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event
 
-  // Skip non-GET requests
-  if (request.method !== 'GET') return
+  // CRITICAL: Skip ALL non-GET requests (POST, PUT, DELETE, etc.) - pass through to network
+  if (request.method !== 'GET') {
+    return
+  }
 
-  // Skip API calls and PeerJS - always go to network
+  // Skip API calls and external services - always go to network
   if (request.url.includes('/api/') ||
       request.url.includes('peerjs.com') ||
       request.url.includes('mymemory') ||
-      request.url.includes('huggingface')) {
+      request.url.includes('huggingface') ||
+      request.url.includes('libretranslate') ||
+      request.url.includes('lingva')) {
     return
   }
 

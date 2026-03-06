@@ -1,8 +1,8 @@
 import Peer, { MediaConnection, DataConnection } from "peerjs";
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// VOXLINK PEER CONNECTION v2 - FaceTime-Level Reliability
-// Fixed: Room signaling to ensure host/guest always find each other
+// VOXLINK VIDEO CONNECTION v2.0 - Bulletproof Video Calls
+// Fixed: Connection reliability, retry logic, ICE handling
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export type ConnectionMode = "video" | "talk";
@@ -17,51 +17,31 @@ export type ConnectionStatus =
 export interface PeerCallbacks {
   onStatusChange?: (status: ConnectionStatus, message?: string) => void;
   onRemoteStream?: (stream: MediaStream) => void;
-  onDataMessage?: (data: any) => void;
+  onDataMessage?: (data: unknown) => void;
   onPartnerJoined?: (name: string) => void;
   onPartnerLeft?: () => void;
   onError?: (error: string) => void;
 }
 
-// Default STUN servers (TURN fetched dynamically)
+// Default ICE servers (STUN only - TURN fetched from API)
 const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
-  { urls: "stun:stun2.l.google.com:19302" },
+  { urls: "stun:global.stun.twilio.com:3478" },
 ];
 
-// Fetch ICE servers from our API (includes working TURN)
+// Fetch ICE servers from secure API (includes TURN credentials)
 async function getIceServers(): Promise<RTCIceServer[]> {
   try {
-    const response = await fetch("/api/turn");
-    if (response.ok) {
-      const data = await response.json();
-      console.log("🧊 Got ICE servers:", data.iceServers.length, "servers");
-      return data.iceServers;
+    const res = await fetch("/api/turn");
+    if (res.ok) {
+      const data = await res.json();
+      return data.iceServers || DEFAULT_ICE_SERVERS;
     }
   } catch (err) {
-    console.error("Failed to fetch ICE servers:", err);
+    console.warn("[VoxLink] Failed to fetch TURN credentials:", err);
   }
   return DEFAULT_ICE_SERVERS;
-}
-
-// Generate deterministic peer ID for host, unique for guest
-// This eliminates the need for room registry on serverless
-function generatePeerId(roomId: string, role: "host" | "guest"): string {
-  if (role === "host") {
-    // Host ID is deterministic so guests can find them directly
-    return `voxlink-${roomId}-host`;
-  } else {
-    // Guest ID is unique to allow multiple guests (though we limit to 1)
-    const timestamp = Date.now().toString(36);
-    const random = Math.random().toString(36).slice(2, 6);
-    return `voxlink-${roomId}-guest-${timestamp}-${random}`;
-  }
-}
-
-// Get deterministic host peer ID for a room
-function getHostPeerId(roomId: string): string {
-  return `voxlink-${roomId}-host`;
 }
 
 export class PeerConnection {
@@ -76,17 +56,16 @@ export class PeerConnection {
   private isHost: boolean = false;
   private userName: string = "";
   private myPeerId: string = "";
-  private partnerPeerId: string = "";
+  private hostPeerId: string = "";
 
   private _status: ConnectionStatus = "initializing";
   private callbacks: PeerCallbacks = {};
-  private destroyed: boolean = false;
+  private isDestroyed: boolean = false;
   private connectionAttempts: number = 0;
-  private maxConnectionAttempts: number = 5;
-  private pollingInterval: NodeJS.Timeout | null = null;
+  private maxConnectionAttempts: number = 30; // Increased from 5
+  private connectionAttemptInterval: NodeJS.Timeout | null = null;
   private keepAliveInterval: NodeJS.Timeout | null = null;
-  private lastPingTime: number = 0;
-  private iceServersCache: RTCIceServer[] | null = null;
+  private lastPongTime: number = Date.now();
 
   constructor(callbacks: PeerCallbacks) {
     this.callbacks = callbacks;
@@ -95,6 +74,7 @@ export class PeerConnection {
   get status() {
     return this._status;
   }
+
   get isConnected() {
     return this._status === "connected";
   }
@@ -110,391 +90,314 @@ export class PeerConnection {
     mode: ConnectionMode,
     localStream?: MediaStream,
   ): Promise<boolean> {
-    this.roomId = roomId;
+    this.roomId = roomId.toUpperCase(); // Normalize to uppercase
     this.isHost = isHost;
     this.userName = userName;
     this.mode = mode;
     this.localStream = localStream || null;
-    this.destroyed = false;
+    this.isDestroyed = false;
     this.connectionAttempts = 0;
 
-    this.setStatus("initializing", "Iniciando...");
+    // Generate peer IDs - deterministic for host, unique for guest
+    this.hostPeerId = `voxlink-video-${this.roomId}-host`;
+
+    if (isHost) {
+      this.myPeerId = this.hostPeerId;
+    } else {
+      const uniqueId = Math.random().toString(36).substring(2, 8);
+      this.myPeerId = `voxlink-video-${this.roomId}-guest-${uniqueId}`;
+    }
+
+    this.setStatus("initializing", "Connecting...");
 
     try {
-      // Generate unique peer ID
-      this.myPeerId = generatePeerId(roomId, isHost ? "host" : "guest");
-      console.log("🆔 My peer ID:", this.myPeerId);
+      // Fetch ICE servers (TURN credentials from server)
+      const iceServers = await getIceServers();
 
-      // Create peer with config
-      await this.createPeer();
+      // Create peer with explicit PeerJS cloud configuration
+      this.peer = new Peer(this.myPeerId, {
+        host: "0.peerjs.com",
+        port: 443,
+        secure: true,
+        path: "/",
+        config: {
+          iceServers,
+          iceCandidatePoolSize: 10,
+        },
+        debug: 2,
+      });
+
+      await this.waitForPeerOpen();
+      console.log("[VoxLink Video] Connected as:", this.myPeerId);
+
+      this.setupPeerListeners();
 
       if (isHost) {
-        // Host: FIRST setup listeners, THEN register
-        // CRITICAL: Listeners MUST be ready before guest tries to connect
-        this.setupPeerListeners();
-        await this.registerAsHost();
-        this.setStatus("waiting", "Esperando...");
+        this.setStatus("waiting", "Waiting for partner...");
       } else {
-        // Guest: Look up host and connect
-        this.setStatus("connecting", "Buscando anfitrión...");
-        this.setupPeerListeners();
-        await this.findAndConnectToHost();
+        this.setStatus("connecting", "Looking for host...");
+        this.startConnectionAttempts();
       }
 
       return true;
-    } catch (err: any) {
-      console.error("❌ Connection failed:", err);
-      this.setStatus("failed", err.message);
-      this.callbacks.onError?.(err.message);
+    } catch (err: unknown) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Connection failed";
+      console.error("[VoxLink Video] Init error:", err);
+      this.setStatus("failed", errorMessage);
+      this.callbacks.onError?.(errorMessage);
       return false;
     }
   }
 
-  private async createPeer(): Promise<void> {
-    // Fetch working ICE servers (with TURN)
-    const iceServers = await getIceServers();
-
+  private waitForPeerOpen(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error("Timeout connecting to signaling server"));
-      }, 15000);
-
-      try {
-        this.peer = new Peer(this.myPeerId, {
-          config: { iceServers },
-          debug: 1,
-        });
-
-        this.peer.on("open", (id) => {
-          clearTimeout(timeout);
-          console.log("✅ Peer ready:", id);
-          resolve();
-        });
-
-        this.peer.on("error", (err: any) => {
-          console.error("❌ Peer error:", err.type, err.message);
-
-          // If ID is taken (shouldn't happen with unique IDs but just in case)
-          if (err.type === "unavailable-id") {
-            clearTimeout(timeout);
-            // Generate new ID and retry
-            this.myPeerId = generatePeerId(
-              this.roomId,
-              this.isHost ? "host" : "guest",
-            );
-            console.log("🔄 ID taken, retrying with:", this.myPeerId);
-
-            this.peer = new Peer(this.myPeerId, {
-              config: { iceServers },
-              debug: 1,
-            });
-
-            this.peer.on("open", () => {
-              resolve();
-            });
-
-            this.peer.on("error", (e) => {
-              reject(e);
-            });
-          } else if (err.type === "network" || err.type === "server-error") {
-            clearTimeout(timeout);
-            reject(new Error("Cannot connect to signaling server"));
-          }
-          // Other errors handled in setupPeerListeners
-        });
-      } catch (err) {
-        clearTimeout(timeout);
-        reject(err);
+      if (!this.peer) {
+        reject(new Error("Peer not created"));
+        return;
       }
+
+      if (this.peer.open) {
+        resolve();
+        return;
+      }
+
+      const timeout = setTimeout(() => {
+        reject(new Error("Connection timeout - please refresh"));
+      }, 20000);
+
+      this.peer.on("open", () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+
+      this.peer.on("error", (error) => {
+        clearTimeout(timeout);
+        if (error.type === "unavailable-id") {
+          reject(new Error("Room already in use - try a different code"));
+        } else {
+          reject(error);
+        }
+      });
     });
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // HOST REGISTRATION
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  private async registerAsHost(): Promise<void> {
-    try {
-      const response = await fetch("/api/room", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          roomId: this.roomId,
-          hostPeerId: this.myPeerId,
-          hostName: this.userName,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to register room");
-      }
-
-      const data = await response.json();
-      console.log("📍 Room registered:", data);
-    } catch (err) {
-      console.error("Room registration failed:", err);
-      // Continue anyway - guest might still connect via polling
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // GUEST: FIND AND CONNECT TO HOST
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  private async findAndConnectToHost(): Promise<void> {
-    // With deterministic host IDs, we know exactly what to connect to
-    // No need for room registry lookup - just connect directly
-    const hostPeerId = getHostPeerId(this.roomId);
-    console.log("📍 Using deterministic host ID:", hostPeerId);
-
-    this.partnerPeerId = hostPeerId;
-    this.setStatus("connecting", "Conectando con anfitrión...");
-
-    // Try connecting with retries (host might not be ready yet)
-    this.connectToPeer(hostPeerId);
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // PEER CONNECTION SETUP
+  // PEER LISTENERS
   // ═══════════════════════════════════════════════════════════════════════════
 
   private setupPeerListeners(): void {
     if (!this.peer) return;
 
-    // Handle incoming data connection (host receives this from guest)
+    // Handle incoming data connection (host receives this)
     this.peer.on("connection", (conn) => {
-      if (this.destroyed) return;
-      console.log("📡 Incoming data connection from:", conn.peer);
-      this.partnerPeerId = conn.peer;
+      if (this.isDestroyed) return;
+      console.log("[VoxLink Video] Incoming data connection:", conn.peer);
       this.handleDataConnection(conn);
     });
 
-    // Handle incoming media call
+    // Handle incoming video call (host receives this)
     this.peer.on("call", (call) => {
-      if (this.destroyed) return;
-      console.log("📞 Incoming call from:", call.peer);
+      if (this.isDestroyed) return;
+      console.log("[VoxLink Video] Incoming call:", call.peer);
 
-      // CRITICAL: Setup handlers BEFORE answering to catch ICE state transitions
-      this.handleMediaConnection(call);
-
-      // NOW answer with our stream (handlers are ready)
+      // Answer with our stream
       if (this.localStream) {
-        console.log("📞 Answering with our stream...");
         call.answer(this.localStream);
       } else {
-        console.log("📞 Answering without stream (audio only mode)");
         call.answer();
       }
+
+      this.handleMediaConnection(call);
     });
 
-    // Handle disconnection from signaling server
+    this.peer.on("error", (error: { type: string; message?: string }) => {
+      console.error("[VoxLink Video] Peer error:", error.type, error.message);
+
+      if (error.type === "peer-unavailable" && !this.isHost) {
+        console.log("[VoxLink Video] Host not found, will retry...");
+      } else if (error.type === "unavailable-id" && this.isHost) {
+        this.setStatus("failed", "Room code in use - try a new code");
+        this.callbacks.onError?.("Room code in use");
+      }
+    });
+
     this.peer.on("disconnected", () => {
-      if (this.destroyed) return;
-      console.log("⚠️ Disconnected from signaling server");
-
-      // Try to reconnect to signaling server
-      setTimeout(() => {
-        if (!this.destroyed && this.peer && !this.peer.destroyed) {
-          console.log("🔄 Reconnecting to signaling server...");
-          this.peer.reconnect();
-        }
-      }, 1000);
-    });
-
-    // Handle peer errors
-    this.peer.on("error", (err: any) => {
-      if (this.destroyed) return;
-      console.error("Peer error:", err.type, err.message);
-
-      // Only handle peer-unavailable for non-hosts who are actively connecting
-      if (
-        err.type === "peer-unavailable" &&
-        !this.isHost &&
-        this.partnerPeerId
-      ) {
-        this.connectionAttempts++;
-        console.log(
-          `⚠️ Peer unavailable, attempt ${this.connectionAttempts}/${this.maxConnectionAttempts}`,
-        );
-
-        if (this.connectionAttempts < this.maxConnectionAttempts) {
-          // Wait and retry looking up the host
-          setTimeout(() => {
-            if (!this.destroyed) {
-              this.findAndConnectToHost();
-            }
-          }, 2000);
-        } else {
-          this.setStatus("failed", "Could not reach host");
-          this.callbacks.onError?.("Could not reach host");
-        }
+      console.log("[VoxLink Video] Disconnected from signaling server");
+      if (!this.isDestroyed && this.peer && !this.peer.destroyed) {
+        setTimeout(() => this.peer?.reconnect(), 1000);
       }
     });
   }
 
-  private connectToPeer(peerId: string): void {
-    if (!this.peer || this.destroyed) return;
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CONNECTION ATTEMPTS (Guest)
+  // ═══════════════════════════════════════════════════════════════════════════
 
-    console.log("🔗 Connecting to peer:", peerId);
-    this.setStatus("connecting", "Conectando...");
+  private startConnectionAttempts(): void {
+    this.stopConnectionAttempts();
 
-    // Create data connection first
-    const conn = this.peer.connect(peerId, { reliable: true });
-    this.handleDataConnection(conn);
+    const tryConnect = () => {
+      if (this.isDestroyed || this._status === "connected") {
+        this.stopConnectionAttempts();
+        return;
+      }
+
+      this.connectionAttempts++;
+      if (this.connectionAttempts > this.maxConnectionAttempts) {
+        this.setStatus("failed", "Could not find host - ask them to refresh");
+        this.callbacks.onError?.("Could not find host");
+        return;
+      }
+
+      console.log(
+        `[VoxLink Video] Connection attempt ${this.connectionAttempts}/${this.maxConnectionAttempts}`,
+      );
+      this.connectToHost();
+    };
+
+    tryConnect();
+    this.connectionAttemptInterval = setInterval(tryConnect, 2000);
   }
 
-  private handleDataConnection(conn: DataConnection): void {
-    // Don't close existing connection if it's the same peer
-    if (
-      this.dataConnection &&
-      this.dataConnection.peer === conn.peer &&
-      this.dataConnection.open
-    ) {
-      console.log("📡 Already connected to this peer, ignoring duplicate");
+  private stopConnectionAttempts(): void {
+    if (this.connectionAttemptInterval) {
+      clearInterval(this.connectionAttemptInterval);
+      this.connectionAttemptInterval = null;
+    }
+  }
+
+  private connectToHost(): void {
+    if (!this.peer || this.isDestroyed || !this.peer.open) {
       return;
     }
 
-    // Close old connection if it exists
+    // Don't reconnect if already connected
+    if (this.dataConnection?.open) {
+      return;
+    }
+
+    console.log("[VoxLink Video] Connecting to host:", this.hostPeerId);
+
+    // Create data connection first
+    const conn = this.peer.connect(this.hostPeerId, {
+      reliable: true,
+      serialization: "json",
+    });
+
+    this.handleDataConnection(conn);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DATA CONNECTION
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  private handleDataConnection(conn: DataConnection): void {
+    // Avoid duplicate connections
+    if (this.dataConnection?.open && this.dataConnection.peer === conn.peer) {
+      return;
+    }
+
+    // Close old connection
     if (this.dataConnection && this.dataConnection.peer !== conn.peer) {
       try {
         this.dataConnection.close();
-      } catch {}
+      } catch {
+        // Ignore
+      }
     }
 
     this.dataConnection = conn;
 
-    // Handler for when data channel opens
-    const handleOpen = () => {
-      if (this.destroyed) return;
-      console.log("✅ Data channel open!");
+    conn.on("open", () => {
+      if (this.isDestroyed) return;
+      console.log("[VoxLink Video] Data channel open");
 
-      // Mark as connected
-      this.setStatus("connected", "¡Conectado!");
+      this.stopConnectionAttempts();
+      this.connectionAttempts = 0;
+      this.lastPongTime = Date.now();
 
       // Send hello
-      this.send({ type: "hello", name: this.userName, peerId: this.myPeerId });
+      this.send({ type: "hello", name: this.userName });
 
-      // Start keep-alive pings to prevent connection timeout
+      // Start keep-alive
       this.startKeepAlive();
 
-      // ONLY guest initiates the video call (prevents collision)
-      // Increased delay to ensure host listeners are ready
+      // Guest initiates video call after data channel is ready
       if (!this.isHost && this.localStream) {
-        console.log("📞 Guest initiating video call in 500ms...");
-        setTimeout(() => this.initiateCall(), 500);
-      }
-    };
-
-    conn.on("open", handleOpen);
-
-    // FIX: Check if already open (PeerJS may not fire 'open' if already connected)
-    if (conn.open) {
-      console.log("✅ Data channel already open!");
-      handleOpen();
-    }
-
-    conn.on("data", (data: any) => {
-      if (this.destroyed) return;
-
-      // Handle ping/pong for keep-alive
-      if (data?.type === "ping") {
-        this.send({ type: "pong", time: data.time });
-        return;
-      }
-      if (data?.type === "pong") {
-        const latency = Date.now() - data.time;
-        console.log("🏓 Pong received, latency:", latency, "ms");
-        return;
+        setTimeout(() => this.initiateVideoCall(), 500);
       }
 
-      // Handle hello messages
-      if (data?.type === "hello") {
-        console.log("👋 Partner joined:", data.name);
-        this.callbacks.onPartnerJoined?.(data.name);
+      this.setStatus("connected", "Connected!");
+    });
 
-        // Send hello back if we haven't already
-        this.send({
-          type: "hello",
-          name: this.userName,
-          peerId: this.myPeerId,
-        });
-
-        // NOTE: Only GUEST initiates video call (in handleOpen above)
-        // Host just waits and answers - prevents bidirectional call collision
-        return;
-      }
-
-      // Forward other messages to callback
-      this.callbacks.onDataMessage?.(data);
+    conn.on("data", (data: unknown) => {
+      if (this.isDestroyed) return;
+      this.handleDataMessage(data);
     });
 
     conn.on("close", () => {
-      if (this.destroyed) return;
-      console.log("📡 Data channel closed");
-      this.handleDisconnect();
+      console.log("[VoxLink Video] Data channel closed");
+      this.handlePartnerLeft();
     });
 
     conn.on("error", (err) => {
-      console.error("Data channel error:", err);
+      console.error("[VoxLink Video] Data channel error:", err);
     });
   }
 
-  private initiateCall(): void {
-    if (!this.peer || !this.partnerPeerId || this.destroyed) return;
+  private handleDataMessage(data: unknown): void {
+    if (!data || typeof data !== "object") return;
 
-    // Don't create duplicate calls - FIX: Check if connection IS open, not NOT open
-    if (this.mediaConnection?.open) {
-      console.log("📞 Call already connected, skipping");
+    const msg = data as Record<string, unknown>;
+
+    // Keep-alive
+    if (msg.type === "ping") {
+      this.send({ type: "pong", time: msg.time });
       return;
     }
 
-    console.log("📞 Calling peer:", this.partnerPeerId);
-
-    if (this.localStream) {
-      const call = this.peer.call(this.partnerPeerId, this.localStream);
-      this.handleMediaConnection(call);
-
-      // Add timeout for media connection establishment
-      this.setupMediaConnectionTimeout();
+    if (msg.type === "pong") {
+      this.lastPongTime = Date.now();
+      return;
     }
+
+    // Hello message
+    if (msg.type === "hello") {
+      const name = String(msg.name || "Partner");
+      console.log("[VoxLink Video] Partner joined:", name);
+      this.callbacks.onPartnerJoined?.(name);
+
+      // Send hello back
+      this.send({ type: "hello", name: this.userName });
+      return;
+    }
+
+    // Forward other messages
+    this.callbacks.onDataMessage?.(data);
   }
 
-  private mediaConnectionTimeout: NodeJS.Timeout | null = null;
+  // ═══════════════════════════════════════════════════════════════════════════
+  // VIDEO CALL
+  // ═══════════════════════════════════════════════════════════════════════════
 
-  private setupMediaConnectionTimeout(): void {
-    // Clear any existing timeout
-    if (this.mediaConnectionTimeout) {
-      clearTimeout(this.mediaConnectionTimeout);
+  private initiateVideoCall(): void {
+    if (!this.peer || !this.localStream || this.isDestroyed) return;
+
+    // Don't create duplicate calls
+    if (this.mediaConnection?.open) {
+      return;
     }
 
-    // Set 10 second timeout for media connection
-    this.mediaConnectionTimeout = setTimeout(() => {
-      if (this.destroyed) return;
+    console.log("[VoxLink Video] Initiating video call to:", this.hostPeerId);
 
-      // Check if we have remote stream (connection successful)
-      if (this.remoteStream) {
-        console.log("📺 Media connection established successfully");
-        return;
-      }
-
-      // No stream after 10 seconds - try ICE restart
-      console.log("⚠️ Media connection timeout - attempting ICE restart");
-      const pc = (this.mediaConnection as any)
-        ?.peerConnection as RTCPeerConnection;
-      if (pc) {
-        try {
-          pc.restartIce?.();
-        } catch (err) {
-          console.error("ICE restart failed:", err);
-        }
-      }
-    }, 10000);
+    const call = this.peer.call(this.hostPeerId, this.localStream);
+    this.handleMediaConnection(call);
   }
 
   private handleMediaConnection(call: MediaConnection): void {
-    // Avoid duplicate media connections
-    if (this.mediaConnection?.peer === call.peer) {
-      console.log("📺 Already have media connection to this peer");
+    // Avoid duplicate connections
+    if (this.mediaConnection?.peer === call.peer && this.mediaConnection.open) {
       return;
     }
 
@@ -502,117 +405,103 @@ export class PeerConnection {
     if (this.mediaConnection) {
       try {
         this.mediaConnection.close();
-      } catch {}
+      } catch {
+        // Ignore
+      }
     }
 
     this.mediaConnection = call;
-    console.log("📺 Setting up media connection with:", call.peer);
 
     call.on("stream", (stream) => {
-      if (this.destroyed) return;
+      if (this.isDestroyed) return;
 
       // Avoid duplicate stream events
       if (this.remoteStream?.id === stream.id) {
-        console.log("📺 Same stream received, ignoring");
         return;
       }
 
-      console.log("📺 GOT REMOTE STREAM!");
-      console.log("   Video tracks:", stream.getVideoTracks().length);
-      console.log("   Audio tracks:", stream.getAudioTracks().length);
-
-      // Clear media connection timeout - we're good!
-      if (this.mediaConnectionTimeout) {
-        clearTimeout(this.mediaConnectionTimeout);
-        this.mediaConnectionTimeout = null;
-      }
-
+      console.log("[VoxLink Video] Got remote stream!");
       this.remoteStream = stream;
       this.callbacks.onRemoteStream?.(stream);
     });
 
     call.on("close", () => {
-      console.log("📞 Media connection closed");
+      console.log("[VoxLink Video] Media connection closed");
       this.remoteStream = null;
     });
 
     call.on("error", (err) => {
-      console.error("Media connection error:", err);
+      console.error("[VoxLink Video] Media error:", err);
     });
 
-    // Monitor ICE connection state
-    const pc = (call as any).peerConnection as RTCPeerConnection;
+    // Monitor ICE state
+    const pc = (call as unknown as { peerConnection: RTCPeerConnection })
+      .peerConnection;
     if (pc) {
       pc.oniceconnectionstatechange = () => {
-        console.log("🧊 ICE state:", pc.iceConnectionState);
+        console.log("[VoxLink Video] ICE state:", pc.iceConnectionState);
 
         if (pc.iceConnectionState === "failed") {
-          console.log("🧊 ICE failed, attempting ICE restart...");
+          console.log("[VoxLink Video] ICE failed, restarting...");
           try {
             pc.restartIce?.();
-          } catch (err) {
-            console.error("ICE restart failed:", err);
+          } catch {
+            // Ignore
           }
         }
 
         if (pc.iceConnectionState === "disconnected") {
-          console.log("🧊 ICE disconnected, waiting for recovery...");
-          // Give it time to recover before taking action
           setTimeout(() => {
-            if (pc.iceConnectionState === "disconnected" && !this.destroyed) {
-              console.log("🧊 ICE still disconnected, restarting...");
+            if (pc.iceConnectionState === "disconnected" && !this.isDestroyed) {
               try {
                 pc.restartIce?.();
-              } catch (err) {
-                console.error("ICE restart failed:", err);
+              } catch {
+                // Ignore
               }
             }
           }, 3000);
         }
-
-        if (pc.iceConnectionState === "connected") {
-          console.log("🧊 ICE connected successfully!");
-        }
-      };
-
-      pc.onconnectionstatechange = () => {
-        console.log("🔌 Connection state:", pc.connectionState);
       };
     }
   }
 
-  private handleDisconnect(): void {
-    if (this.destroyed) return;
-
-    console.log("🔌 Partner disconnected");
-    this.stopKeepAlive();
-    this.callbacks.onPartnerLeft?.();
-    this.remoteStream = null;
-    this.setStatus("failed", "Conexión perdida");
-  }
+  // ═══════════════════════════════════════════════════════════════════════════
+  // KEEP-ALIVE
+  // ═══════════════════════════════════════════════════════════════════════════
 
   private startKeepAlive(): void {
-    this.stopKeepAlive(); // Clear any existing interval
+    this.stopKeepAlive();
 
-    // Send ping every 5 seconds to keep connection alive
     this.keepAliveInterval = setInterval(() => {
-      if (this.destroyed || !this.dataConnection?.open) {
+      if (!this.dataConnection?.open) {
         this.stopKeepAlive();
         return;
       }
 
-      this.lastPingTime = Date.now();
-      this.send({ type: "ping", time: this.lastPingTime });
-    }, 5000);
+      // Check connection health
+      const timeSinceLastPong = Date.now() - this.lastPongTime;
+      if (timeSinceLastPong > 15000) {
+        console.warn("[VoxLink Video] No pong for 15s");
+      }
 
-    console.log("💓 Keep-alive started");
+      this.send({ type: "ping", time: Date.now() });
+    }, 5000);
   }
 
   private stopKeepAlive(): void {
     if (this.keepAliveInterval) {
       clearInterval(this.keepAliveInterval);
       this.keepAliveInterval = null;
-      console.log("💔 Keep-alive stopped");
+    }
+  }
+
+  private handlePartnerLeft(): void {
+    this.stopKeepAlive();
+    this.callbacks.onPartnerLeft?.();
+    this.remoteStream = null;
+
+    if (this._status === "connected" && !this.isDestroyed) {
+      this.setStatus("waiting", "Partner disconnected");
     }
   }
 
@@ -620,85 +509,54 @@ export class PeerConnection {
   // PUBLIC METHODS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  send(data: any): boolean {
-    if (!this.dataConnection?.open || this.destroyed) {
-      if (data?.type !== "ping" && data?.type !== "pong") {
-        console.warn("⚠️ Send failed: data channel not open", {
-          hasConnection: !!this.dataConnection,
-          isOpen: this.dataConnection?.open,
-          destroyed: this.destroyed,
-          dataType: data?.type,
-        });
-      }
+  send(data: unknown): boolean {
+    if (!this.dataConnection?.open || this.isDestroyed) {
       return false;
     }
+
     try {
       this.dataConnection.send(data);
       return true;
     } catch (err) {
-      console.error("⚠️ Send error:", err);
+      console.error("[VoxLink Video] Send error:", err);
       return false;
     }
   }
 
-  replaceVideoTrack(track: MediaStreamTrack): void {
-    const pc = (this.mediaConnection as any)
-      ?.peerConnection as RTCPeerConnection;
-    if (!pc) return;
-
-    const sender = pc.getSenders().find((s) => s.track?.kind === "video");
-    if (sender) {
-      sender.replaceTrack(track).catch((err) => {
-        console.error("Failed to replace video track:", err);
-      });
-    }
-  }
-
   disconnect(): void {
-    console.log("🔌 Disconnecting...");
-    this.destroyed = true;
+    console.log("[VoxLink Video] Disconnecting...");
+    this.isDestroyed = true;
 
-    // Stop keep-alive
     this.stopKeepAlive();
-
-    // Clear media connection timeout
-    if (this.mediaConnectionTimeout) {
-      clearTimeout(this.mediaConnectionTimeout);
-      this.mediaConnectionTimeout = null;
-    }
-
-    // Clear any polling
-    if (this.pollingInterval) {
-      clearInterval(this.pollingInterval);
-      this.pollingInterval = null;
-    }
-
-    // Clean up room registration
-    if (this.isHost) {
-      fetch(`/api/room?roomId=${encodeURIComponent(this.roomId)}`, {
-        method: "DELETE",
-      }).catch(() => {});
-    }
+    this.stopConnectionAttempts();
 
     try {
       this.mediaConnection?.close();
-    } catch {}
+    } catch {
+      // Ignore
+    }
     try {
       this.dataConnection?.close();
-    } catch {}
+    } catch {
+      // Ignore
+    }
     try {
       this.peer?.destroy();
-    } catch {}
+    } catch {
+      // Ignore
+    }
 
     this.peer = null;
     this.dataConnection = null;
     this.mediaConnection = null;
     this.remoteStream = null;
+    this.connectionAttempts = 0;
   }
 
   private setStatus(status: ConnectionStatus, message?: string): void {
-    if (this.destroyed) return;
+    if (this.isDestroyed) return;
     this._status = status;
+    console.log("[VoxLink Video] Status:", status, message || "");
     this.callbacks.onStatusChange?.(status, message);
   }
 }
@@ -711,7 +569,7 @@ export async function getCamera(
   facingMode: "user" | "environment" = "user",
 ): Promise<MediaStream> {
   const constraints = [
-    // Try HD first
+    // HD
     {
       video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
       audio: {
@@ -720,29 +578,28 @@ export async function getCamera(
         autoGainControl: true,
       },
     },
-    // Fallback to SD
+    // SD fallback
     {
       video: { facingMode, width: { ideal: 640 }, height: { ideal: 480 } },
       audio: { echoCancellation: true, noiseSuppression: true },
     },
-    // Absolute minimum
+    // Minimum
     { video: true, audio: true },
   ];
 
   for (const constraint of constraints) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia(constraint);
-      console.log("📷 Camera acquired:", {
-        video: stream.getVideoTracks()[0]?.getSettings(),
-        audio: stream.getAudioTracks()[0]?.getSettings(),
-      });
+      console.log("[VoxLink Video] Camera acquired");
       return stream;
-    } catch (err: any) {
-      if (err.name === "NotAllowedError") {
-        throw new Error("Camera access denied. Please allow camera access.");
-      }
-      if (err.name === "NotFoundError") {
-        throw new Error("No camera found on this device.");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        if (err.name === "NotAllowedError") {
+          throw new Error("Camera access denied. Please allow camera access.");
+        }
+        if (err.name === "NotFoundError") {
+          throw new Error("No camera found on this device.");
+        }
       }
       // Try next constraint
     }
