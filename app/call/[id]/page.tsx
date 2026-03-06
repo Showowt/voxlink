@@ -49,6 +49,7 @@ function VideoCallContent() {
   const [statusMessage, setStatusMessage] = useState("Iniciando...");
   const [error, setError] = useState<string | null>(null);
   const [hasPartner, setHasPartner] = useState(false);
+  const [hasRemoteStream, setHasRemoteStream] = useState(false);
   const [partnerName, setPartnerName] = useState("");
 
   // Media state
@@ -85,7 +86,8 @@ function VideoCallContent() {
     isListeningRef.current = isListening;
   }, [isListening]);
 
-  const isConnected = status === "connected" && hasPartner;
+  // Enable controls when connected - either hasPartner OR we have remote video stream
+  const isConnected = status === "connected" && (hasPartner || hasRemoteStream);
   const statusColor =
     status === "connected"
       ? "bg-green-500"
@@ -148,6 +150,9 @@ function VideoCallContent() {
             if (remoteVideoRef.current) {
               remoteVideoRef.current.srcObject = stream;
             }
+            // Mark that we have a remote stream - enables mic even if hello wasn't received
+            setHasRemoteStream(true);
+            setHasPartner(true); // If we got video, partner is definitely connected
           },
           onDataMessage: (data) => {
             if (!mountedRef.current) return;
@@ -163,6 +168,7 @@ function VideoCallContent() {
             if (!mountedRef.current) return;
             console.log("👋 Partner left");
             setHasPartner(false);
+            setHasRemoteStream(false);
             setPartnerName("");
           },
           onError: (err) => {
