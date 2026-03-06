@@ -691,8 +691,10 @@ function TalkContent() {
   }, [isHandsFree, isListening, startListening, vibrate]);
 
   const copyJoinLink = useCallback(() => {
+    // Normalize room ID to uppercase for consistency
+    const normalizedId = roomId.toUpperCase();
     navigator.clipboard.writeText(
-      `${window.location.origin}/?join=talk&id=${roomId}`,
+      `${window.location.origin}/?join=talk&id=${normalizedId}`,
     );
     setCopied(true);
     vibrate(50);
@@ -736,7 +738,9 @@ function TalkContent() {
           <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5">
             <div className={`w-2.5 h-2.5 rounded-full ${statusColor}`} />
             <span className="text-white text-sm font-medium">VoxLink Talk</span>
-            <span className="text-gray-500 text-xs font-mono">#{roomId}</span>
+            <span className="text-gray-500 text-xs font-mono">
+              #{roomId.toUpperCase()}
+            </span>
           </div>
 
           {partnerName && (
