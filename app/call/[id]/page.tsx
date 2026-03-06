@@ -7,13 +7,20 @@ import {
   getCamera,
   stopCamera,
 } from "../../lib/peer-connection";
+import { getSpeechCode, getFlag } from "../../lib/languages";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // VOXLINK VIDEO CALL - PeerJS P2P with Live Translation
 // Mobile-optimized, no external API dependencies
 // ═══════════════════════════════════════════════════════════════════════════════
 
-type CallStatus = "loading" | "waiting" | "connecting" | "connected" | "error";
+type CallStatus =
+  | "loading"
+  | "waiting"
+  | "connecting"
+  | "connected"
+  | "error"
+  | "room_full";
 
 interface TranscriptEntry {
   id: string;
@@ -22,7 +29,7 @@ interface TranscriptEntry {
   original: string;
   translated: string;
   timestamp: Date;
-  lang: "en" | "es";
+  lang: string;
 }
 
 function VideoCallContent() {
@@ -33,8 +40,9 @@ function VideoCallContent() {
   const roomCode = params.id as string;
   const isHost = searchParams.get("host") === "true";
   const userName = searchParams.get("name") || "User";
-  const userLang = (searchParams.get("lang") || "en") as "en" | "es";
-  const targetLang = userLang === "en" ? "es" : "en";
+  const userLang = searchParams.get("lang") || "en";
+  // Partner's language will be determined during the call
+  const [partnerLang, setPartnerLang] = useState<string | null>(null);
 
   // State
   const [status, setStatus] = useState<CallStatus>("loading");
@@ -81,7 +89,7 @@ function VideoCallContent() {
   const statusColor =
     status === "connected"
       ? "bg-green-500"
-      : status === "error"
+      : status === "error" || status === "room_full"
         ? "bg-red-500"
         : "bg-yellow-500";
 
@@ -124,6 +132,11 @@ function VideoCallContent() {
             } else if (peerStatus === "connected") {
               setStatus("connected");
               setStatusMessage("Connected!");
+            } else if (peerStatus === "room_full") {
+              setStatus("room_full");
+              setError(
+                message || "This room is full. Only 2 participants allowed.",
+              );
             } else if (peerStatus === "failed") {
               setStatus("error");
               setError(message || "Connection failed");
@@ -210,10 +223,15 @@ function VideoCallContent() {
           clearTimeout(theirCaptionTimeoutRef.current);
         }
 
+        // Track partner's language for UI display
+        if (data.lang) {
+          setPartnerLang(data.lang);
+        }
+
         // Show partner's original text immediately
         setTheirLiveText(data.text);
 
-        // FIX: Translate partner's text to OUR language (not use their translation)
+        // Translate partner's text to OUR language
         // Partner sent their text in their language, we need it in ours
         const needsTranslation = data.lang !== userLang;
         if (needsTranslation && data.text) {
@@ -263,7 +281,12 @@ function VideoCallContent() {
   // SPEECH RECOGNITION & TRANSLATION
   // ═══════════════════════════════════════════════════════════════════════════
 
-  const translateText = async (text: string): Promise<string> => {
+  const translateText = async (
+    text: string,
+    toLang?: string,
+  ): Promise<string> => {
+    const targetLanguage = toLang || partnerLang || "es"; // Default to Spanish if no partner lang known
+    if (userLang === targetLanguage) return text; // Same language, no translation needed
     try {
       const res = await fetch("/api/translate", {
         method: "POST",
@@ -271,7 +294,7 @@ function VideoCallContent() {
         body: JSON.stringify({
           text,
           sourceLang: userLang,
-          targetLang: targetLang,
+          targetLang: targetLanguage,
         }),
       });
       if (!res.ok) {
@@ -302,7 +325,7 @@ function VideoCallContent() {
 
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = userLang === "en" ? "en-US" : "es-ES";
+    recognition.lang = getSpeechCode(userLang);
 
     recognition.onstart = () => {
       setIsListening(true);
@@ -367,7 +390,7 @@ function VideoCallContent() {
 
     recognitionRef.current = recognition;
     recognition.start();
-  }, [userLang, userName, targetLang]);
+  }, [userLang, userName, partnerLang]);
 
   const stopListening = useCallback(() => {
     isListeningRef.current = false;
@@ -387,7 +410,7 @@ function VideoCallContent() {
     name: string,
     original: string,
     translated: string,
-    lang: "en" | "es",
+    lang: string,
   ) => {
     const entry: TranscriptEntry = {
       id: Date.now().toString(),
@@ -437,7 +460,9 @@ function VideoCallContent() {
   };
 
   const copyLink = () => {
-    const url = `${window.location.origin}/call/${roomCode}?host=false&name=Guest&lang=${targetLang}`;
+    // Default to different language for joining guest
+    const guestLang = userLang === "en" ? "es" : "en";
+    const url = `${window.location.origin}/call/${roomCode}?host=false&name=Guest&lang=${guestLang}`;
     navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -467,7 +492,19 @@ function VideoCallContent() {
         {!hasPartner && (
           <div className="absolute inset-0 bg-gradient-to-b from-gray-900 to-black flex items-center justify-center">
             <div className="text-center p-6">
-              {status === "error" ? (
+              {status === "room_full" ? (
+                <>
+                  <div className="text-6xl mb-4">🚫</div>
+                  <p className="text-red-400 text-xl mb-2">Room Full</p>
+                  <p className="text-gray-400 text-base mb-6">{error}</p>
+                  <button
+                    onClick={() => router.push("/")}
+                    className="px-6 py-3 bg-cyan-500 text-white font-medium"
+                  >
+                    Go Back Home
+                  </button>
+                </>
+              ) : status === "error" ? (
                 <>
                   <div className="text-6xl mb-4">❌</div>
                   <p className="text-red-400 text-xl mb-4">{error}</p>
@@ -523,7 +560,7 @@ function VideoCallContent() {
           )}
           <div className="absolute bottom-0 inset-x-0 bg-black/60 px-1 py-0.5 md:px-2 md:py-1">
             <p className="text-white text-[10px] md:text-xs truncate">
-              {userName} {userLang === "en" ? "🇺🇸" : "🇪🇸"}
+              {userName} {getFlag(userLang)}
             </p>
           </div>
         </div>
@@ -561,7 +598,7 @@ function VideoCallContent() {
                       {partnerName || "Partner"}
                     </span>
                     <span className="text-purple-400/50 text-xs">
-                      {targetLang === "en" ? "🇺🇸" : "🇪🇸"}
+                      {getFlag(partnerLang || "es")}
                     </span>
                   </div>
                   <p className="text-white/70 text-xs md:text-sm leading-relaxed mb-1">
@@ -595,7 +632,7 @@ function VideoCallContent() {
                       You
                     </span>
                     <span className="text-cyan-400/50 text-xs">
-                      {userLang === "en" ? "🇺🇸" : "🇪🇸"}
+                      {getFlag(userLang)}
                     </span>
                   </div>
                   <p className="text-white/70 text-xs md:text-sm leading-relaxed mb-1">

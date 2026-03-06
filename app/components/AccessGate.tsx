@@ -7,7 +7,7 @@ import { useState, useEffect } from "react";
 // Temporary security layer until full auth/subscription system is built
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const STORAGE_KEY = "voxlink_access_token";
+export const STORAGE_KEY = "voxlink_access_token";
 
 interface AccessGateProps {
   children: React.ReactNode;
@@ -22,7 +22,7 @@ export default function AccessGate({ children }: AccessGateProps) {
 
   // Check if already authorized (has valid token)
   useEffect(() => {
-    const token = sessionStorage.getItem(STORAGE_KEY);
+    const token = localStorage.getItem(STORAGE_KEY);
     // Token must be 64 chars (hex string from 32 bytes)
     setIsAuthorized(token !== null && token.length === 64);
   }, []);
@@ -106,7 +106,7 @@ export default function AccessGate({ children }: AccessGateProps) {
       const data = await res.json();
 
       if (data.valid && data.token) {
-        sessionStorage.setItem(STORAGE_KEY, data.token);
+        localStorage.setItem(STORAGE_KEY, data.token);
         setIsAuthorized(true);
       } else {
         setError(data.error || "Invalid code");
@@ -222,11 +222,27 @@ export default function AccessGate({ children }: AccessGateProps) {
           <p className="text-gray-600 text-xs">
             Contact administrator for access code
           </p>
-          <div className="mt-3 pt-3 border-t border-gray-800">
-            <span className="text-xs text-gray-500">Powered by </span>
-            <span className="text-xs text-cyan-500 font-semibold">
-              MachineMind
-            </span>
+          <div className="mt-3 pt-3 border-t border-gray-800 space-y-2">
+            <div className="flex justify-center gap-4 text-[10px]">
+              <a
+                href="/privacy"
+                className="text-gray-500 hover:text-cyan-400 transition"
+              >
+                Privacy Policy
+              </a>
+              <a
+                href="/terms"
+                className="text-gray-500 hover:text-cyan-400 transition"
+              >
+                Terms of Service
+              </a>
+            </div>
+            <div>
+              <span className="text-xs text-gray-500">Powered by </span>
+              <span className="text-xs text-cyan-500 font-semibold">
+                MachineMind
+              </span>
+            </div>
           </div>
         </div>
       </div>

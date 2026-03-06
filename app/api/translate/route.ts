@@ -384,15 +384,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ translation: "" }, { headers: corsHeaders });
     }
 
-    // Normalize language codes FIRST, then check if same language
-    const from =
-      sourceLang === "en" || sourceLang === "en-US" || sourceLang === "english"
-        ? "en"
-        : "es";
-    const to =
-      targetLang === "en" || targetLang === "en-US" || targetLang === "english"
-        ? "en"
-        : "es";
+    // Normalize language codes - support all languages
+    // Map BCP-47 codes and common variants to ISO 639-1 codes
+    const normalizeLanguage = (lang: string): string => {
+      const code = lang.toLowerCase().split("-")[0].split("_")[0];
+      const aliases: Record<string, string> = {
+        english: "en",
+        spanish: "es",
+        espanol: "es",
+        french: "fr",
+        francais: "fr",
+        portuguese: "pt",
+        portugues: "pt",
+        german: "de",
+        deutsch: "de",
+        italian: "it",
+        italiano: "it",
+        chinese: "zh",
+        mandarin: "zh",
+        japanese: "ja",
+        korean: "ko",
+        arabic: "ar",
+        russian: "ru",
+        hindi: "hi",
+      };
+      return aliases[code] || code;
+    };
+
+    const from = normalizeLanguage(sourceLang);
+    const to = normalizeLanguage(targetLang);
 
     // Skip translation if normalized languages are the same
     if (from === to) {

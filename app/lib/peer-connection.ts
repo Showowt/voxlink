@@ -12,7 +12,8 @@ export type ConnectionStatus =
   | "connecting"
   | "connected"
   | "reconnecting"
-  | "failed";
+  | "failed"
+  | "room_full";
 
 export interface PeerCallbacks {
   onStatusChange?: (status: ConnectionStatus, message?: string) => void;
@@ -193,6 +194,27 @@ export class PeerConnection {
     this.peer.on("connection", (conn) => {
       if (this.isDestroyed) return;
       console.log("[VoxLink Video] Incoming data connection:", conn.peer);
+
+      // Check if host already has a connected partner
+      if (this.isHost && this.dataConnection?.open) {
+        console.log(
+          "[VoxLink Video] Room full - rejecting new connection:",
+          conn.peer,
+        );
+        // Send room_full message to the new joiner and close their connection
+        conn.on("open", () => {
+          conn.send({ type: "room_full" });
+          setTimeout(() => {
+            try {
+              conn.close();
+            } catch {
+              // Ignore close errors
+            }
+          }, 100);
+        });
+        return;
+      }
+
       this.handleDataConnection(conn);
     });
 
@@ -200,6 +222,20 @@ export class PeerConnection {
     this.peer.on("call", (call) => {
       if (this.isDestroyed) return;
       console.log("[VoxLink Video] Incoming call:", call.peer);
+
+      // Check if host already has a connected partner - reject call if room full
+      if (this.isHost && this.mediaConnection?.open) {
+        console.log(
+          "[VoxLink Video] Room full - rejecting video call:",
+          call.peer,
+        );
+        try {
+          call.close();
+        } catch {
+          // Ignore close errors
+        }
+        return;
+      }
 
       // Answer with our stream
       if (this.localStream) {
@@ -350,6 +386,20 @@ export class PeerConnection {
     if (!data || typeof data !== "object") return;
 
     const msg = data as Record<string, unknown>;
+
+    // Room full message - 3rd person trying to join
+    if (msg.type === "room_full") {
+      console.log("[VoxLink Video] Room is full - cannot join");
+      this.stopConnectionAttempts();
+      this.setStatus(
+        "room_full",
+        "This room is full. Only 2 participants allowed.",
+      );
+      this.callbacks.onError?.(
+        "This room is full. Only 2 participants allowed.",
+      );
+      return;
+    }
 
     // Keep-alive
     if (msg.type === "ping") {

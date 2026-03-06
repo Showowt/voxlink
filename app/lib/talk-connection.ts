@@ -11,10 +11,19 @@ export type TalkConnectionStatus =
   | "waiting"
   | "connected"
   | "reconnecting"
-  | "failed";
+  | "failed"
+  | "room_full";
 
 export interface TalkMessage {
-  type: "message" | "live" | "presence" | "emoji" | "clear" | "ping" | "pong";
+  type:
+    | "message"
+    | "live"
+    | "presence"
+    | "emoji"
+    | "clear"
+    | "ping"
+    | "pong"
+    | "room_full";
   data: Record<string, unknown>;
   messageId?: string;
 }
@@ -194,7 +203,27 @@ export class TalkConnection {
     this.peer.on("connection", (conn) => {
       console.log("[VoxLink] Incoming connection from:", conn.peer);
 
-      // Clean up any existing connection
+      // Check if host already has a connected partner
+      if (this._isHost && this.dataConnection?.open && this.connectionHealthy) {
+        console.log(
+          "[VoxLink] Room full - rejecting new connection:",
+          conn.peer,
+        );
+        // Send room_full message to the new joiner and close their connection
+        conn.on("open", () => {
+          conn.send({ type: "room_full", data: {} });
+          setTimeout(() => {
+            try {
+              conn.close();
+            } catch {
+              // Ignore close errors
+            }
+          }, 100);
+        });
+        return;
+      }
+
+      // Clean up any existing connection (only if not healthy/open)
       if (this.dataConnection && this.dataConnection.peer !== conn.peer) {
         this.cleanupDataConnection();
       }
@@ -376,6 +405,17 @@ export class TalkConnection {
     if (!data || typeof data !== "object") return;
 
     const message = data as TalkMessage;
+
+    // Room full message - 3rd person trying to join
+    if (message.type === "room_full") {
+      console.log("[VoxLink] Room is full - cannot join");
+      this.stopConnectionAttempts();
+      this.setStatus(
+        "room_full",
+        "This room is full. Only 2 participants allowed.",
+      );
+      return;
+    }
 
     // Update connection health on any received data
     this.lastPongTime = Date.now();

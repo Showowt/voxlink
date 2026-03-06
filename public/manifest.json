@@ -100,6 +100,20 @@
       "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }]
     }
   ],
+  "screenshots": [
+    {
+      "src": "/screenshots/mobile",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow"
+    },
+    {
+      "src": "/screenshots/desktop",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide"
+    }
+  ],
   "related_applications": [],
   "handle_links": "preferred",
   "launch_handler": {

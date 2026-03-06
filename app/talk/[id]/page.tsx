@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { TalkConnection, TalkMessage } from "../../lib/talk-connection";
+import { getSpeechCode, getFlag } from "../../lib/languages";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // VOXLINK TALK MODE - FaceTime-Quality Live Translation
@@ -68,13 +69,13 @@ interface TranscriptEntry {
   original: string;
   translated: string;
   timestamp: Date;
-  sourceLang: "en" | "es";
+  sourceLang: string;
   emoji?: string;
 }
 
 interface LiveTextPayload {
   text: string;
-  sourceLang: "en" | "es";
+  sourceLang: string;
   [key: string]: unknown;
 }
 
@@ -82,7 +83,7 @@ interface MessagePayload {
   id: string;
   speaker: string;
   original: string;
-  sourceLang: "en" | "es";
+  sourceLang: string;
   timestamp: number;
   [key: string]: unknown;
 }
@@ -109,15 +110,17 @@ function TalkContent() {
   // User configuration from URL params
   const isHost = searchParams.get("host") === "true";
   const userName = searchParams.get("name") || "User";
-  const userLang = (searchParams.get("lang") || "en") as "en" | "es";
-  const targetLang = userLang === "en" ? "es" : "en";
+  const userLang = searchParams.get("lang") || "en";
+  // Default target language - used before partner connects
+  const defaultTargetLang = userLang === "en" ? "es" : "en";
 
   // Connection state
   const [connectionStatus, setConnectionStatus] =
     useState<string>("Connecting...");
   const [isConnected, setIsConnected] = useState(false);
+  const [isRoomFull, setIsRoomFull] = useState(false);
   const [partnerName, setPartnerName] = useState("");
-  const [partnerLang, setPartnerLang] = useState<"en" | "es" | null>(null);
+  const [partnerLang, setPartnerLang] = useState<string | null>(null);
 
   // Speech state
   const [isListening, setIsListening] = useState(false);
@@ -253,6 +256,9 @@ function TalkContent() {
         if (!mountedRef.current) return;
         setConnectionStatus(message || status);
         setIsConnected(status === "connected");
+        if (status === "room_full") {
+          setIsRoomFull(true);
+        }
       },
 
       onMessage: async (msg: TalkMessage) => {
@@ -273,7 +279,7 @@ function TalkContent() {
             sourceLang:
               (data.sourceLang as "en" | "es") ||
               (data.lang as "en" | "es") ||
-              targetLang,
+              defaultTargetLang,
             timestamp: Number(data.timestamp) || Date.now(),
           };
 
@@ -309,7 +315,8 @@ function TalkContent() {
         // ═══════════════════════════════════════════════════════════════════
         if (msg.type === "live") {
           const incomingText = String(data.text || "");
-          const incomingLang = (data.sourceLang as "en" | "es") || targetLang;
+          const incomingLang =
+            (data.sourceLang as "en" | "es") || defaultTargetLang;
 
           // Track partner's language
           setPartnerLang(incomingLang);
@@ -415,7 +422,7 @@ function TalkContent() {
     isHost,
     userName,
     userLang,
-    targetLang,
+    defaultTargetLang,
     translate,
     vibrate,
     addToTranscript,
@@ -439,7 +446,7 @@ function TalkContent() {
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = userLang === "en" ? "en-US" : "es-ES";
+    recognition.lang = getSpeechCode(userLang);
 
     let finalizedText = "";
     let lastSpeechTime = Date.now();
@@ -476,7 +483,7 @@ function TalkContent() {
           const translated = await translate(
             displayText.trim(),
             userLang,
-            targetLang,
+            defaultTargetLang,
           );
           if (!mountedRef.current) return;
 
@@ -501,7 +508,7 @@ function TalkContent() {
         const translated = await translate(
           finalizedText.trim(),
           userLang,
-          targetLang,
+          defaultTargetLang,
         );
         if (!mountedRef.current) return;
         setMyLiveTranslation(translated);
@@ -559,7 +566,7 @@ function TalkContent() {
         const translated = await translate(
           newFinal.trim(),
           userLang,
-          targetLang,
+          defaultTargetLang,
         );
         if (!mountedRef.current) return;
 
@@ -622,7 +629,7 @@ function TalkContent() {
     vibrate([50, 30, 50]);
   }, [
     userLang,
-    targetLang,
+    defaultTargetLang,
     translate,
     vibrate,
     sendToPartner,
@@ -707,10 +714,10 @@ function TalkContent() {
     router.push("/");
   }, [stopListening, router]);
 
-  const speak = useCallback((text: string, lang: "en" | "es") => {
+  const speak = useCallback((text: string, lang: string) => {
     speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = lang === "en" ? "en-US" : "es-ES";
+    utterance.lang = getSpeechCode(lang);
     utterance.rate = 0.9;
     speechSynthesis.speak(utterance);
   }, []);
@@ -722,9 +729,13 @@ function TalkContent() {
   }, [vibrate, sendToPartner]);
 
   // Derived display values
-  const statusColor =
-    isConnected && partnerName ? "bg-green-500" : "bg-yellow-500 animate-pulse";
-  const displayPartnerLang = partnerLang || targetLang;
+  const displayTargetLang = partnerLang || defaultTargetLang;
+  const statusColor = isRoomFull
+    ? "bg-red-500"
+    : isConnected && partnerName
+      ? "bg-green-500"
+      : "bg-yellow-500 animate-pulse";
+  const displayPartnerLang = partnerLang || defaultTargetLang;
 
   // ═══════════════════════════════════════════════════════════════════════════
   // RENDER
@@ -747,7 +758,7 @@ function TalkContent() {
             <div className="flex items-center gap-2 bg-purple-500/20 px-3 py-1.5">
               <span className="text-purple-400 text-sm">{partnerName}</span>
               <span className="text-purple-400/50 text-xs">
-                {displayPartnerLang === "en" ? "🇺🇸" : "🇪🇸"}
+                {getFlag(displayPartnerLang)}
               </span>
             </div>
           )}
@@ -812,10 +823,10 @@ function TalkContent() {
 
       {/* Language indicator */}
       <div className="bg-white/5 px-4 py-2 flex items-center justify-center gap-3 flex-shrink-0">
-        <span className="text-xl">{userLang === "en" ? "🇺🇸" : "🇪🇸"}</span>
+        <span className="text-xl">{getFlag(userLang)}</span>
         <span className="text-white font-medium">{userName}</span>
         <span className="text-gray-500">→</span>
-        <span className="text-xl">{targetLang === "en" ? "🇺🇸" : "🇪🇸"}</span>
+        <span className="text-xl">{getFlag(displayTargetLang)}</span>
       </div>
 
       {/* Conversation area */}
@@ -825,7 +836,23 @@ function TalkContent() {
           className="flex-1 overflow-y-auto p-4 space-y-3"
           onClick={() => setShowEmojiPicker(null)}
         >
-          {transcript.length === 0 && !myLiveText && !partnerLiveText && (
+          {isRoomFull ? (
+            <div className="flex-1 flex items-center justify-center h-full">
+              <div className="text-center py-12">
+                <div className="text-6xl mb-4">🚫</div>
+                <p className="text-red-400 text-xl mb-2">Room Full</p>
+                <p className="text-gray-400 text-base mb-6">
+                  This room is full. Only 2 participants allowed.
+                </p>
+                <button
+                  onClick={() => router.push("/")}
+                  className="px-6 py-3 bg-cyan-500 text-white font-medium"
+                >
+                  Go Back Home
+                </button>
+              </div>
+            </div>
+          ) : transcript.length === 0 && !myLiveText && !partnerLiveText ? (
             <div className="flex-1 flex items-center justify-center h-full">
               <div className="text-center py-12">
                 <div className="text-6xl mb-4">💬</div>
@@ -844,7 +871,7 @@ function TalkContent() {
                 )}
               </div>
             </div>
-          )}
+          ) : null}
 
           {transcript.map((entry) => (
             <div
@@ -882,9 +909,7 @@ function TalkContent() {
                       minute: "2-digit",
                     })}
                   </span>
-                  <span className="text-xs">
-                    {entry.sourceLang === "en" ? "🇺🇸" : "🇪🇸"}
-                  </span>
+                  <span className="text-xs">{getFlag(entry.sourceLang)}</span>
                 </div>
 
                 <div className="flex items-start justify-between gap-3">
@@ -1060,9 +1085,9 @@ function TalkContent() {
           {/* Main mic button */}
           <button
             onClick={toggleListening}
-            disabled={!isConnected && !isHost}
+            disabled={isRoomFull || (!isConnected && !isHost)}
             className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all ${
-              !isConnected && !isHost
+              isRoomFull || (!isConnected && !isHost)
                 ? "bg-gray-700 text-gray-500"
                 : isListening
                   ? "bg-gradient-to-br from-green-400 to-emerald-600 text-white shadow-lg shadow-green-500/50"
@@ -1119,7 +1144,9 @@ function TalkContent() {
         </div>
 
         <p className="text-center text-sm mt-3 text-gray-400">
-          {!isConnected && !isHost ? (
+          {isRoomFull ? (
+            <span className="text-red-400">Room is full - cannot join</span>
+          ) : !isConnected && !isHost ? (
             connectionStatus
           ) : isListening ? (
             <span className="text-green-400 flex items-center justify-center gap-2">
