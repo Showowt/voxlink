@@ -398,8 +398,9 @@ function VideoCallContent() {
             if (captionData.isFinal) {
               speakText(translation, userLang);
             }
-          } catch {
-            setTheirLiveTranslation(captionData.text);
+          } catch (err) {
+            console.error("Translation failed:", err);
+            setTheirLiveTranslation(`[${captionData.text}]`);
           }
         } else {
           // Same language, no translation needed
@@ -556,7 +557,7 @@ function VideoCallContent() {
 
     recognitionRef.current = recognition;
     recognition.start();
-  }, [userLang, userName, partnerLang]);
+  }, [userLang, userName, partnerLang, expectedPartnerLang]);
 
   const stopListening = useCallback(() => {
     isListeningRef.current = false;

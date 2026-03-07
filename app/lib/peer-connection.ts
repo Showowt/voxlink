@@ -730,6 +730,12 @@ export class PeerConnection {
     this.stopStatsMonitoring();
     this.stopConnectionAttempts();
 
+    // Stop local media tracks (camera/microphone)
+    if (this.localStream) {
+      this.localStream.getTracks().forEach((track) => track.stop());
+      this.localStream = null;
+    }
+
     try {
       this.mediaConnection?.close();
     } catch {

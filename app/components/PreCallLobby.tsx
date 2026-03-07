@@ -141,20 +141,26 @@ export default function PreCallLobby({
   // Mic level monitoring
   const startMicLevelMonitor = useCallback((stream: MediaStream) => {
     try {
+      // Close existing context to prevent duplicates
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+
       const audioContext = new AudioContext();
+      audioContextRef.current = audioContext; // Store IMMEDIATELY to prevent race condition
+
       const analyser = audioContext.createAnalyser();
       const source = audioContext.createMediaStreamSource(stream);
 
       analyser.fftSize = 256;
       source.connect(analyser);
 
-      audioContextRef.current = audioContext;
       analyserRef.current = analyser;
 
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
       const updateLevel = () => {
-        if (!analyserRef.current) return;
+        if (!analyserRef.current || !audioContextRef.current) return;
 
         analyserRef.current.getByteFrequencyData(dataArray);
         const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
@@ -245,7 +251,8 @@ export default function PreCallLobby({
               </div>
               <button
                 onClick={onBack}
-                className="p-2 text-gray-400 hover:text-white transition"
+                className="p-3 text-gray-400 hover:text-white transition min-w-[44px] min-h-[44px] flex items-center justify-center"
+                aria-label="Close and go back"
               >
                 ✕
               </button>
@@ -275,7 +282,8 @@ export default function PreCallLobby({
             {/* Camera toggle button */}
             <button
               onClick={toggleVideoPreview}
-              className={`absolute bottom-3 right-3 w-10 h-10 rounded-full flex items-center justify-center transition ${
+              aria-label={videoEnabled ? "Turn camera off" : "Turn camera on"}
+              className={`absolute bottom-3 right-3 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center transition ${
                 videoEnabled
                   ? "bg-white/20 text-white hover:bg-white/30"
                   : "bg-red-500 text-white hover:bg-red-600"

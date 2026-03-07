@@ -11,6 +11,7 @@ import { randomBytes, timingSafeEqual } from "crypto";
 const MAX_ATTEMPTS = 5; // Max attempts per window
 const WINDOW_MS = 60 * 1000; // 1 minute window
 const LOCKOUT_MS = 5 * 60 * 1000; // 5 minute lockout after max failures
+const CLEANUP_THRESHOLD = 100; // Clean after 100 entries
 
 // In-memory rate limit store (resets on deploy)
 const rateLimits = new Map<
@@ -18,19 +19,18 @@ const rateLimits = new Map<
   { attempts: number; windowStart: number; lockedUntil: number }
 >();
 
-// Clean up old entries every 10 minutes
-setInterval(
-  () => {
-    const now = Date.now();
-    const entries = Array.from(rateLimits.entries());
-    for (const [ip, data] of entries) {
-      if (now - data.windowStart > LOCKOUT_MS + WINDOW_MS) {
-        rateLimits.delete(ip);
-      }
+// Lazy cleanup - runs during request processing (serverless-safe)
+function cleanupRateLimits() {
+  if (rateLimits.size < CLEANUP_THRESHOLD) return;
+
+  const now = Date.now();
+  const entries = Array.from(rateLimits.entries());
+  for (const [ip, data] of entries) {
+    if (now - data.windowStart > LOCKOUT_MS + WINDOW_MS) {
+      rateLimits.delete(ip);
     }
-  },
-  10 * 60 * 1000,
-);
+  }
+}
 
 // Timing-safe string comparison to prevent timing attacks
 function secureCompare(a: string, b: string): boolean {
@@ -43,16 +43,28 @@ function secureCompare(a: string, b: string): boolean {
   return timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
 
-// Get client IP from request
+// Get client IP from request (Vercel-hardened)
 function getClientIP(request: Request): string {
+  // On Vercel, x-real-ip is set by Vercel's proxy and cannot be spoofed
+  const realIP = request.headers.get("x-real-ip");
+  if (realIP) {
+    return realIP;
+  }
+
+  // Fallback to x-forwarded-for (less secure, take last IP in chain)
   const forwarded = request.headers.get("x-forwarded-for");
   if (forwarded) {
-    return forwarded.split(",")[0].trim();
+    const ips = forwarded.split(",").map((ip) => ip.trim());
+    return ips[ips.length - 1]; // Last IP is most trustworthy
   }
+
   return "unknown";
 }
 
 export async function POST(request: Request) {
+  // Lazy cleanup on each request (serverless-safe)
+  cleanupRateLimits();
+
   const clientIP = getClientIP(request);
   const now = Date.now();
 
@@ -143,17 +155,13 @@ export async function POST(request: Request) {
       });
     }
 
-    // Failed attempt - increment counter
+    // Failed attempt - increment counter (don't reveal attempts remaining)
     rateLimit.attempts++;
-    const attemptsRemaining = MAX_ATTEMPTS - rateLimit.attempts;
 
     return NextResponse.json(
       {
         valid: false,
-        error:
-          attemptsRemaining > 0
-            ? `Incorrect code. ${attemptsRemaining} attempts remaining.`
-            : "Incorrect code.",
+        error: "Incorrect code.",
       },
       { status: 401 },
     );
