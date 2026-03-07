@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "VoxLink - Real-Time Voice Translation";
+export const alt = "VoxLink™ — Break Language Barriers Instantly";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -15,9 +15,9 @@ export default function Image() {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#0a0a0f",
+        backgroundColor: "#060810",
         backgroundImage:
-          "radial-gradient(circle at 25% 25%, #06b6d4 0%, transparent 50%), radial-gradient(circle at 75% 75%, #3b82f6 0%, transparent 50%)",
+          "radial-gradient(circle at 25% 25%, #00C896 0%, transparent 50%), radial-gradient(circle at 75% 75%, #0066FF 0%, transparent 50%)",
       }}
     >
       {/* Logo */}
@@ -29,7 +29,7 @@ export default function Image() {
           width: 120,
           height: 120,
           borderRadius: 24,
-          background: "linear-gradient(135deg, #06b6d4, #3b82f6)",
+          background: "linear-gradient(135deg, #00C896, #0066FF)",
           marginBottom: 32,
           fontSize: 64,
         }}
@@ -47,18 +47,18 @@ export default function Image() {
           letterSpacing: "-0.02em",
         }}
       >
-        VoxLink
+        VoxLink™
       </div>
 
       {/* Subtitle */}
       <div
         style={{
           fontSize: 32,
-          color: "#06b6d4",
+          color: "#00C896",
           marginBottom: 24,
         }}
       >
-        Real-Time Voice Translation
+        Break Language Barriers Instantly
       </div>
 
       {/* Description */}
@@ -70,8 +70,8 @@ export default function Image() {
           maxWidth: 800,
         }}
       >
-        Break language barriers instantly. Video calls, face-to-face, and voice
-        translation.
+        She speaks Spanish, you hear English. Real-time voice translation for
+        dating, travel, and business.
       </div>
 
       {/* Language flags */}
@@ -84,7 +84,7 @@ export default function Image() {
         }}
       >
         <span>🇺🇸</span>
-        <span style={{ color: "#06b6d4" }}>↔</span>
+        <span style={{ color: "#00C896" }}>↔</span>
         <span>🇪🇸</span>
       </div>
 

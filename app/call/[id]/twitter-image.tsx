@@ -1,11 +1,13 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "VoxLink™ — Break Language Barriers Instantly";
+export const alt = "Join my VoxLink Video Call";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-export default function Image() {
+export default function Image({ params }: { params: { id: string } }) {
+  const roomCode = params.id?.toUpperCase() || "ROOM";
+
   return new ImageResponse(
     <div
       style={{
@@ -20,7 +22,7 @@ export default function Image() {
           "radial-gradient(circle at 25% 25%, #00C896 0%, transparent 50%), radial-gradient(circle at 75% 75%, #0066FF 0%, transparent 50%)",
       }}
     >
-      {/* Logo */}
+      {/* Video Icon */}
       <div
         style={{
           display: "flex",
@@ -34,31 +36,34 @@ export default function Image() {
           fontSize: 64,
         }}
       >
-        🎙️
+        📹
       </div>
 
       {/* Title */}
       <div
         style={{
-          fontSize: 72,
+          fontSize: 64,
           fontWeight: 800,
           color: "white",
           marginBottom: 16,
           letterSpacing: "-0.02em",
         }}
       >
-        VoxLink™
+        Join my VoxLink Video Call
       </div>
 
-      {/* Subtitle */}
+      {/* Room Code */}
       <div
         style={{
-          fontSize: 32,
+          fontSize: 36,
           color: "#00C896",
           marginBottom: 24,
+          padding: "12px 32px",
+          borderRadius: 12,
+          border: "2px solid #00C896",
         }}
       >
-        Break Language Barriers Instantly
+        Room: {roomCode}
       </div>
 
       {/* Description */}
@@ -70,8 +75,8 @@ export default function Image() {
           maxWidth: 800,
         }}
       >
-        She speaks Spanish, you hear English. Real-time voice translation for
-        dating, travel, and business.
+        Tap to join a live-translated video call. You speak your language, they
+        hear theirs.
       </div>
 
       {/* Language flags */}
@@ -97,7 +102,7 @@ export default function Image() {
           color: "#6b7280",
         }}
       >
-        Powered by MachineMind
+        VoxLink™ by MachineMind
       </div>
     </div>,
     { ...size },
