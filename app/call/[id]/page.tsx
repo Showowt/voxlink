@@ -44,6 +44,7 @@ type CallStatus =
   | "waiting"
   | "connecting"
   | "connected"
+  | "reconnecting"
   | "error"
   | "room_full";
 
@@ -359,74 +360,89 @@ function VideoCallContent() {
   // DATA MESSAGE HANDLING (captions from partner)
   // ═══════════════════════════════════════════════════════════════════════════
 
+  // Type guard for CaptionData
+  const isCaptionData = (data: unknown): data is CaptionData => {
+    return (
+      typeof data === "object" &&
+      data !== null &&
+      "type" in data &&
+      (data as Record<string, unknown>).type === "caption" &&
+      "text" in data &&
+      typeof (data as Record<string, unknown>).text === "string"
+    );
+  };
+
   const handleDataMessage = useCallback(
     async (data: CaptionData | Record<string, unknown>) => {
-      if (data.type === "caption") {
-        const captionData = data as CaptionData;
-        // Clear existing timeout
-        if (theirCaptionTimeoutRef.current) {
-          clearTimeout(theirCaptionTimeoutRef.current);
-        }
+      if (!isCaptionData(data)) {
+        // Ignore non-caption messages (ping/pong, hello, etc.)
+        return;
+      }
+      const captionData = data;
 
-        // Track partner's language for UI display
-        if (captionData.lang) {
-          setPartnerLang(captionData.lang);
-        }
+      // Clear existing timeout
+      if (theirCaptionTimeoutRef.current) {
+        clearTimeout(theirCaptionTimeoutRef.current);
+      }
 
-        // Show partner's original text immediately
-        setTheirLiveText(captionData.text);
+      // Track partner's language for UI display
+      if (captionData.lang) {
+        setPartnerLang(captionData.lang);
+      }
 
-        // Translate partner's text to OUR language
-        // Partner sent their text in their language, we need it in ours
-        const needsTranslation = captionData.lang !== userLang;
-        if (needsTranslation && captionData.text) {
-          // Translate from partner's language to our language
-          try {
-            const res = await fetch("/api/translate", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                text: captionData.text,
-                sourceLang: captionData.lang,
-                targetLang: userLang,
-              }),
-            });
-            const result = await res.json();
-            const translation = result.translation || captionData.text;
-            setTheirLiveTranslation(translation);
-            // Speak the translation in our language (P1 fix: TTS for partner messages)
-            if (captionData.isFinal) {
-              speakText(translation, userLang);
-            }
-          } catch (err) {
-            console.error("Translation failed:", err);
-            setTheirLiveTranslation(`[${captionData.text}]`);
-          }
-        } else {
-          // Same language, no translation needed
-          setTheirLiveTranslation(captionData.text);
-          // Speak the text even if same language
+      // Show partner's original text immediately
+      setTheirLiveText(captionData.text);
+
+      // Translate partner's text to OUR language
+      // Partner sent their text in their language, we need it in ours
+      const needsTranslation = captionData.lang !== userLang;
+      if (needsTranslation && captionData.text) {
+        // Translate from partner's language to our language
+        try {
+          const res = await fetch("/api/translate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text: captionData.text,
+              sourceLang: captionData.lang,
+              targetLang: userLang,
+            }),
+          });
+          const result = await res.json();
+          const translation = result.translation || captionData.text;
+          setTheirLiveTranslation(translation);
+          // Speak the translation in our language (P1 fix: TTS for partner messages)
           if (captionData.isFinal) {
-            speakText(captionData.text, userLang);
+            speakText(translation, userLang);
           }
+        } catch (err) {
+          console.error("Translation failed:", err);
+          setTheirLiveTranslation(`[${captionData.text}]`);
         }
-
-        // Auto-clear after 5 seconds of no updates
-        theirCaptionTimeoutRef.current = setTimeout(() => {
-          setTheirLiveText("");
-          setTheirLiveTranslation("");
-        }, 5000);
-
-        // If this is a final caption, add to transcript
-        if (captionData.isFinal && captionData.text) {
-          addToTranscript(
-            "partner",
-            partnerName || "Partner",
-            captionData.text,
-            captionData.translation || captionData.text,
-            captionData.lang || "en",
-          );
+      } else {
+        // Same language, no translation needed
+        setTheirLiveTranslation(captionData.text);
+        // Speak the text even if same language
+        if (captionData.isFinal) {
+          speakText(captionData.text, userLang);
         }
+      }
+
+      // Auto-clear after 5 seconds of no updates
+      theirCaptionTimeoutRef.current = setTimeout(() => {
+        setTheirLiveText("");
+        setTheirLiveTranslation("");
+      }, 5000);
+
+      // If this is a final caption, add to transcript
+      if (captionData.isFinal && captionData.text) {
+        addToTranscript(
+          "partner",
+          partnerName || "Partner",
+          captionData.text,
+          captionData.translation || captionData.text,
+          captionData.lang || "en",
+        );
       }
     },
     [partnerName, userLang],

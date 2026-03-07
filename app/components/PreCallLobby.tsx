@@ -429,7 +429,8 @@ export default function PreCallLobby({
 
             <button
               onClick={onBack}
-              className="w-full py-2 text-gray-400 hover:text-white transition text-sm"
+              className="w-full py-3 text-gray-400 hover:text-white transition text-sm min-h-[44px]"
+              aria-label="Go back to home"
             >
               ← Back
             </button>
