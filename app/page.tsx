@@ -985,7 +985,7 @@ function HomeContent() {
   const [language, setLanguage] = useState("en");
   const [joinCode, setJoinCode] = useState("");
   const [activeTab, setActiveTab] = useState<
-    "video" | "talk" | "voxnote" | "voxtype"
+    "video" | "talk" | "voxnote" | "voxtype" | "proximity"
   >("voxtype");
   const [mode, setMode] = useState<"start" | "join">("start");
   const [isJoining, setIsJoining] = useState(false);
@@ -1233,6 +1233,16 @@ function HomeContent() {
             >
               📹 Call
             </button>
+            <button
+              onClick={() => setActiveTab("proximity")}
+              className={`flex-1 py-2.5 sm:py-3 text-center font-medium transition text-xs sm:text-sm ${
+                activeTab === "proximity"
+                  ? "text-purple-400 border-b-2 border-purple-400 bg-purple-500/5"
+                  : "text-gray-400 hover:text-white"
+              }`}
+            >
+              📡
+            </button>
           </div>
 
           <div className="p-3 sm:p-5 max-h-[calc(100dvh-220px)] sm:max-h-none overflow-y-auto">
@@ -1241,6 +1251,45 @@ function HomeContent() {
               <VoxTypeTab />
             ) : activeTab === "voxnote" ? (
               <VoxNoteTab />
+            ) : activeTab === "proximity" ? (
+              <div className="space-y-4 text-center">
+                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center mx-auto">
+                  <span className="text-4xl">📡</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white">
+                    Proximity Connect
+                  </h3>
+                  <p className="text-gray-400 text-sm mt-1">
+                    AirDrop for translated conversations
+                  </p>
+                </div>
+                <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/30 text-left">
+                  <ul className="text-sm text-gray-300 space-y-2">
+                    <li className="flex items-start gap-2">
+                      <span className="text-purple-400">📍</span>
+                      Find nearby VoxLink users
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-purple-400">📡</span>
+                      Connect instantly with one tap
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-purple-400">🌍</span>
+                      Auto-translate between languages
+                    </li>
+                  </ul>
+                </div>
+                <button
+                  onClick={() => router.push("/proximity")}
+                  className="w-full py-4 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-xl text-white font-semibold text-lg transition shadow-lg shadow-purple-500/25"
+                >
+                  📡 Start Proximity Discovery
+                </button>
+                <p className="text-xs text-gray-500">
+                  Location shared only while app is open
+                </p>
+              </div>
             ) : (
               <>
                 {/* True Face-to-Face Mode Button */}
