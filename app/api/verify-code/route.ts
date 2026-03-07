@@ -6,15 +6,11 @@ import { randomBytes } from "crypto";
 // Validates 4-digit access code and returns session token
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// SECURITY: Access code from environment variable - NEVER hardcode
-const ACCESS_CODE = process.env.VOXLINK_ACCESS_CODE;
-
-if (!ACCESS_CODE) {
-  console.error("CRITICAL: VOXLINK_ACCESS_CODE environment variable not set");
-}
-
 export async function POST(request: Request) {
   try {
+    // Read env var at runtime (not build time)
+    const ACCESS_CODE = process.env.VOXLINK_ACCESS_CODE;
+
     const { code } = await request.json();
 
     // Validate input
@@ -27,6 +23,9 @@ export async function POST(request: Request) {
 
     // Fail if ACCESS_CODE not configured
     if (!ACCESS_CODE) {
+      console.error(
+        "CRITICAL: VOXLINK_ACCESS_CODE environment variable not set",
+      );
       return NextResponse.json(
         { valid: false, error: "Service not configured" },
         { status: 503 },
