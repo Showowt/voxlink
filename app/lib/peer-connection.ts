@@ -1,6 +1,24 @@
 import Peer, { MediaConnection, DataConnection } from "peerjs";
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// NETWORK CONNECTION TYPE (Navigator.connection API)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface NetworkInformation extends EventTarget {
+  type?: string;
+  effectiveType?: string;
+  downlink?: number;
+  rtt?: number;
+  saveData?: boolean;
+}
+
+interface NavigatorWithConnection extends Navigator {
+  connection?: NetworkInformation;
+  mozConnection?: NetworkInformation;
+  webkitConnection?: NetworkInformation;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // VOXLINK VIDEO CONNECTION v2.0 - Bulletproof Video Calls
 // Fixed: Connection reliability, retry logic, ICE handling
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -102,8 +120,107 @@ export class PeerConnection {
     timestamp: number;
   } | null = null;
 
+  // Network change detection
+  private networkChangeHandler: (() => void) | null = null;
+  private onlineHandler: (() => void) | null = null;
+  private offlineHandler: (() => void) | null = null;
+  private lastNetworkType: string | null = null;
+  private isOffline: boolean = false;
+
   constructor(callbacks: PeerCallbacks) {
     this.callbacks = callbacks;
+    this.setupNetworkListeners();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // NETWORK CHANGE DETECTION - Proactive ICE restart on network switch
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  private setupNetworkListeners(): void {
+    if (typeof window === "undefined") return;
+
+    // Online/offline detection
+    this.onlineHandler = () => {
+      console.log("[VoxLink Video] Network: Back online");
+      this.isOffline = false;
+
+      // If we were connected, trigger ICE restart
+      if (this._status === "connected" || this._status === "reconnecting") {
+        this.triggerIceRestart();
+      }
+    };
+
+    this.offlineHandler = () => {
+      console.log("[VoxLink Video] Network: Went offline");
+      this.isOffline = true;
+      if (this._status === "connected") {
+        this.setStatus("reconnecting", "Network offline...");
+      }
+    };
+
+    window.addEventListener("online", this.onlineHandler);
+    window.addEventListener("offline", this.offlineHandler);
+
+    // Network Information API (for WiFi ↔ cellular detection)
+    const connection = (navigator as NavigatorWithConnection).connection;
+    if (connection) {
+      this.lastNetworkType =
+        connection.type || connection.effectiveType || null;
+
+      this.networkChangeHandler = () => {
+        const newType = connection.type || connection.effectiveType || null;
+        console.log(
+          `[VoxLink Video] Network type changed: ${this.lastNetworkType} → ${newType}`,
+        );
+
+        // If type changed and we're connected, trigger ICE restart
+        if (newType !== this.lastNetworkType && this._status === "connected") {
+          console.log(
+            "[VoxLink Video] Triggering ICE restart due to network change",
+          );
+          this.triggerIceRestart();
+        }
+
+        this.lastNetworkType = newType;
+      };
+
+      connection.addEventListener("change", this.networkChangeHandler);
+    }
+  }
+
+  private removeNetworkListeners(): void {
+    if (typeof window === "undefined") return;
+
+    if (this.onlineHandler) {
+      window.removeEventListener("online", this.onlineHandler);
+    }
+    if (this.offlineHandler) {
+      window.removeEventListener("offline", this.offlineHandler);
+    }
+
+    const connection = (navigator as NavigatorWithConnection).connection;
+    if (connection && this.networkChangeHandler) {
+      connection.removeEventListener("change", this.networkChangeHandler);
+    }
+  }
+
+  private triggerIceRestart(): void {
+    if (!this.mediaConnection || this.isDestroyed) return;
+
+    try {
+      const pc = (
+        this.mediaConnection as unknown as {
+          peerConnection?: RTCPeerConnection;
+        }
+      ).peerConnection;
+
+      if (pc && pc.iceConnectionState !== "closed") {
+        console.log("[VoxLink Video] Restarting ICE...");
+        pc.restartIce?.();
+      }
+    } catch (err) {
+      console.warn("[VoxLink Video] ICE restart failed:", err);
+    }
   }
 
   get status() {
@@ -301,8 +418,28 @@ export class PeerConnection {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // CONNECTION ATTEMPTS (Guest)
+  // CONNECTION ATTEMPTS (Guest) - Exponential Backoff with Jitter
   // ═══════════════════════════════════════════════════════════════════════════
+
+  // Backoff configuration
+  private static readonly BASE_DELAY = 1000; // 1 second
+  private static readonly MAX_DELAY = 16000; // 16 seconds max
+  private static readonly BACKOFF_FACTOR = 2;
+  private static readonly JITTER_FACTOR = 0.2; // ±20%
+
+  private calculateBackoffDelay(): number {
+    // Exponential: 1s → 2s → 4s → 8s → 16s (capped)
+    const exponentialDelay =
+      PeerConnection.BASE_DELAY *
+      Math.pow(PeerConnection.BACKOFF_FACTOR, this.connectionAttempts - 1);
+    const cappedDelay = Math.min(exponentialDelay, PeerConnection.MAX_DELAY);
+
+    // Add jitter (±20%) to prevent thundering herd
+    const jitter = cappedDelay * PeerConnection.JITTER_FACTOR;
+    const randomJitter = (Math.random() - 0.5) * 2 * jitter;
+
+    return Math.round(cappedDelay + randomJitter);
+  }
 
   private startConnectionAttempts(): void {
     this.stopConnectionAttempts();
@@ -320,19 +457,25 @@ export class PeerConnection {
         return;
       }
 
+      const delay = this.calculateBackoffDelay();
       console.log(
-        `[VoxLink Video] Connection attempt ${this.connectionAttempts}/${this.maxConnectionAttempts}`,
+        `[VoxLink Video] Connection attempt ${this.connectionAttempts}/${this.maxConnectionAttempts} (next in ${delay}ms)`,
       );
       this.connectToHost();
+
+      // Schedule next attempt with exponential backoff
+      if (this.connectionAttempts < this.maxConnectionAttempts) {
+        this.connectionAttemptInterval = setTimeout(tryConnect, delay);
+      }
     };
 
+    // First attempt immediately
     tryConnect();
-    this.connectionAttemptInterval = setInterval(tryConnect, 2000);
   }
 
   private stopConnectionAttempts(): void {
     if (this.connectionAttemptInterval) {
-      clearInterval(this.connectionAttemptInterval);
+      clearTimeout(this.connectionAttemptInterval);
       this.connectionAttemptInterval = null;
     }
   }
@@ -733,6 +876,7 @@ export class PeerConnection {
     this.stopKeepAlive();
     this.stopStatsMonitoring();
     this.stopConnectionAttempts();
+    this.removeNetworkListeners();
 
     // Stop local media tracks (camera/microphone)
     if (this.localStream) {

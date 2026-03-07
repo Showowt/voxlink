@@ -17,6 +17,15 @@ import type {
   CaptionData,
 } from "../../lib/speech-types";
 import PreCallLobby from "../../components/PreCallLobby";
+import {
+  BrowserUnsupportedScreen,
+  PermissionDeniedScreen,
+  ConnectionFailedScreen,
+  RoomFullScreen,
+  detectErrorType,
+} from "../../components/ErrorScreens";
+import ReconnectingOverlay from "../../components/ReconnectingOverlay";
+import { useBrowserSupport } from "../../lib/browser-support";
 
 // Text-to-Speech helper
 const speakText = (text: string, lang: string) => {
@@ -63,10 +72,19 @@ function VideoCallContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
+  // Browser support detection
+  const browserSupport = useBrowserSupport();
+
   const roomCode = params.id as string;
   const isHost = searchParams.get("host") === "true";
   const userName = searchParams.get("name") || "User";
   const initialUserLang = searchParams.get("lang") || "en";
+
+  // Reconnection state
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [maxReconnectAttempts] = useState(5);
+  const [isReconnecting, setIsReconnecting] = useState(false);
+  const [reconnectCountdown, setReconnectCountdown] = useState(0);
 
   // Lobby state - start in lobby mode
   const [inLobby, setInLobby] = useState(true);
@@ -706,6 +724,30 @@ function VideoCallContent() {
   // ═══════════════════════════════════════════════════════════════════════════
 
   // Show lobby first
+  // Browser unsupported check
+  if (!browserSupport.isSupported) {
+    return (
+      <BrowserUnsupportedScreen
+        missingFeatures={browserSupport.missingFeatures}
+      />
+    );
+  }
+
+  // Reconnecting overlay
+  if (isReconnecting && status === "reconnecting") {
+    return (
+      <ReconnectingOverlay
+        attempt={reconnectAttempt}
+        maxAttempts={maxReconnectAttempts}
+        nextRetryIn={reconnectCountdown}
+        onCancel={() => {
+          setIsReconnecting(false);
+          router.push("/");
+        }}
+      />
+    );
+  }
+
   if (inLobby) {
     return (
       <PreCallLobby
@@ -736,28 +778,27 @@ function VideoCallContent() {
           <div className="absolute inset-0 bg-gradient-to-b from-gray-900 to-black flex items-center justify-center">
             <div className="text-center p-6">
               {status === "room_full" ? (
-                <>
-                  <div className="text-6xl mb-4">🚫</div>
-                  <p className="text-red-400 text-xl mb-2">Room Full</p>
-                  <p className="text-gray-400 text-base mb-6">{error}</p>
-                  <button
-                    onClick={() => router.push("/")}
-                    className="px-6 py-3 bg-[#00C896] text-white font-medium"
-                  >
-                    Go Back Home
-                  </button>
-                </>
+                <RoomFullScreen onBack={() => router.push("/")} />
               ) : status === "error" ? (
-                <>
-                  <div className="text-6xl mb-4">❌</div>
-                  <p className="text-red-400 text-xl mb-4">{error}</p>
-                  <button
-                    onClick={retry}
-                    className="px-6 py-3 bg-[#00C896] text-white font-medium"
-                  >
-                    Try Again
-                  </button>
-                </>
+                (() => {
+                  const errorType = detectErrorType(error || "Unknown error");
+                  if (errorType === "permission_denied") {
+                    return (
+                      <PermissionDeniedScreen
+                        permissionType="both"
+                        onRetry={retry}
+                        onBack={() => router.push("/")}
+                      />
+                    );
+                  }
+                  return (
+                    <ConnectionFailedScreen
+                      message={error || "Connection failed"}
+                      onRetry={retry}
+                      onBack={() => router.push("/")}
+                    />
+                  );
+                })()
               ) : (
                 <>
                   <div className="w-16 h-16 md:w-20 md:h-20 border-4 border-[#00C896] border-t-transparent rounded-full animate-spin mx-auto mb-6" />

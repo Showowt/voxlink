@@ -12,6 +12,14 @@ import type {
 } from "../../lib/speech-types";
 // Import to ensure global Window augmentation
 import "../../lib/speech-types";
+import {
+  BrowserUnsupportedScreen,
+  PermissionDeniedScreen,
+  ConnectionFailedScreen,
+  detectErrorType,
+} from "../../components/ErrorScreens";
+import ReconnectingOverlay from "../../components/ReconnectingOverlay";
+import { useBrowserSupport } from "../../lib/browser-support";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // VOXLINK TALK MODE - FaceTime-Quality Live Translation
@@ -61,6 +69,10 @@ function TalkContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
+
+  // Browser support detection
+  const browserSupport = useBrowserSupport();
+
   const roomId = params.id as string;
 
   // User configuration from URL params
@@ -69,6 +81,11 @@ function TalkContent() {
   const userLang = searchParams.get("lang") || "en";
   // Default target language - used before partner connects
   const defaultTargetLang = userLang === "en" ? "es" : "en";
+
+  // Error state
+  const [error, setError] = useState<string | null>(null);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [isReconnecting, setIsReconnecting] = useState(false);
 
   // Connection state
   const [connectionStatus, setConnectionStatus] =
@@ -696,6 +713,50 @@ function TalkContent() {
   // ═══════════════════════════════════════════════════════════════════════════
   // RENDER
   // ═══════════════════════════════════════════════════════════════════════════
+
+  // Browser unsupported check
+  if (!browserSupport.isSupported) {
+    return (
+      <BrowserUnsupportedScreen
+        missingFeatures={browserSupport.missingFeatures}
+      />
+    );
+  }
+
+  // Reconnecting overlay
+  if (isReconnecting) {
+    return (
+      <ReconnectingOverlay
+        attempt={reconnectAttempt}
+        maxAttempts={5}
+        onCancel={() => {
+          setIsReconnecting(false);
+          router.push("/");
+        }}
+      />
+    );
+  }
+
+  // Error screen for connection failures
+  if (error && !isConnected) {
+    const errorType = detectErrorType(error);
+    if (errorType === "permission_denied") {
+      return (
+        <PermissionDeniedScreen
+          permissionType="microphone"
+          onRetry={() => window.location.reload()}
+          onBack={() => router.push("/")}
+        />
+      );
+    }
+    return (
+      <ConnectionFailedScreen
+        message={error}
+        onRetry={() => window.location.reload()}
+        onBack={() => router.push("/")}
+      />
+    );
+  }
 
   return (
     <div className="h-screen bg-[#0a0a0f] flex flex-col overflow-hidden">
