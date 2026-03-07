@@ -1199,6 +1199,22 @@ function HomeContent() {
               <VoxNoteTab />
             ) : (
               <>
+                {/* True Face-to-Face Mode Button */}
+                {activeTab === "talk" && (
+                  <div className="mb-4">
+                    <button
+                      onClick={() => router.push("/face-to-face")}
+                      className="w-full py-4 bg-gradient-to-r from-[#00C896] to-[#0066FF] hover:from-[#00B085] hover:to-[#0055DD] rounded-xl text-white font-semibold text-lg transition shadow-lg"
+                    >
+                      🗣️ True Face-to-Face (One Device)
+                    </button>
+                    <p className="text-xs text-gray-500 text-center mt-2">
+                      Place phone between two people - each speaks their
+                      language
+                    </p>
+                  </div>
+                )}
+
                 {/* Description */}
                 <div className="mb-5 p-3 rounded-xl bg-gray-800/50 text-center">
                   {activeTab === "video" ? (
@@ -1211,9 +1227,9 @@ function HomeContent() {
                   ) : (
                     <p className="text-gray-300 text-sm">
                       <span className="text-cyan-400 font-medium">
-                        Face-to-Face:
+                        Remote Talk:
                       </span>{" "}
-                      Sit with someone, each uses their phone
+                      Each person uses their own phone
                     </p>
                   )}
                 </div>
