@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { getFlag, getSpeechCode } from "../lib/languages";
+import { getFlag, getSpeechCode, LANGUAGES } from "../lib/languages";
+import { LanguageSelector } from "../components/LanguageSelector";
 import type {
   SpeechRecognitionEvent,
   SpeechRecognitionErrorEvent,
@@ -28,6 +29,9 @@ interface TranslationState {
 
 export default function FaceToFacePage() {
   const router = useRouter();
+
+  // Setup mode - show language selection first
+  const [isSetupMode, setIsSetupMode] = useState(true);
 
   // Language configuration
   const [topLang, setTopLang] = useState("en");
@@ -299,6 +303,15 @@ export default function FaceToFacePage() {
     };
   }, []);
 
+  // Start session - exit setup mode
+  const startSession = () => {
+    if (topLang === bottomLang) {
+      setError("Please select different languages for each speaker");
+      return;
+    }
+    setIsSetupMode(false);
+  };
+
   // Browser not supported
   if (!browserSupported) {
     return (
@@ -323,6 +336,119 @@ export default function FaceToFacePage() {
     );
   }
 
+  // Setup mode - language selection
+  if (isSetupMode) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#060810] via-[#0d1117] to-[#060810] flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <div className="bg-[#12121a] rounded-2xl border border-gray-800 p-6">
+            {/* Header */}
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-[#00C896] to-[#0066FF] mb-3 shadow-lg">
+                <span className="text-3xl">🗣️</span>
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-1">
+                Face-to-Face Translation
+              </h2>
+              <p className="text-gray-400 text-sm">
+                Place phone between two people
+              </p>
+            </div>
+
+            {/* Error */}
+            {error && (
+              <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm text-center">
+                {error}
+              </div>
+            )}
+
+            {/* Language Selection */}
+            <div className="space-y-4">
+              {/* Your Language (Top Speaker) */}
+              <div>
+                <label className="block text-sm text-gray-400 mb-2 flex items-center gap-2">
+                  <span className="text-lg">👆</span>
+                  <span>Top Speaker (You)</span>
+                </label>
+                <LanguageSelector
+                  value={topLang}
+                  onChange={setTopLang}
+                  excludeCode={bottomLang}
+                />
+              </div>
+
+              {/* Swap Button */}
+              <div className="flex justify-center">
+                <button
+                  onClick={swapLanguages}
+                  className="p-3 rounded-xl bg-[#1a1a2e] border border-gray-700 text-[#00C896] hover:bg-[#00C896]/10 hover:border-[#00C896]/50 transition"
+                >
+                  <svg
+                    className="w-6 h-6"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                    />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Partner's Language (Bottom Speaker) */}
+              <div>
+                <label className="block text-sm text-gray-400 mb-2 flex items-center gap-2">
+                  <span className="text-lg">👇</span>
+                  <span>Bottom Speaker (Partner)</span>
+                </label>
+                <LanguageSelector
+                  value={bottomLang}
+                  onChange={setBottomLang}
+                  excludeCode={topLang}
+                />
+              </div>
+            </div>
+
+            {/* Preview */}
+            <div className="mt-6 p-4 rounded-xl bg-gradient-to-r from-[#00C896]/10 to-[#0066FF]/10 border border-white/10">
+              <div className="flex items-center justify-center gap-4">
+                <div className="text-center">
+                  <span className="text-3xl">{getFlag(topLang)}</span>
+                  <p className="text-xs text-gray-400 mt-1">Top</p>
+                </div>
+                <span className="text-2xl text-white/50">↔</span>
+                <div className="text-center">
+                  <span className="text-3xl">{getFlag(bottomLang)}</span>
+                  <p className="text-xs text-gray-400 mt-1">Bottom</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Start Button */}
+            <button
+              onClick={startSession}
+              className="w-full mt-6 py-4 bg-gradient-to-r from-[#00C896] to-[#0066FF] hover:from-[#00B085] hover:to-[#0055DD] rounded-xl text-white font-semibold text-lg transition shadow-lg"
+            >
+              🚀 Start Translation
+            </button>
+
+            {/* Back Link */}
+            <button
+              onClick={() => router.push("/")}
+              className="w-full mt-3 py-3 bg-[#1a1a2e] border border-gray-700 rounded-xl text-gray-400 hover:text-white hover:border-gray-600 transition"
+            >
+              ← Back to Home
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen bg-[#060810] flex flex-col overflow-hidden select-none">
       {/* Error Banner */}
@@ -342,10 +468,14 @@ export default function FaceToFacePage() {
       <div className="flex-1 flex flex-col relative bg-gradient-to-b from-[#00C896]/10 to-transparent">
         {/* Top speaker controls */}
         <div className="flex items-center justify-between p-3 border-b border-white/10">
-          <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsSetupMode(true)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition"
+          >
             <span className="text-2xl">{getFlag(topLang)}</span>
             <span className="text-white font-medium uppercase">{topLang}</span>
-          </div>
+            <span className="text-gray-400 text-xs">✏️</span>
+          </button>
           <div className="flex items-center gap-2">
             <button
               onClick={swapLanguages}
@@ -421,12 +551,16 @@ export default function FaceToFacePage() {
       <div className="flex-1 flex flex-col relative bg-gradient-to-t from-[#0066FF]/10 to-transparent rotate-180">
         {/* Bottom speaker controls (appears at top of their view) */}
         <div className="flex items-center justify-between p-3 border-b border-white/10">
-          <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsSetupMode(true)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition"
+          >
             <span className="text-2xl">{getFlag(bottomLang)}</span>
             <span className="text-white font-medium uppercase">
               {bottomLang}
             </span>
-          </div>
+            <span className="text-gray-400 text-xs">✏️</span>
+          </button>
           <button
             onClick={clearAll}
             className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm transition"
