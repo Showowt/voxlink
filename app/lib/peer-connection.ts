@@ -15,6 +15,15 @@ export type ConnectionStatus =
   | "failed"
   | "room_full";
 
+export type IceConnectionState =
+  | "new"
+  | "checking"
+  | "connected"
+  | "completed"
+  | "disconnected"
+  | "failed"
+  | "closed";
+
 export interface PeerCallbacks {
   onStatusChange?: (status: ConnectionStatus, message?: string) => void;
   onRemoteStream?: (stream: MediaStream) => void;
@@ -22,6 +31,7 @@ export interface PeerCallbacks {
   onPartnerJoined?: (name: string) => void;
   onPartnerLeft?: () => void;
   onError?: (error: string) => void;
+  onIceStateChange?: (state: IceConnectionState) => void;
 }
 
 // Default ICE servers (STUN only - TURN fetched from API)
@@ -489,9 +499,13 @@ export class PeerConnection {
       .peerConnection;
     if (pc) {
       pc.oniceconnectionstatechange = () => {
-        console.log("[VoxLink Video] ICE state:", pc.iceConnectionState);
+        const state = pc.iceConnectionState as IceConnectionState;
+        console.log("[VoxLink Video] ICE state:", state);
 
-        if (pc.iceConnectionState === "failed") {
+        // Notify UI of ICE state changes
+        this.callbacks.onIceStateChange?.(state);
+
+        if (state === "failed") {
           console.log("[VoxLink Video] ICE failed, restarting...");
           try {
             pc.restartIce?.();
@@ -500,7 +514,7 @@ export class PeerConnection {
           }
         }
 
-        if (pc.iceConnectionState === "disconnected") {
+        if (state === "disconnected") {
           setTimeout(() => {
             if (pc.iceConnectionState === "disconnected" && !this.isDestroyed) {
               try {

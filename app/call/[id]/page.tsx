@@ -6,8 +6,31 @@ import {
   PeerConnection,
   getCamera,
   stopCamera,
+  type IceConnectionState,
 } from "../../lib/peer-connection";
-import { getSpeechCode, getFlag } from "../../lib/languages";
+import { getSpeechCode, getFlag, getLanguage } from "../../lib/languages";
+import type {
+  SpeechRecognitionEvent,
+  SpeechRecognitionErrorEvent,
+  SpeechRecognitionInstance,
+  CaptionData,
+} from "../../lib/speech-types";
+
+// Text-to-Speech helper
+const speakText = (text: string, lang: string) => {
+  if (!text.trim() || typeof window === "undefined") return;
+
+  // Cancel any ongoing speech
+  window.speechSynthesis.cancel();
+
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = getSpeechCode(lang);
+  utterance.rate = 0.9;
+  utterance.pitch = 1;
+  utterance.volume = 1;
+
+  window.speechSynthesis.speak(utterance);
+};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // VOXLINK VIDEO CALL - PeerJS P2P with Live Translation
@@ -70,13 +93,14 @@ function VideoCallContent() {
 
   // UI state
   const [copied, setCopied] = useState(false);
+  const [iceState, setIceState] = useState<IceConnectionState | null>(null);
 
   // Refs
   const peerRef = useRef<PeerConnection | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const isListeningRef = useRef(false);
   const mountedRef = useRef(true);
   const captionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -154,9 +178,9 @@ function VideoCallContent() {
             setHasRemoteStream(true);
             setHasPartner(true); // If we got video, partner is definitely connected
           },
-          onDataMessage: (data) => {
+          onDataMessage: (data: unknown) => {
             if (!mountedRef.current) return;
-            handleDataMessage(data);
+            handleDataMessage(data as CaptionData | Record<string, unknown>);
           },
           onPartnerJoined: (name) => {
             if (!mountedRef.current) return;
@@ -177,6 +201,11 @@ function VideoCallContent() {
             setError(err);
             setStatus("error");
           },
+          onIceStateChange: (state) => {
+            if (!mountedRef.current) return;
+            console.log("🧊 ICE state:", state);
+            setIceState(state);
+          },
         });
 
         peerRef.current = peer;
@@ -194,11 +223,13 @@ function VideoCallContent() {
           setStatus("error");
           setError("Failed to connect");
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Init error:", err);
         if (mountedRef.current) {
           setStatus("error");
-          setError(err.message || "Failed to start call");
+          const errorMessage =
+            err instanceof Error ? err.message : "Failed to start call";
+          setError(errorMessage);
         }
       }
     };
@@ -222,44 +253,54 @@ function VideoCallContent() {
   // ═══════════════════════════════════════════════════════════════════════════
 
   const handleDataMessage = useCallback(
-    async (data: any) => {
+    async (data: CaptionData | Record<string, unknown>) => {
       if (data.type === "caption") {
+        const captionData = data as CaptionData;
         // Clear existing timeout
         if (theirCaptionTimeoutRef.current) {
           clearTimeout(theirCaptionTimeoutRef.current);
         }
 
         // Track partner's language for UI display
-        if (data.lang) {
-          setPartnerLang(data.lang);
+        if (captionData.lang) {
+          setPartnerLang(captionData.lang);
         }
 
         // Show partner's original text immediately
-        setTheirLiveText(data.text);
+        setTheirLiveText(captionData.text);
 
         // Translate partner's text to OUR language
         // Partner sent their text in their language, we need it in ours
-        const needsTranslation = data.lang !== userLang;
-        if (needsTranslation && data.text) {
+        const needsTranslation = captionData.lang !== userLang;
+        if (needsTranslation && captionData.text) {
           // Translate from partner's language to our language
           try {
             const res = await fetch("/api/translate", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                text: data.text,
-                sourceLang: data.lang,
+                text: captionData.text,
+                sourceLang: captionData.lang,
                 targetLang: userLang,
               }),
             });
             const result = await res.json();
-            setTheirLiveTranslation(result.translation || data.text);
+            const translation = result.translation || captionData.text;
+            setTheirLiveTranslation(translation);
+            // Speak the translation in our language (P1 fix: TTS for partner messages)
+            if (captionData.isFinal) {
+              speakText(translation, userLang);
+            }
           } catch {
-            setTheirLiveTranslation(data.text);
+            setTheirLiveTranslation(captionData.text);
           }
         } else {
           // Same language, no translation needed
-          setTheirLiveTranslation(data.text);
+          setTheirLiveTranslation(captionData.text);
+          // Speak the text even if same language
+          if (captionData.isFinal) {
+            speakText(captionData.text, userLang);
+          }
         }
 
         // Auto-clear after 5 seconds of no updates
@@ -269,13 +310,13 @@ function VideoCallContent() {
         }, 5000);
 
         // If this is a final caption, add to transcript
-        if (data.isFinal && data.text) {
+        if (captionData.isFinal && captionData.text) {
           addToTranscript(
             "partner",
             partnerName || "Partner",
-            data.text,
-            data.translation || data.text,
-            data.lang, // FIX: Use sender's language, not our targetLang
+            captionData.text,
+            captionData.translation || captionData.text,
+            captionData.lang || "en",
           );
         }
       }
@@ -324,10 +365,13 @@ function VideoCallContent() {
       return;
     }
 
-    const SpeechRecognition =
-      (window as any).webkitSpeechRecognition ||
-      (window as any).SpeechRecognition;
-    const recognition = new SpeechRecognition();
+    const SpeechRecognitionAPI =
+      window.webkitSpeechRecognition || window.SpeechRecognition;
+    if (!SpeechRecognitionAPI) {
+      setError("Speech recognition not supported");
+      return;
+    }
+    const recognition = new SpeechRecognitionAPI();
 
     recognition.continuous = true;
     recognition.interimResults = true;
@@ -338,7 +382,7 @@ function VideoCallContent() {
       console.log("🎤 Listening started");
     };
 
-    recognition.onresult = async (event: any) => {
+    recognition.onresult = async (event: SpeechRecognitionEvent) => {
       const results = event.results;
       const latest = results[results.length - 1];
       const text = latest[0].transcript.trim();
@@ -376,7 +420,7 @@ function VideoCallContent() {
       }
     };
 
-    recognition.onerror = (event: any) => {
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       console.error("Speech error:", event.error);
       if (event.error !== "no-speech") {
         setIsListening(false);
@@ -581,6 +625,32 @@ function VideoCallContent() {
               #{roomCode}
             </span>
           </div>
+
+          {/* ICE Connection State Indicator */}
+          {iceState && iceState !== "connected" && iceState !== "completed" && (
+            <div className="flex items-center gap-1.5 bg-black/50 backdrop-blur px-2 py-1.5 md:px-3 md:py-2 min-h-[44px]">
+              <div
+                className={`w-2 h-2 rounded-full ${
+                  iceState === "checking" || iceState === "new"
+                    ? "bg-yellow-500 animate-pulse"
+                    : iceState === "disconnected"
+                      ? "bg-orange-500"
+                      : iceState === "failed"
+                        ? "bg-red-500"
+                        : "bg-gray-500"
+                }`}
+              />
+              <span className="text-gray-400 text-[10px] md:text-xs">
+                {iceState === "checking" || iceState === "new"
+                  ? "Connecting..."
+                  : iceState === "disconnected"
+                    ? "Reconnecting..."
+                    : iceState === "failed"
+                      ? "Connection lost"
+                      : iceState}
+              </span>
+            </div>
+          )}
 
           {hasPartner && (
             <button

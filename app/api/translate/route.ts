@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // VOXLINK ULTRA-FAST TRANSLATION API
@@ -6,6 +7,16 @@ import { NextRequest, NextResponse } from "next/server";
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const dynamic = "force-dynamic";
+
+// Zod schema for input validation
+const TranslateRequestSchema = z.object({
+  text: z
+    .string()
+    .min(1, "Text is required")
+    .max(5000, "Text too long (max 5000 chars)"),
+  sourceLang: z.string().min(2, "Source language required").max(10),
+  targetLang: z.string().min(2, "Target language required").max(10),
+});
 
 // CORS - restricted to production domains + extension
 const ALLOWED_ORIGINS = [
@@ -353,32 +364,19 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { text, sourceLang, targetLang } = await req.json();
+    const body = await req.json();
 
-    // Validation - check all required fields
-    if (!text || typeof text !== "string") {
+    // Zod validation
+    const parsed = TranslateRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      const errorMessage = parsed.error.issues[0]?.message || "Invalid request";
       return NextResponse.json(
-        { translation: "", error: "Missing or invalid text" },
+        { translation: "", error: errorMessage },
         { status: 400, headers: corsHeaders },
       );
     }
 
-    if (!sourceLang || !targetLang) {
-      return NextResponse.json(
-        { translation: "", error: "Missing sourceLang or targetLang" },
-        { status: 400, headers: corsHeaders },
-      );
-    }
-
-    // Input length validation - prevent DoS with massive payloads
-    const MAX_TEXT_LENGTH = 5000;
-    if (text.length > MAX_TEXT_LENGTH) {
-      return NextResponse.json(
-        { translation: "", error: "Text too long (max 5000 chars)" },
-        { status: 400, headers: corsHeaders },
-      );
-    }
-
+    const { text, sourceLang, targetLang } = parsed.data;
     const cleanText = text.trim();
     if (!cleanText) {
       return NextResponse.json({ translation: "" }, { headers: corsHeaders });
