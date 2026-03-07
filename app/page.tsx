@@ -223,7 +223,7 @@ function VoxTypeTab() {
       <div className="text-center pb-1 sm:pb-2 hidden sm:block">
         <p className="text-gray-400 text-xs sm:text-sm">
           Type → Translate →{" "}
-          <span className="text-cyan-400">Verify meaning</span> → Share
+          <span className="text-[#00C896]">Verify meaning</span> → Share
         </p>
       </div>
 
@@ -252,7 +252,7 @@ function VoxTypeTab() {
               : "Escribe lo que quieres decir..."
           }
           rows={2}
-          className="w-full px-3 py-2.5 sm:px-4 sm:py-3 bg-[#1a1a2e] border border-gray-700 rounded-lg sm:rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition resize-none text-base sm:text-lg"
+          className="w-full px-3 py-2.5 sm:px-4 sm:py-3 bg-[#1a1a2e] border border-gray-700 rounded-lg sm:rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-[#00C896] transition resize-none text-base sm:text-lg"
         />
       </div>
 
@@ -266,7 +266,7 @@ function VoxTypeTab() {
       {/* Loading */}
       {isTranslating && (
         <div className="flex items-center justify-center gap-2 py-3 sm:py-4">
-          <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-[#00C896] border-t-transparent rounded-full animate-spin" />
           <span className="text-gray-400 text-xs sm:text-sm">
             Translating...
           </span>
@@ -282,7 +282,7 @@ function VoxTypeTab() {
               Translation
             </label>
           </div>
-          <div className="p-3 sm:p-4 rounded-lg sm:rounded-xl bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 text-cyan-100 text-sm sm:text-base">
+          <div className="p-3 sm:p-4 rounded-lg sm:rounded-xl bg-gradient-to-br from-[#00C896]/10 to-blue-500/10 border border-[#00C896]/30 text-cyan-100 text-sm sm:text-base">
             {translatedText}
           </div>
 
@@ -320,7 +320,7 @@ function VoxTypeTab() {
                 className={`w-full py-3 sm:py-4 rounded-lg sm:rounded-xl font-semibold text-base sm:text-lg transition shadow-lg ${
                   copied
                     ? "bg-green-500 text-white shadow-green-500/25"
-                    : "bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white shadow-cyan-500/25"
+                    : "bg-gradient-to-r from-[#00C896] to-[#0066FF] hover:from-[#00B085] hover:to-[#0055DD] text-white shadow-[#00C896]/25"
                 }`}
               >
                 {copied ? "✓ Copied!" : "📋 Copy Translation"}
@@ -891,7 +891,7 @@ function VoxNoteTab() {
               className={`text-xs transition ${
                 isSpeaking
                   ? "text-green-400"
-                  : "text-cyan-400 hover:text-cyan-300"
+                  : "text-[#00C896] hover:text-cyan-300"
               }`}
             >
               {isSpeaking ? "🔊..." : "🔊"}
@@ -932,7 +932,7 @@ function VoxNoteTab() {
                 className={`w-full py-3 sm:py-4 rounded-lg sm:rounded-xl font-semibold text-base sm:text-lg transition shadow-lg ${
                   copied === "translated"
                     ? "bg-green-500 text-white shadow-green-500/25"
-                    : "bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white shadow-cyan-500/25"
+                    : "bg-gradient-to-r from-[#00C896] to-[#0066FF] hover:from-[#00B085] hover:to-[#0055DD] text-white shadow-[#00C896]/25"
                 }`}
               >
                 {copied === "translated" ? "✓ Copied!" : "📋 Copy"}
@@ -990,6 +990,37 @@ function HomeContent() {
   const [mode, setMode] = useState<"start" | "join">("start");
   const [isJoining, setIsJoining] = useState(false);
 
+  // Browser compatibility check
+  const [browserWarning, setBrowserWarning] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Check SpeechRecognition support
+    const hasSpeech =
+      typeof window !== "undefined" &&
+      ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
+
+    if (!hasSpeech) {
+      const userAgent = navigator.userAgent.toLowerCase();
+      if (userAgent.includes("firefox")) {
+        setBrowserWarning(
+          "Firefox does not support voice features. Please use Chrome, Edge, or Safari.",
+        );
+      } else if (
+        userAgent.includes("safari") &&
+        !userAgent.includes("chrome")
+      ) {
+        // Safari has partial support, show softer warning
+        setBrowserWarning(
+          "Some voice features may not work in Safari. Chrome recommended.",
+        );
+      } else {
+        setBrowserWarning(
+          "Your browser may not support voice features. Chrome recommended.",
+        );
+      }
+    }
+  }, []);
+
   // Load saved preferences
   useEffect(() => {
     const savedName = localStorage.getItem("voxlink_name");
@@ -1013,9 +1044,12 @@ function HomeContent() {
     if (language) localStorage.setItem("voxlink_lang", language);
   }, [name, language]);
 
-  // Generate room code
+  // Generate cryptographically secure room code
   const generateCode = () => {
-    return Math.random().toString(36).substring(2, 8).toUpperCase();
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // No O/0/I/1 for clarity
+    const array = new Uint8Array(6);
+    crypto.getRandomValues(array);
+    return Array.from(array, (byte) => chars[byte % chars.length]).join("");
   };
 
   // Start Video Call
@@ -1075,7 +1109,7 @@ function HomeContent() {
   // Joining screen
   if (isJoining && joinId) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0a0a0f] via-[#0d1117] to-[#0a0a0f] flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-[#060810] via-[#0d1117] to-[#060810] flex items-center justify-center p-4">
         <div className="w-full max-w-md">
           <div className="bg-[#12121a] rounded-2xl border border-gray-800 p-6">
             <div className="text-center mb-6">
@@ -1086,7 +1120,7 @@ function HomeContent() {
                 Join {joinType === "talk" ? "Conversation" : "Video Call"}
               </h2>
               <p className="text-gray-400 text-sm mt-1">
-                Code: <span className="font-mono text-cyan-400">{joinId}</span>
+                Code: <span className="font-mono text-[#00C896]">{joinId}</span>
               </p>
             </div>
 
@@ -1100,7 +1134,7 @@ function HomeContent() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Enter your name"
-                  className="w-full px-4 py-3 bg-[#1a1a2e] border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition"
+                  className="w-full px-4 py-3 bg-[#1a1a2e] border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-[#00C896] transition"
                 />
               </div>
 
@@ -1113,7 +1147,7 @@ function HomeContent() {
 
               <button
                 onClick={joinType === "talk" ? joinTalkMode : joinVideoCall}
-                className="w-full py-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 rounded-xl text-white font-semibold text-lg transition shadow-lg shadow-cyan-500/25"
+                className="w-full py-4 bg-gradient-to-r from-[#00C896] to-[#0066FF] hover:from-[#00B085] hover:to-[#0055DD] rounded-xl text-white font-semibold text-lg transition shadow-lg shadow-[#00C896]/25"
               >
                 {joinType === "talk" ? "💬 Join" : "📹 Join"}
               </button>
@@ -1125,15 +1159,15 @@ function HomeContent() {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-gradient-to-br from-[#0a0a0f] via-[#0d1117] to-[#0a0a0f] flex flex-col py-3 px-3 sm:py-4 sm:px-4 sm:justify-center overflow-y-auto">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-[#060810] via-[#0d1117] to-[#060810] flex flex-col py-3 px-3 sm:py-4 sm:px-4 sm:justify-center overflow-y-auto">
       <div className="w-full max-w-md mx-auto flex-shrink-0">
         {/* Logo - Compact on mobile */}
         <div className="text-center mb-3 sm:mb-6">
-          <div className="inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 mb-2 sm:mb-3 shadow-lg shadow-cyan-500/25">
+          <div className="inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-gradient-to-br from-[#00C896] to-[#0066FF] mb-2 sm:mb-3 shadow-lg shadow-[#00C896]/25">
             <span className="text-2xl sm:text-3xl">🔗</span>
           </div>
           <div className="flex items-center justify-center gap-1 mb-0.5 sm:mb-1">
-            <span className="text-xs sm:text-sm font-medium text-cyan-400 tracking-wider">
+            <span className="text-xs sm:text-sm font-medium text-[#00C896] tracking-wider">
               MACHINEMIND
             </span>
           </div>
@@ -1145,6 +1179,16 @@ function HomeContent() {
           </p>
         </div>
 
+        {/* Browser Compatibility Warning */}
+        {browserWarning && (
+          <div className="mb-3 sm:mb-4 p-3 rounded-xl bg-orange-500/10 border border-orange-500/30 text-center">
+            <p className="text-orange-400 text-xs sm:text-sm flex items-center justify-center gap-2">
+              <span>⚠️</span>
+              {browserWarning}
+            </p>
+          </div>
+        )}
+
         {/* Card */}
         <div className="bg-[#12121a] rounded-xl sm:rounded-2xl border border-gray-800 overflow-hidden shadow-xl">
           {/* Mode Tabs - Compact on mobile */}
@@ -1153,7 +1197,7 @@ function HomeContent() {
               onClick={() => setActiveTab("voxtype")}
               className={`flex-1 py-2.5 sm:py-3 text-center font-medium transition text-xs sm:text-sm ${
                 activeTab === "voxtype"
-                  ? "text-cyan-400 border-b-2 border-cyan-400 bg-cyan-500/5"
+                  ? "text-[#00C896] border-b-2 border-[#00C896] bg-[#00C896]/5"
                   : "text-gray-400 hover:text-white"
               }`}
             >
@@ -1173,7 +1217,7 @@ function HomeContent() {
               onClick={() => setActiveTab("talk")}
               className={`flex-1 py-2.5 sm:py-3 text-center font-medium transition text-xs sm:text-sm ${
                 activeTab === "talk"
-                  ? "text-cyan-400 border-b-2 border-cyan-400 bg-cyan-500/5"
+                  ? "text-[#00C896] border-b-2 border-[#00C896] bg-[#00C896]/5"
                   : "text-gray-400 hover:text-white"
               }`}
             >
@@ -1183,7 +1227,7 @@ function HomeContent() {
               onClick={() => setActiveTab("video")}
               className={`flex-1 py-2.5 sm:py-3 text-center font-medium transition text-xs sm:text-sm ${
                 activeTab === "video"
-                  ? "text-cyan-400 border-b-2 border-cyan-400 bg-cyan-500/5"
+                  ? "text-[#00C896] border-b-2 border-[#00C896] bg-[#00C896]/5"
                   : "text-gray-400 hover:text-white"
               }`}
             >
@@ -1219,14 +1263,14 @@ function HomeContent() {
                 <div className="mb-5 p-3 rounded-xl bg-gray-800/50 text-center">
                   {activeTab === "video" ? (
                     <p className="text-gray-300 text-sm">
-                      <span className="text-cyan-400 font-medium">
+                      <span className="text-[#00C896] font-medium">
                         Video Call:
                       </span>{" "}
                       Remote calls with live translation
                     </p>
                   ) : (
                     <p className="text-gray-300 text-sm">
-                      <span className="text-cyan-400 font-medium">
+                      <span className="text-[#00C896] font-medium">
                         Remote Talk:
                       </span>{" "}
                       Each person uses their own phone
@@ -1244,7 +1288,7 @@ function HomeContent() {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Enter your name"
-                    className="w-full px-4 py-3 bg-[#1a1a2e] border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition text-lg"
+                    className="w-full px-4 py-3 bg-[#1a1a2e] border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-[#00C896] transition text-lg"
                   />
                 </div>
 
@@ -1260,9 +1304,9 @@ function HomeContent() {
                 <div className="flex gap-2 mb-4">
                   <button
                     onClick={() => setMode("start")}
-                    className={`flex-1 py-2 rounded-lg font-medium transition ${
+                    className={`flex-1 py-3 min-h-[44px] rounded-lg font-medium transition ${
                       mode === "start"
-                        ? "bg-cyan-500 text-white"
+                        ? "bg-[#00C896] text-white"
                         : "bg-[#1a1a2e] text-gray-400"
                     }`}
                   >
@@ -1270,9 +1314,9 @@ function HomeContent() {
                   </button>
                   <button
                     onClick={() => setMode("join")}
-                    className={`flex-1 py-2 rounded-lg font-medium transition ${
+                    className={`flex-1 py-3 min-h-[44px] rounded-lg font-medium transition ${
                       mode === "join"
-                        ? "bg-cyan-500 text-white"
+                        ? "bg-[#00C896] text-white"
                         : "bg-[#1a1a2e] text-gray-400"
                     }`}
                   >
@@ -1286,7 +1330,7 @@ function HomeContent() {
                     onClick={
                       activeTab === "video" ? startVideoCall : startTalkMode
                     }
-                    className="w-full py-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 rounded-xl text-white font-semibold text-lg transition shadow-lg shadow-cyan-500/25"
+                    className="w-full py-4 bg-gradient-to-r from-[#00C896] to-[#0066FF] hover:from-[#00B085] hover:to-[#0055DD] rounded-xl text-white font-semibold text-lg transition shadow-lg shadow-[#00C896]/25"
                   >
                     {activeTab === "video"
                       ? "📹 Start Video Call"
@@ -1302,7 +1346,7 @@ function HomeContent() {
                       }
                       placeholder="Enter code"
                       maxLength={6}
-                      className="w-full px-4 py-3 bg-[#1a1a2e] border border-gray-700 rounded-xl text-white text-center text-2xl tracking-[0.3em] placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition uppercase font-mono"
+                      className="w-full px-4 py-3 bg-[#1a1a2e] border border-gray-700 rounded-xl text-white text-center text-2xl tracking-[0.3em] placeholder-gray-500 focus:outline-none focus:border-[#00C896] transition uppercase font-mono"
                     />
                     <button
                       onClick={
@@ -1325,7 +1369,7 @@ function HomeContent() {
         <div className="text-center mt-3 sm:mt-6 space-y-1 sm:space-y-2 pb-2">
           <p className="text-gray-500 text-[10px] sm:text-xs">
             Chrome recommended •{" "}
-            <a href="/status" className="text-cyan-500 hover:underline">
+            <a href="/status" className="text-[#00C896] hover:underline">
               Status
             </a>
           </p>
@@ -1334,10 +1378,10 @@ function HomeContent() {
               href="https://machinemindconsulting.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs text-gray-400 hover:text-cyan-400 transition"
+              className="inline-flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs text-gray-400 hover:text-[#00C896] transition"
             >
               <span>Powered by</span>
-              <span className="font-semibold text-cyan-500">MachineMind</span>
+              <span className="font-semibold text-[#00C896]">MachineMind</span>
             </a>
           </div>
         </div>
@@ -1350,9 +1394,9 @@ export default function Home() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+        <div className="min-h-screen bg-[#060810] flex items-center justify-center">
           <div className="text-center">
-            <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <div className="w-12 h-12 border-4 border-[#00C896] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
             <p className="text-gray-400">Loading VoxLink...</p>
           </div>
         </div>

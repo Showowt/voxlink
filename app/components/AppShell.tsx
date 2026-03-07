@@ -106,7 +106,7 @@ function LogoutButton() {
   return (
     <button
       onClick={handleLogout}
-      className="fixed top-4 right-4 z-50 flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-400 hover:text-white bg-[#1a1a2e] hover:bg-[#252538] border border-gray-700 hover:border-gray-600 rounded-lg transition-all"
+      className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 min-h-[44px] text-sm font-medium text-gray-400 hover:text-white bg-[#1a1a2e] hover:bg-[#252538] border border-gray-700 hover:border-gray-600 rounded-lg transition-all"
       title="Sign Out"
     >
       <svg

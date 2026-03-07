@@ -388,26 +388,26 @@ function VideoCallContent() {
       const text = latest[0].transcript.trim();
       const isFinal = latest.isFinal;
 
-      // Update live text
+      // Update live text immediately (no API call for interim)
       setMyLiveText(text);
 
-      // Translate in real-time
-      const translation = await translateText(text);
-      setMyLiveTranslation(translation);
-
-      // Send to partner with error checking
-      const sent = peerRef.current?.send({
-        type: "caption",
-        text,
-        translation,
-        isFinal,
-        lang: userLang,
-      });
-      if (sent === false) {
-        console.warn("⚠️ Caption failed to send - data channel not ready");
-      }
-
+      // Only translate on final results to reduce API calls
       if (isFinal) {
+        const translation = await translateText(text);
+        setMyLiveTranslation(translation);
+
+        // Send final caption to partner
+        const sent = peerRef.current?.send({
+          type: "caption",
+          text,
+          translation,
+          isFinal: true,
+          lang: userLang,
+        });
+        if (sent === false) {
+          console.warn("⚠️ Caption failed to send - data channel not ready");
+        }
+
         // Add to transcript
         addToTranscript("me", userName, text, translation, userLang);
 
@@ -417,6 +417,14 @@ function VideoCallContent() {
           setMyLiveText("");
           setMyLiveTranslation("");
         }, 2000);
+      } else {
+        // For interim results, send text without translation (partner sees live typing)
+        peerRef.current?.send({
+          type: "caption",
+          text,
+          isFinal: false,
+          lang: userLang,
+        });
       }
     };
 
@@ -549,7 +557,7 @@ function VideoCallContent() {
                   <p className="text-gray-400 text-base mb-6">{error}</p>
                   <button
                     onClick={() => router.push("/")}
-                    className="px-6 py-3 bg-cyan-500 text-white font-medium"
+                    className="px-6 py-3 bg-[#00C896] text-white font-medium"
                   >
                     Go Back Home
                   </button>
@@ -560,14 +568,14 @@ function VideoCallContent() {
                   <p className="text-red-400 text-xl mb-4">{error}</p>
                   <button
                     onClick={retry}
-                    className="px-6 py-3 bg-cyan-500 text-white font-medium"
+                    className="px-6 py-3 bg-[#00C896] text-white font-medium"
                   >
                     Try Again
                   </button>
                 </>
               ) : (
                 <>
-                  <div className="w-16 h-16 md:w-20 md:h-20 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto mb-6" />
+                  <div className="w-16 h-16 md:w-20 md:h-20 border-4 border-[#00C896] border-t-transparent rounded-full animate-spin mx-auto mb-6" />
                   <p className="text-white text-lg md:text-xl mb-2">
                     {statusMessage}
                   </p>
@@ -577,12 +585,12 @@ function VideoCallContent() {
                         <p className="text-gray-400 text-sm mb-2">
                           Share this code:
                         </p>
-                        <p className="text-cyan-400 text-2xl md:text-3xl font-mono font-bold tracking-wider">
+                        <p className="text-[#00C896] text-2xl md:text-3xl font-mono font-bold tracking-wider">
                           {roomCode}
                         </p>
                         <button
                           onClick={copyLink}
-                          className="mt-3 px-4 py-2 bg-cyan-500/20 text-cyan-400 text-sm min-h-[44px]"
+                          className="mt-3 px-4 py-2 bg-[#00C896]/20 text-[#00C896] text-sm min-h-[44px]"
                         >
                           {copied ? "✓ Link Copied" : "🔗 Copy Join Link"}
                         </button>
@@ -655,7 +663,7 @@ function VideoCallContent() {
           {hasPartner && (
             <button
               onClick={() => setShowHistory(!showHistory)}
-              className={`bg-black/50 backdrop-blur px-2 py-1.5 md:px-3 md:py-2 text-xs md:text-sm min-h-[44px] ${showHistory ? "text-cyan-400" : "text-white"}`}
+              className={`bg-black/50 backdrop-blur px-2 py-1.5 md:px-3 md:py-2 text-xs md:text-sm min-h-[44px] ${showHistory ? "text-[#00C896]" : "text-white"}`}
             >
               📜 {transcript.length > 0 && `(${transcript.length})`}
             </button>
@@ -702,12 +710,12 @@ function VideoCallContent() {
           {myLiveText && (
             <div className="flex justify-end caption-slide-in">
               <div className="max-w-[95%] md:max-w-[75%]">
-                <div className="bg-cyan-500/20 backdrop-blur-xl border border-cyan-500/30 px-3 py-2 md:px-4 md:py-3 shadow-lg">
+                <div className="bg-[#00C896]/20 backdrop-blur-xl border border-[#00C896]/30 px-3 py-2 md:px-4 md:py-3 shadow-lg">
                   <div className="flex items-center gap-2 mb-1.5">
-                    <span className="text-cyan-400 text-xs font-medium">
+                    <span className="text-[#00C896] text-xs font-medium">
                       You
                     </span>
-                    <span className="text-cyan-400/50 text-xs">
+                    <span className="text-[#00C896]/50 text-xs">
                       {getFlag(userLang)}
                     </span>
                   </div>
@@ -717,7 +725,7 @@ function VideoCallContent() {
                   </p>
                   {myLiveTranslation && (
                     <p
-                      className={`text-cyan-300 font-medium leading-relaxed ${
+                      className={`text-[#00C896] font-medium leading-relaxed ${
                         fontSize === "small"
                           ? "text-sm md:text-base"
                           : fontSize === "medium"
@@ -757,11 +765,11 @@ function VideoCallContent() {
                 transcript.map((entry) => (
                   <div
                     key={entry.id}
-                    className={`p-2 md:p-3 ${entry.speaker === "me" ? "bg-cyan-500/10 border-l-2 border-cyan-500" : "bg-purple-500/10 border-l-2 border-purple-500"}`}
+                    className={`p-2 md:p-3 ${entry.speaker === "me" ? "bg-[#00C896]/10 border-l-2 border-[#00C896]" : "bg-purple-500/10 border-l-2 border-purple-500"}`}
                   >
                     <div className="flex items-center gap-2 mb-1">
                       <span
-                        className={`text-xs font-medium ${entry.speaker === "me" ? "text-cyan-400" : "text-purple-400"}`}
+                        className={`text-xs font-medium ${entry.speaker === "me" ? "text-[#00C896]" : "text-purple-400"}`}
                       >
                         {entry.name}
                       </span>
@@ -817,7 +825,7 @@ function VideoCallContent() {
                 ? "bg-gray-700 text-gray-500"
                 : isListening
                   ? "bg-gradient-to-br from-green-400 to-emerald-600 text-white shadow-lg shadow-green-500/50"
-                  : "bg-gradient-to-br from-cyan-400 to-blue-600 text-white shadow-lg shadow-cyan-500/50"
+                  : "bg-gradient-to-br from-[#00C896] to-blue-600 text-white shadow-lg shadow-[#00C896]/50"
             }`}
           >
             {isListening ? (
@@ -923,7 +931,7 @@ export default function VideoCallPage() {
     <Suspense
       fallback={
         <div className="min-h-screen bg-black flex items-center justify-center">
-          <div className="w-16 h-16 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-16 h-16 border-4 border-[#00C896] border-t-transparent rounded-full animate-spin" />
         </div>
       }
     >
