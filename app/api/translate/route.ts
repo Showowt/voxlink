@@ -258,7 +258,7 @@ for (const [phrase, translation] of Object.entries(PHRASES["en-es"])) {
 // TRANSLATION APIS - Optimized for speed (2s timeout, parallel execution)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const FAST_TIMEOUT = 2000; // 2 seconds max for real-time
+const FAST_TIMEOUT = 1500; // 1.5 seconds max for real-time (faster!)
 
 // Google Translate Direct - FASTEST, most accurate
 async function translateGoogle(

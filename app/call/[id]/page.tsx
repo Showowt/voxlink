@@ -123,6 +123,8 @@ function VideoCallContent() {
   const mountedRef = useRef(true);
   const captionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const theirCaptionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const interimTranslateRef = useRef<NodeJS.Timeout | null>(null);
+  const lastTranslatedTextRef = useRef<string>("");
 
   useEffect(() => {
     isListeningRef.current = isListening;
@@ -402,38 +404,42 @@ function VideoCallContent() {
       // Show partner's original text immediately
       setTheirLiveText(captionData.text);
 
-      // Translate partner's text to OUR language
-      // Partner sent their text in their language, we need it in ours
-      const needsTranslation = captionData.lang !== userLang;
-      if (needsTranslation && captionData.text) {
-        // Translate from partner's language to our language
-        try {
-          const res = await fetch("/api/translate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              text: captionData.text,
-              sourceLang: captionData.lang,
-              targetLang: userLang,
-            }),
-          });
-          const result = await res.json();
-          const translation = result.translation || captionData.text;
-          setTheirLiveTranslation(translation);
-          // Speak the translation in our language (P1 fix: TTS for partner messages)
-          if (captionData.isFinal) {
-            speakText(translation, userLang);
-          }
-        } catch (err) {
-          console.error("Translation failed:", err);
-          setTheirLiveTranslation(`[${captionData.text}]`);
+      // SPEED: If partner already sent translation, use it instantly
+      if (captionData.translation) {
+        setTheirLiveTranslation(captionData.translation);
+        if (captionData.isFinal) {
+          speakText(captionData.translation, userLang);
         }
       } else {
-        // Same language, no translation needed
-        setTheirLiveTranslation(captionData.text);
-        // Speak the text even if same language
-        if (captionData.isFinal) {
-          speakText(captionData.text, userLang);
+        // Translate partner's text to OUR language
+        const needsTranslation = captionData.lang !== userLang;
+        if (needsTranslation && captionData.text) {
+          try {
+            const res = await fetch("/api/translate", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                text: captionData.text,
+                sourceLang: captionData.lang,
+                targetLang: userLang,
+              }),
+            });
+            const result = await res.json();
+            const translation = result.translation || captionData.text;
+            setTheirLiveTranslation(translation);
+            if (captionData.isFinal) {
+              speakText(translation, userLang);
+            }
+          } catch (err) {
+            console.error("Translation failed:", err);
+            setTheirLiveTranslation(`[${captionData.text}]`);
+          }
+        } else {
+          // Same language, no translation needed
+          setTheirLiveTranslation(captionData.text);
+          if (captionData.isFinal) {
+            speakText(captionData.text, userLang);
+          }
         }
       }
 
@@ -522,25 +528,36 @@ function VideoCallContent() {
       const text = latest[0].transcript.trim();
       const isFinal = latest.isFinal;
 
-      // Update live text immediately (no API call for interim)
+      // Update live text immediately
       setMyLiveText(text);
 
-      // Only translate on final results to reduce API calls
+      // Send to partner immediately (they see live typing)
+      peerRef.current?.send({
+        type: "caption",
+        text,
+        isFinal,
+        lang: userLang,
+      });
+
       if (isFinal) {
+        // Clear any pending interim translation
+        if (interimTranslateRef.current) {
+          clearTimeout(interimTranslateRef.current);
+        }
+
+        // Translate final result immediately
         const translation = await translateText(text);
         setMyLiveTranslation(translation);
+        lastTranslatedTextRef.current = text;
 
-        // Send final caption to partner
-        const sent = peerRef.current?.send({
+        // Send final with translation
+        peerRef.current?.send({
           type: "caption",
           text,
           translation,
           isFinal: true,
           lang: userLang,
         });
-        if (sent === false) {
-          console.warn("⚠️ Caption failed to send - data channel not ready");
-        }
 
         // Add to transcript
         addToTranscript("me", userName, text, translation, userLang);
@@ -550,15 +567,35 @@ function VideoCallContent() {
         captionTimeoutRef.current = setTimeout(() => {
           setMyLiveText("");
           setMyLiveTranslation("");
+          lastTranslatedTextRef.current = "";
         }, 2000);
       } else {
-        // For interim results, send text without translation (partner sees live typing)
-        peerRef.current?.send({
-          type: "caption",
-          text,
-          isFinal: false,
-          lang: userLang,
-        });
+        // SPEED OPTIMIZATION: Debounced translation for interim results
+        // Translate while speaking, not just at the end
+        if (interimTranslateRef.current) {
+          clearTimeout(interimTranslateRef.current);
+        }
+
+        // Only translate if text is different and long enough
+        if (text.length >= 3 && text !== lastTranslatedTextRef.current) {
+          interimTranslateRef.current = setTimeout(async () => {
+            // Double-check we're still on this text
+            if (text === lastTranslatedTextRef.current) return;
+
+            const translation = await translateText(text);
+            setMyLiveTranslation(translation);
+            lastTranslatedTextRef.current = text;
+
+            // Send interim translation to partner
+            peerRef.current?.send({
+              type: "caption",
+              text,
+              translation,
+              isFinal: false,
+              lang: userLang,
+            });
+          }, 300); // 300ms debounce - fast but not overwhelming
+        }
       }
     };
 
