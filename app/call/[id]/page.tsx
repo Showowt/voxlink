@@ -232,8 +232,17 @@ function VideoCallContent() {
       try {
         setStatus("loading");
 
-        // Use stream from lobby if available, otherwise get new one
-        if (!localStream) {
+        // Use stream from lobby if available AND tracks are active
+        // If stream exists but tracks are stopped, get a new one
+        const isStreamActive = (stream: MediaStream | null): boolean => {
+          if (!stream) return false;
+          const tracks = stream.getTracks();
+          return (
+            tracks.length > 0 && tracks.some((t) => t.readyState === "live")
+          );
+        };
+
+        if (!localStream || !isStreamActive(localStream)) {
           setStatusMessage("Getting camera...");
           localStream = await getCamera("user");
         }

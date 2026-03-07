@@ -57,6 +57,7 @@ export default function PreCallLobby({
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationRef = useRef<number | null>(null);
+  const streamHandedOffRef = useRef(false); // Track if stream was passed to parent
 
   // Initialize camera and mic
   useEffect(() => {
@@ -126,7 +127,8 @@ export default function PreCallLobby({
 
     return () => {
       mounted = false;
-      if (localStream) {
+      // Only stop stream if NOT handed off to parent (user joined call)
+      if (localStream && !streamHandedOffRef.current) {
         stopCamera(localStream);
       }
       if (animationRef.current) {
@@ -202,6 +204,9 @@ export default function PreCallLobby({
           videoTrack.enabled = false;
         }
       }
+
+      // Mark stream as handed off - don't cleanup on unmount
+      streamHandedOffRef.current = true;
 
       onJoin({
         stream,

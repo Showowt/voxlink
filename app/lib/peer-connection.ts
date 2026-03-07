@@ -393,12 +393,13 @@ export class PeerConnection {
       // Start keep-alive
       this.startKeepAlive();
 
-      // Guest initiates video call after data channel is ready
-      if (!this.isHost && this.localStream) {
+      // BOTH host and guest initiate video call after data channel is ready
+      // This makes the connection symmetric and more reliable
+      if (this.localStream) {
         setTimeout(() => this.initiateVideoCall(), 500);
       }
 
-      this.setStatus("connected", "Connected!");
+      this.setStatus("connecting", "Establishing video...");
     });
 
     conn.on("data", (data: unknown) => {
@@ -507,6 +508,9 @@ export class PeerConnection {
       console.log("[VoxLink Video] Got remote stream!");
       this.remoteStream = stream;
       this.callbacks.onRemoteStream?.(stream);
+
+      // NOW we're truly connected - data channel + video stream
+      this.setStatus("connected", "Connected!");
 
       // Start quality monitoring when we have video
       this.startStatsMonitoring();
