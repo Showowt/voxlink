@@ -7,6 +7,7 @@ import {
   getCamera,
   stopCamera,
   type IceConnectionState,
+  type ConnectionQuality,
 } from "../../lib/peer-connection";
 import { getSpeechCode, getFlag, getLanguage } from "../../lib/languages";
 import type {
@@ -15,6 +16,7 @@ import type {
   SpeechRecognitionInstance,
   CaptionData,
 } from "../../lib/speech-types";
+import PreCallLobby from "../../components/PreCallLobby";
 
 // Text-to-Speech helper
 const speakText = (text: string, lang: string) => {
@@ -63,9 +65,19 @@ function VideoCallContent() {
   const roomCode = params.id as string;
   const isHost = searchParams.get("host") === "true";
   const userName = searchParams.get("name") || "User";
-  const userLang = searchParams.get("lang") || "en";
-  // Partner's language will be determined during the call
+  const initialUserLang = searchParams.get("lang") || "en";
+
+  // Lobby state - start in lobby mode
+  const [inLobby, setInLobby] = useState(true);
+  const [lobbyStream, setLobbyStream] = useState<MediaStream | null>(null);
+
+  // Language state (can be changed in lobby)
+  const [userLang, setUserLang] = useState(initialUserLang);
+  // Partner's language - can be set in lobby OR auto-detected during call
   const [partnerLang, setPartnerLang] = useState<string | null>(null);
+  const [expectedPartnerLang, setExpectedPartnerLang] = useState<string>(
+    initialUserLang === "en" ? "es" : "en",
+  );
 
   // State
   const [status, setStatus] = useState<CallStatus>("loading");
@@ -95,6 +107,11 @@ function VideoCallContent() {
   const [copied, setCopied] = useState(false);
   const [iceState, setIceState] = useState<IceConnectionState | null>(null);
 
+  // Quality monitoring state
+  const [quality, setQuality] = useState<ConnectionQuality | null>(null);
+  const [callDuration, setCallDuration] = useState(0);
+  const callStartTimeRef = useRef<number | null>(null);
+
   // Refs
   const peerRef = useRef<PeerConnection | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
@@ -119,21 +136,107 @@ function VideoCallContent() {
         ? "bg-red-500"
         : "bg-yellow-500";
 
+  // Format call duration as MM:SS
+  const formatDuration = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  // Quality bar colors
+  const getQualityBars = (
+    q: ConnectionQuality | null,
+  ): { count: number; color: string } => {
+    if (!q) return { count: 0, color: "bg-gray-500" };
+    switch (q.quality) {
+      case "excellent":
+        return { count: 4, color: "bg-green-400" };
+      case "good":
+        return { count: 3, color: "bg-green-400" };
+      case "fair":
+        return { count: 2, color: "bg-yellow-400" };
+      case "poor":
+        return { count: 1, color: "bg-red-400" };
+    }
+  };
+
   // ═══════════════════════════════════════════════════════════════════════════
-  // PEERJS SETUP
+  // LOBBY HANDLER - Join call with pre-configured stream
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const handleLobbyJoin = useCallback(
+    (settings: {
+      stream: MediaStream;
+      userLang: string;
+      partnerLang: string;
+      videoEnabled: boolean;
+    }) => {
+      setLobbyStream(settings.stream);
+      setUserLang(settings.userLang);
+      setExpectedPartnerLang(settings.partnerLang);
+      setIsVideoOff(!settings.videoEnabled);
+      setInLobby(false);
+    },
+    [],
+  );
+
+  const handleLobbyBack = useCallback(() => {
+    router.push("/");
+  }, [router]);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CALL DURATION TIMER
   // ═══════════════════════════════════════════════════════════════════════════
 
   useEffect(() => {
+    let timerInterval: NodeJS.Timeout | null = null;
+
+    if (hasPartner && status === "connected") {
+      // Start timer when partner joins
+      if (!callStartTimeRef.current) {
+        callStartTimeRef.current = Date.now();
+      }
+
+      timerInterval = setInterval(() => {
+        if (callStartTimeRef.current) {
+          const elapsed = Math.floor(
+            (Date.now() - callStartTimeRef.current) / 1000,
+          );
+          setCallDuration(elapsed);
+        }
+      }, 1000);
+    } else if (!hasPartner) {
+      // Reset when partner leaves
+      callStartTimeRef.current = null;
+      setCallDuration(0);
+    }
+
+    return () => {
+      if (timerInterval) clearInterval(timerInterval);
+    };
+  }, [hasPartner, status]);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PEERJS SETUP - Only runs after leaving lobby
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  useEffect(() => {
+    // Don't initialize until we leave the lobby
+    if (inLobby) return;
+
     mountedRef.current = true;
-    let localStream: MediaStream | null = null;
+    let localStream: MediaStream | null = lobbyStream;
 
     const init = async () => {
       try {
         setStatus("loading");
-        setStatusMessage("Getting camera...");
 
-        // Get camera
-        localStream = await getCamera("user");
+        // Use stream from lobby if available, otherwise get new one
+        if (!localStream) {
+          setStatusMessage("Getting camera...");
+          localStream = await getCamera("user");
+        }
+
         localStreamRef.current = localStream;
 
         // Show local video
@@ -206,6 +309,10 @@ function VideoCallContent() {
             console.log("🧊 ICE state:", state);
             setIceState(state);
           },
+          onQualityUpdate: (qualityData) => {
+            if (!mountedRef.current) return;
+            setQuality(qualityData);
+          },
         });
 
         peerRef.current = peer;
@@ -246,7 +353,7 @@ function VideoCallContent() {
         peerRef.current.disconnect();
       }
     };
-  }, [roomCode, isHost, userName]);
+  }, [roomCode, isHost, userName, inLobby, lobbyStream]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // DATA MESSAGE HANDLING (captions from partner)
@@ -332,7 +439,8 @@ function VideoCallContent() {
     text: string,
     toLang?: string,
   ): Promise<string> => {
-    const targetLanguage = toLang || partnerLang || "es"; // Default to Spanish if no partner lang known
+    // Use detected partner language, or expected partner language from lobby
+    const targetLanguage = toLang || partnerLang || expectedPartnerLang;
     if (userLang === targetLanguage) return text; // Same language, no translation needed
     try {
       const res = await fetch("/api/translate", {
@@ -534,6 +642,20 @@ function VideoCallContent() {
   // RENDER
   // ═══════════════════════════════════════════════════════════════════════════
 
+  // Show lobby first
+  if (inLobby) {
+    return (
+      <PreCallLobby
+        roomCode={roomCode}
+        userName={userName}
+        userLang={userLang}
+        isHost={isHost}
+        onJoin={handleLobbyJoin}
+        onBack={handleLobbyBack}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-black flex flex-col">
       {/* Video Container */}
@@ -633,6 +755,49 @@ function VideoCallContent() {
               #{roomCode}
             </span>
           </div>
+
+          {/* Call Duration Timer */}
+          {hasPartner && callDuration > 0 && (
+            <div className="flex items-center gap-1.5 bg-black/50 backdrop-blur px-2 py-1.5 md:px-3 md:py-2 min-h-[44px]">
+              <span className="text-white text-xs md:text-sm font-mono">
+                {formatDuration(callDuration)}
+              </span>
+            </div>
+          )}
+
+          {/* Connection Quality Indicator */}
+          {hasPartner && quality && (
+            <div className="flex items-center gap-1.5 bg-black/50 backdrop-blur px-2 py-1.5 md:px-3 md:py-2 min-h-[44px]">
+              {/* Quality bars */}
+              <div className="flex items-end gap-0.5 h-4">
+                {[1, 2, 3, 4].map((bar) => {
+                  const { count, color } = getQualityBars(quality);
+                  return (
+                    <div
+                      key={bar}
+                      className={`w-1 rounded-sm transition-all ${
+                        bar <= count ? color : "bg-gray-600"
+                      }`}
+                      style={{ height: `${bar * 4}px` }}
+                    />
+                  );
+                })}
+              </div>
+              {/* Show RTT on larger screens */}
+              <span className="hidden md:inline text-gray-400 text-xs">
+                {quality.rtt}ms
+              </span>
+            </div>
+          )}
+
+          {/* Unstable connection warning */}
+          {hasPartner && quality && quality.quality === "poor" && (
+            <div className="flex items-center gap-1.5 bg-red-500/20 backdrop-blur px-2 py-1.5 md:px-3 md:py-2 min-h-[44px] border border-red-500/30">
+              <span className="text-red-400 text-[10px] md:text-xs">
+                ⚠️ Unstable
+              </span>
+            </div>
+          )}
 
           {/* ICE Connection State Indicator */}
           {iceState && iceState !== "connected" && iceState !== "completed" && (

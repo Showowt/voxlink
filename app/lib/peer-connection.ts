@@ -24,6 +24,22 @@ export type IceConnectionState =
   | "failed"
   | "closed";
 
+// Connection quality metrics
+export interface ConnectionQuality {
+  // Quality score: 'excellent' | 'good' | 'fair' | 'poor'
+  quality: "excellent" | "good" | "fair" | "poor";
+  // Packet loss percentage (0-100)
+  packetLoss: number;
+  // Round trip time in ms
+  rtt: number;
+  // Jitter in ms
+  jitter: number;
+  // Estimated bandwidth in kbps
+  bandwidth: number;
+  // Timestamp of measurement
+  timestamp: number;
+}
+
 export interface PeerCallbacks {
   onStatusChange?: (status: ConnectionStatus, message?: string) => void;
   onRemoteStream?: (stream: MediaStream) => void;
@@ -32,6 +48,7 @@ export interface PeerCallbacks {
   onPartnerLeft?: () => void;
   onError?: (error: string) => void;
   onIceStateChange?: (state: IceConnectionState) => void;
+  onQualityUpdate?: (quality: ConnectionQuality) => void;
 }
 
 // Default ICE servers (STUN only - TURN fetched from API)
@@ -76,7 +93,14 @@ export class PeerConnection {
   private maxConnectionAttempts: number = 30; // Increased from 5
   private connectionAttemptInterval: NodeJS.Timeout | null = null;
   private keepAliveInterval: NodeJS.Timeout | null = null;
+  private statsInterval: NodeJS.Timeout | null = null;
   private lastPongTime: number = Date.now();
+  private previousStats: {
+    packetsReceived: number;
+    packetsLost: number;
+    bytesReceived: number;
+    timestamp: number;
+  } | null = null;
 
   constructor(callbacks: PeerCallbacks) {
     this.callbacks = callbacks;
@@ -483,6 +507,9 @@ export class PeerConnection {
       console.log("[VoxLink Video] Got remote stream!");
       this.remoteStream = stream;
       this.callbacks.onRemoteStream?.(stream);
+
+      // Start quality monitoring when we have video
+      this.startStatsMonitoring();
     });
 
     call.on("close", () => {
@@ -561,11 +588,119 @@ export class PeerConnection {
 
   private handlePartnerLeft(): void {
     this.stopKeepAlive();
+    this.stopStatsMonitoring();
     this.callbacks.onPartnerLeft?.();
     this.remoteStream = null;
 
     if (this._status === "connected" && !this.isDestroyed) {
       this.setStatus("waiting", "Partner disconnected");
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // QUALITY MONITORING - RTCPeerConnection.getStats()
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  private startStatsMonitoring(): void {
+    this.stopStatsMonitoring();
+
+    // Poll stats every 2 seconds
+    this.statsInterval = setInterval(() => {
+      this.collectStats();
+    }, 2000);
+  }
+
+  private stopStatsMonitoring(): void {
+    if (this.statsInterval) {
+      clearInterval(this.statsInterval);
+      this.statsInterval = null;
+    }
+    this.previousStats = null;
+  }
+
+  private async collectStats(): Promise<void> {
+    if (!this.mediaConnection || this.isDestroyed) return;
+
+    try {
+      // Get the underlying RTCPeerConnection
+      const pc = (
+        this.mediaConnection as unknown as {
+          peerConnection?: RTCPeerConnection;
+        }
+      ).peerConnection;
+      if (!pc) return;
+
+      const stats = await pc.getStats();
+      let packetsReceived = 0;
+      let packetsLost = 0;
+      let bytesReceived = 0;
+      let jitter = 0;
+      let rtt = 0;
+
+      stats.forEach((report) => {
+        if (report.type === "inbound-rtp" && report.kind === "video") {
+          packetsReceived = report.packetsReceived || 0;
+          packetsLost = report.packetsLost || 0;
+          jitter = (report.jitter || 0) * 1000; // Convert to ms
+          bytesReceived = report.bytesReceived || 0;
+        }
+        if (report.type === "candidate-pair" && report.state === "succeeded") {
+          rtt = report.currentRoundTripTime
+            ? report.currentRoundTripTime * 1000
+            : 0;
+        }
+      });
+
+      const now = Date.now();
+
+      // Calculate quality metrics
+      let packetLoss = 0;
+      let bandwidth = 0;
+
+      if (this.previousStats) {
+        const timeDelta = (now - this.previousStats.timestamp) / 1000;
+        const packetsInPeriod =
+          packetsReceived - this.previousStats.packetsReceived;
+        const lostInPeriod = packetsLost - this.previousStats.packetsLost;
+        const bytesInPeriod = bytesReceived - this.previousStats.bytesReceived;
+
+        if (packetsInPeriod + lostInPeriod > 0) {
+          packetLoss = (lostInPeriod / (packetsInPeriod + lostInPeriod)) * 100;
+        }
+
+        // Bandwidth in kbps
+        bandwidth = timeDelta > 0 ? (bytesInPeriod * 8) / timeDelta / 1000 : 0;
+      }
+
+      // Store for next calculation
+      this.previousStats = {
+        packetsReceived,
+        packetsLost,
+        bytesReceived,
+        timestamp: now,
+      };
+
+      // Determine quality level
+      let quality: ConnectionQuality["quality"] = "excellent";
+      if (packetLoss > 10 || rtt > 300) {
+        quality = "poor";
+      } else if (packetLoss > 5 || rtt > 200) {
+        quality = "fair";
+      } else if (packetLoss > 2 || rtt > 100) {
+        quality = "good";
+      }
+
+      // Notify callback
+      this.callbacks.onQualityUpdate?.({
+        quality,
+        packetLoss: Math.round(packetLoss * 10) / 10,
+        rtt: Math.round(rtt),
+        jitter: Math.round(jitter),
+        bandwidth: Math.round(bandwidth),
+        timestamp: now,
+      });
+    } catch (err) {
+      console.warn("[VoxLink] Stats collection error:", err);
     }
   }
 
@@ -592,6 +727,7 @@ export class PeerConnection {
     this.isDestroyed = true;
 
     this.stopKeepAlive();
+    this.stopStatsMonitoring();
     this.stopConnectionAttempts();
 
     try {
