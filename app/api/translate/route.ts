@@ -387,6 +387,7 @@ export async function POST(req: NextRequest) {
     const normalizeLanguage = (lang: string): string => {
       const code = lang.toLowerCase().split("-")[0].split("_")[0];
       const aliases: Record<string, string> = {
+        // Original 12
         english: "en",
         spanish: "es",
         espanol: "es",
@@ -405,6 +406,34 @@ export async function POST(req: NextRequest) {
         arabic: "ar",
         russian: "ru",
         hindi: "hi",
+        // New languages
+        dutch: "nl",
+        nederlands: "nl",
+        polish: "pl",
+        polski: "pl",
+        turkish: "tr",
+        turkce: "tr",
+        vietnamese: "vi",
+        thai: "th",
+        indonesian: "id",
+        ukrainian: "uk",
+        greek: "el",
+        hebrew: "he",
+        swedish: "sv",
+        svenska: "sv",
+        czech: "cs",
+        romanian: "ro",
+        hungarian: "hu",
+        magyar: "hu",
+        finnish: "fi",
+        suomi: "fi",
+        danish: "da",
+        dansk: "da",
+        norwegian: "no",
+        norsk: "no",
+        malay: "ms",
+        filipino: "tl",
+        tagalog: "tl",
       };
       return aliases[code] || code;
     };

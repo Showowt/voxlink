@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "Join my VoxLink Conversation";
+export const alt = "Join VoxLink Conversation | Unete a la Conversacion";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -22,87 +22,133 @@ export default function Image({ params }: { params: { id: string } }) {
           "radial-gradient(circle at 25% 25%, #00C896 0%, transparent 50%), radial-gradient(circle at 75% 75%, #0066FF 0%, transparent 50%)",
       }}
     >
-      {/* Chat Icon */}
+      {/* Logo Container */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
-          justifyContent: "center",
-          width: 120,
-          height: 120,
+          gap: 20,
+          marginBottom: 28,
+          padding: "20px 40px",
           borderRadius: 24,
-          background: "linear-gradient(135deg, #00C896, #0066FF)",
-          marginBottom: 32,
-          fontSize: 64,
+          background: "linear-gradient(135deg, #00c896, #0066ff)",
         }}
       >
-        💬
+        {/* Chat bubbles icon */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+          }}
+        >
+          <div
+            style={{
+              width: 40,
+              height: 28,
+              borderRadius: 8,
+              backgroundColor: "rgba(255,255,255,0.3)",
+            }}
+          />
+          <div
+            style={{
+              width: 48,
+              height: 32,
+              borderRadius: 8,
+              backgroundColor: "rgba(255,255,255,0.5)",
+              marginLeft: 16,
+            }}
+          />
+        </div>
+        {/* VoxLink text */}
+        <div
+          style={{
+            fontSize: 52,
+            fontWeight: 800,
+            color: "white",
+            letterSpacing: "-2px",
+          }}
+        >
+          VoxLink
+        </div>
       </div>
 
-      {/* Title */}
+      {/* Title - Bilingual */}
       <div
         style={{
-          fontSize: 64,
-          fontWeight: 800,
+          fontSize: 40,
+          fontWeight: 700,
           color: "white",
-          marginBottom: 16,
-          letterSpacing: "-0.02em",
+          marginBottom: 8,
         }}
       >
-        Join my VoxLink Conversation
+        Join my Conversation
+      </div>
+      <div
+        style={{
+          fontSize: 28,
+          fontWeight: 500,
+          color: "#9ca3af",
+          marginBottom: 20,
+        }}
+      >
+        Unete a mi Conversacion
       </div>
 
       {/* Room Code */}
       <div
         style={{
-          fontSize: 36,
+          fontSize: 48,
           color: "#00C896",
-          marginBottom: 24,
-          padding: "12px 32px",
+          marginBottom: 20,
+          padding: "12px 48px",
           borderRadius: 12,
-          border: "2px solid #00C896",
+          border: "3px solid #00C896",
+          fontWeight: 700,
+          fontFamily: "monospace",
         }}
       >
-        Room: {roomCode}
+        {roomCode}
       </div>
 
-      {/* Description */}
+      {/* Description - Bilingual */}
       <div
         style={{
-          fontSize: 24,
-          color: "#9ca3af",
+          fontSize: 18,
+          color: "#6b7280",
           textAlign: "center",
-          maxWidth: 800,
         }}
       >
-        Tap to start a face-to-face translated conversation. Real-time
-        translation as you speak.
+        Real-time translation | Traduccion en tiempo real
       </div>
 
-      {/* Language flags */}
+      {/* Flags */}
       <div
         style={{
           display: "flex",
-          gap: 24,
-          marginTop: 40,
-          fontSize: 48,
+          gap: 12,
+          marginTop: 28,
+          fontSize: 28,
         }}
       >
         <span>🇺🇸</span>
-        <span style={{ color: "#00C896" }}>↔</span>
+        <span>🇲🇽</span>
+        <span>🇨🇴</span>
+        <span>🇦🇷</span>
         <span>🇪🇸</span>
+        <span>🇧🇷</span>
       </div>
 
       {/* Powered by */}
       <div
         style={{
           position: "absolute",
-          bottom: 32,
-          fontSize: 18,
+          bottom: 28,
+          fontSize: 14,
           color: "#6b7280",
         }}
       >
-        VoxLink™ by MachineMind
+        Powered by MachineMind
       </div>
     </div>,
     { ...size },

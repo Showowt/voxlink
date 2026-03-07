@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "VoxLink Face-to-Face Translation";
+export const alt = "VoxLink Face-to-Face | Traduccion Cara a Cara";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -20,84 +20,130 @@ export default function Image() {
           "radial-gradient(circle at 25% 25%, #00C896 0%, transparent 50%), radial-gradient(circle at 75% 75%, #0066FF 0%, transparent 50%)",
       }}
     >
-      {/* Split Screen Icon */}
+      {/* Logo Container */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
-          justifyContent: "center",
-          width: 120,
-          height: 120,
-          borderRadius: 24,
-          background: "linear-gradient(135deg, #00C896, #0066FF)",
+          gap: 20,
           marginBottom: 32,
-          fontSize: 64,
+          padding: "20px 40px",
+          borderRadius: 24,
+          background: "linear-gradient(135deg, #00c896, #0066ff)",
         }}
       >
-        🗣️
+        {/* Chat bubbles icon */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+          }}
+        >
+          <div
+            style={{
+              width: 40,
+              height: 28,
+              borderRadius: 8,
+              backgroundColor: "rgba(255,255,255,0.3)",
+            }}
+          />
+          <div
+            style={{
+              width: 48,
+              height: 32,
+              borderRadius: 8,
+              backgroundColor: "rgba(255,255,255,0.5)",
+              marginLeft: 16,
+            }}
+          />
+        </div>
+        {/* VoxLink text */}
+        <div
+          style={{
+            fontSize: 52,
+            fontWeight: 800,
+            color: "white",
+            letterSpacing: "-2px",
+          }}
+        >
+          VoxLink
+        </div>
       </div>
 
-      {/* Title */}
+      {/* Title - Bilingual */}
       <div
         style={{
-          fontSize: 64,
-          fontWeight: 800,
+          fontSize: 42,
+          fontWeight: 700,
           color: "white",
-          marginBottom: 16,
-          letterSpacing: "-0.02em",
+          marginBottom: 8,
         }}
       >
         Face-to-Face Translation
       </div>
-
-      {/* Subtitle */}
       <div
         style={{
-          fontSize: 32,
-          color: "#00C896",
-          marginBottom: 24,
+          fontSize: 28,
+          fontWeight: 500,
+          color: "#9ca3af",
+          marginBottom: 20,
         }}
       >
-        One Device, Two Languages
+        Traduccion Cara a Cara
+      </div>
+
+      {/* Subtitle - Bilingual */}
+      <div
+        style={{
+          fontSize: 24,
+          color: "#00C896",
+          marginBottom: 16,
+          fontWeight: 600,
+        }}
+      >
+        One Device, Two Languages | Un Dispositivo, Dos Idiomas
       </div>
 
       {/* Description */}
       <div
         style={{
-          fontSize: 24,
-          color: "#9ca3af",
+          fontSize: 18,
+          color: "#6b7280",
           textAlign: "center",
-          maxWidth: 800,
+          maxWidth: 700,
         }}
       >
-        Place your phone between two people. Each speaks their language, sees
-        the translation instantly.
+        Place phone between two people. Each speaks their language.
       </div>
 
-      {/* Language flags */}
+      {/* Flags */}
       <div
         style={{
           display: "flex",
-          gap: 24,
-          marginTop: 40,
-          fontSize: 48,
+          gap: 12,
+          marginTop: 32,
+          fontSize: 28,
         }}
       >
         <span>🇺🇸</span>
-        <span style={{ color: "#00C896" }}>↔</span>
+        <span>🇲🇽</span>
+        <span>🇨🇴</span>
+        <span>🇦🇷</span>
         <span>🇪🇸</span>
+        <span>🇧🇷</span>
       </div>
 
       {/* Powered by */}
       <div
         style={{
           position: "absolute",
-          bottom: 32,
-          fontSize: 18,
+          bottom: 28,
+          fontSize: 14,
           color: "#6b7280",
         }}
       >
-        VoxLink™ by MachineMind
+        Powered by MachineMind
       </div>
     </div>,
     { ...size },

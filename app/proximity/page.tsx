@@ -45,6 +45,9 @@ function ProximityContent() {
   const [position, setPosition] = useState<GeoPosition | null>(null);
   const [nearbyUsers, setNearbyUsers] = useState<NearbyUser[]>([]);
   const [language, setLanguage] = useState("en");
+  const [permissionState, setPermissionState] = useState<
+    "prompt" | "granted" | "denied" | "unknown"
+  >("unknown");
 
   // UI state
   const [selectedUser, setSelectedUser] = useState<NearbyUser | null>(null);
@@ -63,6 +66,7 @@ function ProximityContent() {
   // Refs
   const watchIdRef = useRef<number | null>(null);
   const scanIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const requestPollRef = useRef<NodeJS.Timeout | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   // Load saved language preference
@@ -72,6 +76,33 @@ function ProximityContent() {
       setLanguage(savedLang);
     }
   }, []);
+
+  // Check location permission state on load
+  useEffect(() => {
+    const checkPermission = async () => {
+      try {
+        if ("permissions" in navigator) {
+          const result = await navigator.permissions.query({
+            name: "geolocation",
+          });
+          setPermissionState(result.state as "prompt" | "granted" | "denied");
+
+          // Listen for permission changes
+          result.onchange = () => {
+            setPermissionState(result.state as "prompt" | "granted" | "denied");
+            if (result.state === "granted" && status === "error") {
+              // Permission was just granted, retry
+              startProximity();
+            }
+          };
+        }
+      } catch {
+        setPermissionState("unknown");
+      }
+    };
+
+    checkPermission();
+  }, [status]);
 
   // Initialize session
   useEffect(() => {
@@ -152,7 +183,33 @@ function ProximityContent() {
         setNearbyUsers(initialScan.users);
       }
 
-      // Subscribe to incoming requests
+      // Poll for incoming requests every 2 seconds (reliable fallback)
+      requestPollRef.current = setInterval(async () => {
+        const requestsResult = await getPendingRequests(sessionId);
+        if (
+          requestsResult.success &&
+          requestsResult.requests &&
+          requestsResult.requests.length > 0
+        ) {
+          // Show the most recent pending request
+          const latestRequest = requestsResult.requests[0];
+          if (!incomingRequest || incomingRequest.id !== latestRequest.id) {
+            setIncomingRequest(latestRequest as ProximityRequest);
+          }
+        }
+      }, 2000);
+
+      // Check immediately
+      const initialRequests = await getPendingRequests(sessionId);
+      if (
+        initialRequests.success &&
+        initialRequests.requests &&
+        initialRequests.requests.length > 0
+      ) {
+        setIncomingRequest(initialRequests.requests[0] as ProximityRequest);
+      }
+
+      // Subscribe to incoming requests (Realtime - may not work on all setups)
       unsubscribeRef.current = subscribeToRequests(
         sessionId,
         (request) => {
@@ -177,6 +234,9 @@ function ProximityContent() {
       }
       if (scanIntervalRef.current) {
         clearInterval(scanIntervalRef.current);
+      }
+      if (requestPollRef.current) {
+        clearInterval(requestPollRef.current);
       }
       if (unsubscribeRef.current) {
         unsubscribeRef.current();
@@ -235,6 +295,67 @@ function ProximityContent() {
 
     setIsSending(false);
   }, [sessionId, selectedUser, connectionMessage]);
+
+  // Poll for pending request status (for sender to know when accepted)
+  useEffect(() => {
+    if (!pendingRequest || !sessionId) return;
+
+    const checkRequestStatus = async () => {
+      try {
+        const response = await fetch(
+          `/api/proximity/request?sessionId=${sessionId}`,
+        );
+        const data = await response.json();
+
+        // Check if our outgoing request was accepted by looking at proximity_requests
+        // We need to check the request we sent
+        const checkResponse = await fetch(`/api/proximity/respond`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            requestId: pendingRequest.id,
+            checkOnly: true,
+            sessionId: sessionId,
+          }),
+        });
+
+        // Actually, let's use a simpler approach - just poll the request status
+        const statusResponse = await fetch(
+          `/api/proximity/request/status?requestId=${pendingRequest.id}`,
+        );
+
+        if (!statusResponse.ok) {
+          // Fallback: check via Supabase directly from client
+          return;
+        }
+
+        const statusData = await statusResponse.json();
+        if (statusData.status === "accepted" && statusData.roomCode) {
+          setPendingRequest(null);
+          router.push(
+            `/call/${statusData.roomCode}?host=false&lang=${language}`,
+          );
+        } else if (
+          statusData.status === "rejected" ||
+          statusData.status === "expired"
+        ) {
+          setPendingRequest(null);
+          setError(
+            statusData.status === "rejected"
+              ? "Connection request was declined"
+              : "Connection request expired",
+          );
+        }
+      } catch (err) {
+        console.error("Error checking request status:", err);
+      }
+    };
+
+    const interval = setInterval(checkRequestStatus, 2000);
+    checkRequestStatus(); // Check immediately
+
+    return () => clearInterval(interval);
+  }, [pendingRequest, sessionId, language, router]);
 
   // Respond to incoming request
   const handleRespondToRequest = useCallback(
@@ -355,6 +476,16 @@ function ProximityContent() {
               </div>
             </div>
 
+            {/* Warning if location was previously denied */}
+            {permissionState === "denied" && (
+              <div className="w-full max-w-xs p-3 rounded-xl bg-orange-500/10 border border-orange-500/30">
+                <p className="text-orange-400 text-xs text-center">
+                  ⚠️ Location was previously blocked. Enable it in your browser
+                  settings first.
+                </p>
+              </div>
+            )}
+
             <button
               onClick={startProximity}
               className="w-full max-w-xs py-4 bg-gradient-to-r from-[#00C896] to-[#0066FF] hover:from-[#00B085] hover:to-[#0055DD] rounded-xl text-white font-semibold text-lg transition shadow-lg shadow-[#00C896]/25"
@@ -379,21 +510,59 @@ function ProximityContent() {
 
         {/* Status: Error */}
         {status === "error" && (
-          <div className="text-center space-y-6 max-w-xs">
+          <div className="text-center space-y-5 max-w-sm px-4">
             <div className="w-20 h-20 rounded-full bg-red-500/20 flex items-center justify-center mx-auto">
               <span className="text-4xl">📍</span>
             </div>
             <div>
               <h2 className="text-xl font-bold text-white mb-2">
-                Location Required
+                Location Access Needed
               </h2>
               <p className="text-gray-400 text-sm">{error}</p>
             </div>
+
+            {/* Instructions to enable location */}
+            <div className="p-4 rounded-xl bg-[#1a1a2e] border border-gray-700 text-left space-y-3">
+              <p className="text-white text-sm font-medium">
+                How to enable location:
+              </p>
+              <div className="space-y-2 text-xs text-gray-400">
+                <p className="flex items-start gap-2">
+                  <span className="text-[#00C896]">📱</span>
+                  <span>
+                    <strong className="text-gray-300">iPhone Safari:</strong>{" "}
+                    Settings → Safari → Location → Allow
+                  </span>
+                </p>
+                <p className="flex items-start gap-2">
+                  <span className="text-[#00C896]">📱</span>
+                  <span>
+                    <strong className="text-gray-300">iPhone Chrome:</strong>{" "}
+                    Settings → Chrome → Location → Allow
+                  </span>
+                </p>
+                <p className="flex items-start gap-2">
+                  <span className="text-[#00C896]">🤖</span>
+                  <span>
+                    <strong className="text-gray-300">Android:</strong> Tap the
+                    lock icon in address bar → Permissions → Location → Allow
+                  </span>
+                </p>
+                <p className="flex items-start gap-2">
+                  <span className="text-[#00C896]">💻</span>
+                  <span>
+                    <strong className="text-gray-300">Desktop:</strong> Click
+                    the lock icon next to URL → Site settings → Location → Allow
+                  </span>
+                </p>
+              </div>
+            </div>
+
             <button
-              onClick={startProximity}
+              onClick={() => window.location.reload()}
               className="w-full py-4 bg-gradient-to-r from-[#00C896] to-[#0066FF] rounded-xl text-white font-semibold transition"
             >
-              Try Again
+              🔄 Reload & Try Again
             </button>
             <button
               onClick={() => router.push("/")}

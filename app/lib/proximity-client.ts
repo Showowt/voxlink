@@ -218,9 +218,7 @@ export async function sendConnectionRequest(
   }
 }
 
-export async function getPendingRequests(
-  sessionId: string,
-): Promise<{
+export async function getPendingRequests(sessionId: string): Promise<{
   success: boolean;
   requests?: ProximityRequest[];
   error?: string;
@@ -311,6 +309,9 @@ export function subscribeToRequests(
   };
 }
 
+// Import from main languages config for consistency
+import { getFlag, getLanguage } from "./languages";
+
 // Format distance for display
 export function formatDistance(meters: number): string {
   if (meters < 100) {
@@ -322,40 +323,11 @@ export function formatDistance(meters: number): string {
   }
 }
 
-// Get language flag emoji
+// Re-export from main languages for convenience
 export function getLanguageFlag(code: string): string {
-  const flags: Record<string, string> = {
-    en: "🇺🇸",
-    es: "🇪🇸",
-    fr: "🇫🇷",
-    de: "🇩🇪",
-    it: "🇮🇹",
-    pt: "🇧🇷",
-    zh: "🇨🇳",
-    ja: "🇯🇵",
-    ko: "🇰🇷",
-    ar: "🇸🇦",
-    ru: "🇷🇺",
-    hi: "🇮🇳",
-  };
-  return flags[code] || "🌐";
+  return getFlag(code);
 }
 
-// Get language name
 export function getLanguageName(code: string): string {
-  const names: Record<string, string> = {
-    en: "English",
-    es: "Español",
-    fr: "Français",
-    de: "Deutsch",
-    it: "Italiano",
-    pt: "Português",
-    zh: "中文",
-    ja: "日本語",
-    ko: "한국어",
-    ar: "العربية",
-    ru: "Русский",
-    hi: "हिन्दी",
-  };
-  return names[code] || code.toUpperCase();
+  return getLanguage(code).name;
 }
