@@ -1182,7 +1182,7 @@ export async function getCamera(
   facingMode: "user" | "environment" = "user",
 ): Promise<MediaStream> {
   const constraints = [
-    // HD
+    // HD video + audio
     {
       video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
       audio: {
@@ -1191,34 +1191,46 @@ export async function getCamera(
         autoGainControl: true,
       },
     },
-    // SD fallback
+    // SD video + audio fallback
     {
       video: { facingMode, width: { ideal: 640 }, height: { ideal: 480 } },
       audio: { echoCancellation: true, noiseSuppression: true },
     },
-    // Minimum
+    // Minimum video + audio
     { video: true, audio: true },
+    // Audio only (no camera) - allows calls without camera
+    { video: false, audio: { echoCancellation: true, noiseSuppression: true } },
+    // Minimum audio only
+    { video: false, audio: true },
   ];
+
+  let lastError: Error | null = null;
 
   for (const constraint of constraints) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia(constraint);
-      console.log("[Voxxo Video] Camera acquired");
+      const hasVideo = stream.getVideoTracks().length > 0;
+      const hasAudio = stream.getAudioTracks().length > 0;
+      console.log(
+        `[Voxxo] Media acquired - Video: ${hasVideo}, Audio: ${hasAudio}`,
+      );
       return stream;
     } catch (err: unknown) {
       if (err instanceof Error) {
+        lastError = err;
+        // Only throw immediately for permission denied (user action required)
         if (err.name === "NotAllowedError") {
-          throw new Error("Camera access denied. Please allow camera access.");
-        }
-        if (err.name === "NotFoundError") {
-          throw new Error("No camera found on this device.");
+          throw new Error(
+            "Camera/microphone access denied. Please allow access in browser settings.",
+          );
         }
       }
-      // Try next constraint
+      // Try next constraint (including audio-only fallbacks)
     }
   }
 
-  throw new Error("Could not access camera");
+  // If we get here, nothing worked
+  throw lastError || new Error("Could not access camera or microphone");
 }
 
 export function stopCamera(stream: MediaStream | null): void {

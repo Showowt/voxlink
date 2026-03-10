@@ -89,7 +89,9 @@ export default function PreCallLobby({
             videoRef.current.srcObject = localStream;
           }
         } else {
-          setCameraPermission("denied");
+          // No camera but we have a stream - audio-only mode is fine
+          setCameraPermission("error");
+          setVideoEnabled(false);
         }
 
         // Check mic
@@ -113,11 +115,8 @@ export default function PreCallLobby({
           setError(
             "Camera/microphone access denied. Please allow access in your browser settings.",
           );
-        } else if (errorMsg.includes("NotFound")) {
-          setCameraPermission("error");
-          setMicPermission("error");
-          setError("No camera or microphone found on this device.");
         } else {
+          // For other errors, show the message but don't block completely
           setCameraPermission("error");
           setMicPermission("error");
           setError(errorMsg);
