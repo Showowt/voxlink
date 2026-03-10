@@ -70,7 +70,7 @@ export async function GET() {
             <span style={{ color: "#27ca40", fontSize: 12, marginRight: 8 }}>
               🔒
             </span>
-            <span style={{ color: "#9ca3af", fontSize: 14 }}>voxlink.app</span>
+            <span style={{ color: "#9ca3af", fontSize: 14 }}>voxxo.app</span>
           </div>
         </div>
 
@@ -124,7 +124,7 @@ export async function GET() {
                   color: "white",
                 }}
               >
-                VoxLink
+                Voxxo
               </span>
             </div>
 
@@ -498,7 +498,7 @@ export async function GET() {
             fontSize: 12,
           }}
         >
-          Powered by MachineMind | Break language barriers instantly
+          Powered by MachineMind | Your Voice. Any Language. Instantly.
         </div>
       </div>,
       {

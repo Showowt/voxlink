@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * VoxLink Error Screen Components
+ * Voxxo Error Screen Components
  *
  * Production error UI for:
  * - Connection failures
@@ -80,19 +80,19 @@ export function ConnectionFailedScreen({
         <h3 className="text-white font-medium mb-3">Try these steps:</h3>
         <ul className="space-y-2 text-zinc-400 text-sm">
           <li className="flex gap-2">
-            <span className="text-[#00C896]">1.</span>
+            <span className="text-[#00DBA8]">1.</span>
             Check your internet connection
           </li>
           <li className="flex gap-2">
-            <span className="text-[#00C896]">2.</span>
+            <span className="text-[#00DBA8]">2.</span>
             Disable VPN if you have one enabled
           </li>
           <li className="flex gap-2">
-            <span className="text-[#00C896]">3.</span>
+            <span className="text-[#00DBA8]">3.</span>
             Ask your partner to refresh their page
           </li>
           <li className="flex gap-2">
-            <span className="text-[#00C896]">4.</span>
+            <span className="text-[#00DBA8]">4.</span>
             Try using a different network (WiFi vs Mobile)
           </li>
         </ul>
@@ -103,7 +103,7 @@ export function ConnectionFailedScreen({
         {onRetry && (
           <button
             onClick={onRetry}
-            className="flex-1 py-3 px-6 rounded-xl font-medium bg-[#00C896] text-white hover:bg-[#00b085] transition-all"
+            className="flex-1 py-3 px-6 rounded-xl font-medium bg-[#00DBA8] text-white hover:bg-[#00C896] transition-all"
           >
             Try Again
           </button>
@@ -166,14 +166,14 @@ export function PermissionDeniedScreen({
 
       {/* Message */}
       <p className="text-zinc-400 text-center max-w-md mb-6">
-        VoxLink needs access to your {permissionLabel.toLowerCase()} for video
+        Voxxo needs access to your {permissionLabel.toLowerCase()} for video
         calls. Please enable permissions in your browser settings.
       </p>
 
       {/* Browser-specific instructions */}
       <div className="bg-zinc-900 rounded-xl p-4 max-w-md w-full mb-8">
         <h3 className="text-white font-medium mb-3 flex items-center gap-2">
-          <span className="text-[#00C896]">{support.browserName}</span>{" "}
+          <span className="text-[#00DBA8]">{support.browserName}</span>{" "}
           Instructions:
         </h3>
         <ol className="space-y-2">
@@ -203,7 +203,7 @@ export function PermissionDeniedScreen({
         {onRetry && (
           <button
             onClick={onRetry}
-            className="flex-1 py-3 px-6 rounded-xl font-medium bg-[#00C896] text-white hover:bg-[#00b085] transition-all"
+            className="flex-1 py-3 px-6 rounded-xl font-medium bg-[#00DBA8] text-white hover:bg-[#00C896] transition-all"
           >
             Try Again
           </button>
@@ -346,7 +346,7 @@ export function RoomFullScreen({
       {/* Message */}
       <p className="text-zinc-400 text-center max-w-md mb-6">
         This call{roomCode ? ` (${roomCode})` : ""} already has 2 participants.
-        VoxLink video calls are currently limited to 1-on-1 conversations.
+        Voxxo video calls are currently limited to 1-on-1 conversations.
       </p>
 
       {/* Tips */}
@@ -354,15 +354,15 @@ export function RoomFullScreen({
         <h3 className="text-white font-medium mb-2">What you can do:</h3>
         <ul className="space-y-2 text-zinc-400 text-sm">
           <li className="flex gap-2">
-            <span className="text-[#00C896]">•</span>
+            <span className="text-[#00DBA8]">•</span>
             Ask one participant to leave
           </li>
           <li className="flex gap-2">
-            <span className="text-[#00C896]">•</span>
+            <span className="text-[#00DBA8]">•</span>
             Create a new room with a different code
           </li>
           <li className="flex gap-2">
-            <span className="text-[#00C896]">•</span>
+            <span className="text-[#00DBA8]">•</span>
             Try again in a few minutes
           </li>
         </ul>
@@ -372,7 +372,7 @@ export function RoomFullScreen({
       {onBack && (
         <button
           onClick={onBack}
-          className="py-3 px-6 rounded-xl font-medium bg-[#00C896] text-white hover:bg-[#00b085] transition-all"
+          className="py-3 px-6 rounded-xl font-medium bg-[#00DBA8] text-white hover:bg-[#00C896] transition-all"
         >
           Go Back Home
         </button>
@@ -421,7 +421,7 @@ export function TimeoutScreen({ onRetry, onBack }: BaseErrorProps) {
         {onRetry && (
           <button
             onClick={onRetry}
-            className="flex-1 py-3 px-6 rounded-xl font-medium bg-[#00C896] text-white hover:bg-[#00b085] transition-all"
+            className="flex-1 py-3 px-6 rounded-xl font-medium bg-[#00DBA8] text-white hover:bg-[#00C896] transition-all"
           >
             Try Again
           </button>

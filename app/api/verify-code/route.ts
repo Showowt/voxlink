@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { randomBytes, timingSafeEqual } from "crypto";
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// VERIFY CODE API - VoxLink Access Gate
+// VERIFY CODE API - Voxxo Access Gate
 // Validates 4-digit access code and returns session token
 // Security: Rate limiting + timing-safe comparison
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -117,7 +117,7 @@ export async function POST(request: Request) {
 
   try {
     // Read env var at runtime (not build time)
-    const ACCESS_CODE = process.env.VOXLINK_ACCESS_CODE;
+    const ACCESS_CODE = process.env.VOXXO_ACCESS_CODE;
 
     const { code } = await request.json();
 
@@ -131,9 +131,7 @@ export async function POST(request: Request) {
 
     // Fail if ACCESS_CODE not configured
     if (!ACCESS_CODE) {
-      console.error(
-        "CRITICAL: VOXLINK_ACCESS_CODE environment variable not set",
-      );
+      console.error("CRITICAL: VOXXO_ACCESS_CODE environment variable not set");
       return NextResponse.json(
         { valid: false, error: "Service not configured" },
         { status: 503 },

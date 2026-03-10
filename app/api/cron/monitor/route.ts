@@ -47,11 +47,11 @@ async function sendDiscordAlert(message: string, isRecovery: boolean = false) {
       body: JSON.stringify({
         embeds: [
           {
-            title: `${emoji} VoxLink Status Alert`,
+            title: `${emoji} Voxxo Status Alert`,
             description: message,
             color: color,
             timestamp: new Date().toISOString(),
-            footer: { text: "VoxLink Uptime Monitor" },
+            footer: { text: "Voxxo Uptime Monitor" },
           },
         ],
       }),
@@ -71,11 +71,11 @@ async function sendSlackAlert(message: string, isRecovery: boolean = false) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        text: `${emoji} *VoxLink Status Alert*\n${message}`,
+        text: `${emoji} *Voxxo Status Alert*\n${message}`,
         attachments: [
           {
             color: isRecovery ? "good" : "danger",
-            footer: "VoxLink Uptime Monitor",
+            footer: "Voxxo Uptime Monitor",
             ts: Math.floor(Date.now() / 1000),
           },
         ],
@@ -207,7 +207,7 @@ export async function GET(request: Request) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            text: "🚨 VoxLink Monitor CRITICAL: Health check completely failed!",
+            text: "🚨 Voxxo Monitor CRITICAL: Health check completely failed!",
             embeds: [
               {
                 title: "🚨 CRITICAL: Monitor Failed",

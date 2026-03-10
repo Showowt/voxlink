@@ -22,7 +22,7 @@ import ReconnectingOverlay from "../../components/ReconnectingOverlay";
 import { useBrowserSupport } from "../../lib/browser-support";
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// VOXLINK TALK MODE - FaceTime-Quality Live Translation
+// VOXXO TALK MODE - FaceTime-Quality Live Translation
 // Production-ready bidirectional translation with proper message sync
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -765,7 +765,7 @@ function TalkContent() {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5">
             <div className={`w-2.5 h-2.5 rounded-full ${statusColor}`} />
-            <span className="text-white text-sm font-medium">VoxLink Talk</span>
+            <span className="text-white text-sm font-medium">Voxxo Talk</span>
             <span className="text-gray-500 text-xs font-mono">
               #{roomId.toUpperCase()}
             </span>

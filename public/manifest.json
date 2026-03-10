@@ -1,13 +1,13 @@
 {
-  "name": "VoxLink - Real-Time Voice Translation",
-  "short_name": "VoxLink",
-  "description": "Break language barriers instantly. Free real-time voice translation between English and Spanish. Video calls, face-to-face conversations, and voice message translation.",
+  "name": "Voxxo — Your Voice. Any Language. Instantly.",
+  "short_name": "Voxxo",
+  "description": "AI-powered real-time voice translation for real conversations. Type, voice, face-to-face, video calls, and proximity connect. 12 languages. Zero awkwardness.",
   "start_url": "/",
   "id": "/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
-  "background_color": "#0a0a0f",
-  "theme_color": "#06b6d4",
+  "background_color": "#0A0E14",
+  "theme_color": "#00DBA8",
   "orientation": "portrait-primary",
   "scope": "/",
   "lang": "en",
@@ -93,8 +93,8 @@
       "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }]
     },
     {
-      "name": "VoxNote",
-      "short_name": "Note",
+      "name": "Voice Mode",
+      "short_name": "Voice",
       "description": "Translate voice messages",
       "url": "/?tab=voxnote",
       "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }]

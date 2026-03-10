@@ -65,7 +65,7 @@ export async function GET() {
               color: "white",
             }}
           >
-            VoxLink
+            Voxxo
           </span>
         </div>
 

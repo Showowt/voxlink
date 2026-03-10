@@ -85,7 +85,7 @@ async function getIceServers(): Promise<RTCIceServer[]> {
       return data.iceServers || DEFAULT_ICE_SERVERS;
     }
   } catch (err) {
-    console.warn("[VoxLink] Failed to fetch TURN credentials:", err);
+    console.warn("[Voxxo] Failed to fetch TURN credentials:", err);
   }
   return DEFAULT_ICE_SERVERS;
 }
@@ -141,7 +141,7 @@ export class PeerConnection {
 
     // Online/offline detection
     this.onlineHandler = () => {
-      console.log("[VoxLink Video] Network: Back online");
+      console.log("[Voxxo Video] Network: Back online");
       this.isOffline = false;
 
       // If we were connected, trigger ICE restart
@@ -151,7 +151,7 @@ export class PeerConnection {
     };
 
     this.offlineHandler = () => {
-      console.log("[VoxLink Video] Network: Went offline");
+      console.log("[Voxxo Video] Network: Went offline");
       this.isOffline = true;
       if (this._status === "connected") {
         this.setStatus("reconnecting", "Network offline...");
@@ -170,13 +170,13 @@ export class PeerConnection {
       this.networkChangeHandler = () => {
         const newType = connection.type || connection.effectiveType || null;
         console.log(
-          `[VoxLink Video] Network type changed: ${this.lastNetworkType} → ${newType}`,
+          `[Voxxo Video] Network type changed: ${this.lastNetworkType} → ${newType}`,
         );
 
         // If type changed and we're connected, trigger ICE restart
         if (newType !== this.lastNetworkType && this._status === "connected") {
           console.log(
-            "[VoxLink Video] Triggering ICE restart due to network change",
+            "[Voxxo Video] Triggering ICE restart due to network change",
           );
           this.triggerIceRestart();
         }
@@ -215,11 +215,11 @@ export class PeerConnection {
       ).peerConnection;
 
       if (pc && pc.iceConnectionState !== "closed") {
-        console.log("[VoxLink Video] Restarting ICE...");
+        console.log("[Voxxo Video] Restarting ICE...");
         pc.restartIce?.();
       }
     } catch (err) {
-      console.warn("[VoxLink Video] ICE restart failed:", err);
+      console.warn("[Voxxo Video] ICE restart failed:", err);
     }
   }
 
@@ -251,13 +251,13 @@ export class PeerConnection {
     this.connectionAttempts = 0;
 
     // Generate peer IDs - deterministic for host, unique for guest
-    this.hostPeerId = `voxlink-video-${this.roomId}-host`;
+    this.hostPeerId = `voxxo-video-${this.roomId}-host`;
 
     if (isHost) {
       this.myPeerId = this.hostPeerId;
     } else {
       const uniqueId = Math.random().toString(36).substring(2, 8);
-      this.myPeerId = `voxlink-video-${this.roomId}-guest-${uniqueId}`;
+      this.myPeerId = `voxxo-video-${this.roomId}-guest-${uniqueId}`;
     }
 
     this.setStatus("initializing", "Connecting...");
@@ -280,7 +280,7 @@ export class PeerConnection {
       });
 
       await this.waitForPeerOpen();
-      console.log("[VoxLink Video] Connected as:", this.myPeerId);
+      console.log("[Voxxo Video] Connected as:", this.myPeerId);
 
       this.setupPeerListeners();
 
@@ -295,7 +295,7 @@ export class PeerConnection {
     } catch (err: unknown) {
       const errorMessage =
         err instanceof Error ? err.message : "Connection failed";
-      console.error("[VoxLink Video] Init error:", err);
+      console.error("[Voxxo Video] Init error:", err);
       this.setStatus("failed", errorMessage);
       this.callbacks.onError?.(errorMessage);
       return false;
@@ -344,12 +344,12 @@ export class PeerConnection {
     // Handle incoming data connection (host receives this)
     this.peer.on("connection", (conn) => {
       if (this.isDestroyed) return;
-      console.log("[VoxLink Video] Incoming data connection:", conn.peer);
+      console.log("[Voxxo Video] Incoming data connection:", conn.peer);
 
       // Check if host already has a connected partner
       if (this.isHost && this.dataConnection?.open) {
         console.log(
-          "[VoxLink Video] Room full - rejecting new connection:",
+          "[Voxxo Video] Room full - rejecting new connection:",
           conn.peer,
         );
         // Send room_full message to the new joiner and close their connection
@@ -372,12 +372,12 @@ export class PeerConnection {
     // Handle incoming video call (host receives this)
     this.peer.on("call", (call) => {
       if (this.isDestroyed) return;
-      console.log("[VoxLink Video] Incoming call:", call.peer);
+      console.log("[Voxxo Video] Incoming call:", call.peer);
 
       // Check if host already has a connected partner - reject call if room full
       if (this.isHost && this.mediaConnection?.open) {
         console.log(
-          "[VoxLink Video] Room full - rejecting video call:",
+          "[Voxxo Video] Room full - rejecting video call:",
           call.peer,
         );
         try {
@@ -399,10 +399,10 @@ export class PeerConnection {
     });
 
     this.peer.on("error", (error: { type: string; message?: string }) => {
-      console.error("[VoxLink Video] Peer error:", error.type, error.message);
+      console.error("[Voxxo Video] Peer error:", error.type, error.message);
 
       if (error.type === "peer-unavailable" && !this.isHost) {
-        console.log("[VoxLink Video] Host not found, will retry...");
+        console.log("[Voxxo Video] Host not found, will retry...");
       } else if (error.type === "unavailable-id" && this.isHost) {
         this.setStatus("failed", "Room code in use - try a new code");
         this.callbacks.onError?.("Room code in use");
@@ -410,7 +410,7 @@ export class PeerConnection {
     });
 
     this.peer.on("disconnected", () => {
-      console.log("[VoxLink Video] Disconnected from signaling server");
+      console.log("[Voxxo Video] Disconnected from signaling server");
       if (!this.isDestroyed && this.peer && !this.peer.destroyed) {
         setTimeout(() => this.peer?.reconnect(), 1000);
       }
@@ -459,7 +459,7 @@ export class PeerConnection {
 
       const delay = this.calculateBackoffDelay();
       console.log(
-        `[VoxLink Video] Connection attempt ${this.connectionAttempts}/${this.maxConnectionAttempts} (next in ${delay}ms)`,
+        `[Voxxo Video] Connection attempt ${this.connectionAttempts}/${this.maxConnectionAttempts} (next in ${delay}ms)`,
       );
       this.connectToHost();
 
@@ -490,7 +490,7 @@ export class PeerConnection {
       return;
     }
 
-    console.log("[VoxLink Video] Connecting to host:", this.hostPeerId);
+    console.log("[Voxxo Video] Connecting to host:", this.hostPeerId);
 
     // Create data connection first
     const conn = this.peer.connect(this.hostPeerId, {
@@ -524,7 +524,7 @@ export class PeerConnection {
 
     conn.on("open", () => {
       if (this.isDestroyed) return;
-      console.log("[VoxLink Video] Data channel open");
+      console.log("[Voxxo Video] Data channel open");
 
       this.stopConnectionAttempts();
       this.connectionAttempts = 0;
@@ -551,12 +551,12 @@ export class PeerConnection {
     });
 
     conn.on("close", () => {
-      console.log("[VoxLink Video] Data channel closed");
+      console.log("[Voxxo Video] Data channel closed");
       this.handlePartnerLeft();
     });
 
     conn.on("error", (err) => {
-      console.error("[VoxLink Video] Data channel error:", err);
+      console.error("[Voxxo Video] Data channel error:", err);
     });
   }
 
@@ -567,7 +567,7 @@ export class PeerConnection {
 
     // Room full message - 3rd person trying to join
     if (msg.type === "room_full") {
-      console.log("[VoxLink Video] Room is full - cannot join");
+      console.log("[Voxxo Video] Room is full - cannot join");
       this.stopConnectionAttempts();
       this.setStatus(
         "room_full",
@@ -593,7 +593,7 @@ export class PeerConnection {
     // Hello message
     if (msg.type === "hello") {
       const name = String(msg.name || "Partner");
-      console.log("[VoxLink Video] Partner joined:", name);
+      console.log("[Voxxo Video] Partner joined:", name);
       this.callbacks.onPartnerJoined?.(name);
 
       // Send hello back
@@ -617,7 +617,7 @@ export class PeerConnection {
       return;
     }
 
-    console.log("[VoxLink Video] Initiating video call to:", this.hostPeerId);
+    console.log("[Voxxo Video] Initiating video call to:", this.hostPeerId);
 
     const call = this.peer.call(this.hostPeerId, this.localStream);
     this.handleMediaConnection(call);
@@ -648,7 +648,7 @@ export class PeerConnection {
         return;
       }
 
-      console.log("[VoxLink Video] Got remote stream!");
+      console.log("[Voxxo Video] Got remote stream!");
       this.remoteStream = stream;
       this.callbacks.onRemoteStream?.(stream);
 
@@ -660,12 +660,12 @@ export class PeerConnection {
     });
 
     call.on("close", () => {
-      console.log("[VoxLink Video] Media connection closed");
+      console.log("[Voxxo Video] Media connection closed");
       this.remoteStream = null;
     });
 
     call.on("error", (err) => {
-      console.error("[VoxLink Video] Media error:", err);
+      console.error("[Voxxo Video] Media error:", err);
     });
 
     // Monitor ICE state
@@ -674,13 +674,13 @@ export class PeerConnection {
     if (pc) {
       pc.oniceconnectionstatechange = () => {
         const state = pc.iceConnectionState as IceConnectionState;
-        console.log("[VoxLink Video] ICE state:", state);
+        console.log("[Voxxo Video] ICE state:", state);
 
         // Notify UI of ICE state changes
         this.callbacks.onIceStateChange?.(state);
 
         if (state === "failed") {
-          console.log("[VoxLink Video] ICE failed, restarting...");
+          console.log("[Voxxo Video] ICE failed, restarting...");
           try {
             pc.restartIce?.();
           } catch {
@@ -719,7 +719,7 @@ export class PeerConnection {
       // Check connection health
       const timeSinceLastPong = Date.now() - this.lastPongTime;
       if (timeSinceLastPong > 15000) {
-        console.warn("[VoxLink Video] No pong for 15s");
+        console.warn("[Voxxo Video] No pong for 15s");
       }
 
       this.send({ type: "ping", time: Date.now() });
@@ -847,7 +847,7 @@ export class PeerConnection {
         timestamp: now,
       });
     } catch (err) {
-      console.warn("[VoxLink] Stats collection error:", err);
+      console.warn("[Voxxo] Stats collection error:", err);
     }
   }
 
@@ -864,13 +864,13 @@ export class PeerConnection {
       this.dataConnection.send(data);
       return true;
     } catch (err) {
-      console.error("[VoxLink Video] Send error:", err);
+      console.error("[Voxxo Video] Send error:", err);
       return false;
     }
   }
 
   disconnect(): void {
-    console.log("[VoxLink Video] Disconnecting...");
+    console.log("[Voxxo Video] Disconnecting...");
     this.isDestroyed = true;
 
     this.stopKeepAlive();
@@ -910,7 +910,7 @@ export class PeerConnection {
   private setStatus(status: ConnectionStatus, message?: string): void {
     if (this.isDestroyed) return;
     this._status = status;
-    console.log("[VoxLink Video] Status:", status, message || "");
+    console.log("[Voxxo Video] Status:", status, message || "");
     this.callbacks.onStatusChange?.(status, message);
   }
 }
@@ -944,7 +944,7 @@ export async function getCamera(
   for (const constraint of constraints) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia(constraint);
-      console.log("[VoxLink Video] Camera acquired");
+      console.log("[Voxxo Video] Camera acquired");
       return stream;
     } catch (err: unknown) {
       if (err instanceof Error) {

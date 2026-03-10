@@ -10,7 +10,7 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("VoxLink Error:", error);
+    console.error("Voxxo Error:", error);
   }, [error]);
 
   return (
@@ -25,7 +25,7 @@ export default function Error({
         </p>
         <button
           onClick={reset}
-          className="px-6 py-3 bg-[#00C896] hover:bg-[#00B085] text-white rounded-xl font-medium transition-colors"
+          className="px-6 py-3 bg-[#00DBA8] hover:bg-[#00C896] text-white rounded-xl font-medium transition-colors"
         >
           Try Again
         </button>

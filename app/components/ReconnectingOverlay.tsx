@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * VoxLink Reconnecting Overlay
+ * Voxxo Reconnecting Overlay
  *
  * Shows during connection recovery with:
  * - Progress indicator
@@ -56,11 +56,11 @@ export default function ReconnectingOverlay({
       <div className="relative w-16 h-16 mb-6">
         <div className="absolute inset-0 border-4 border-white/20 rounded-full" />
         <div
-          className="absolute inset-0 border-4 border-t-[#00C896] border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin"
+          className="absolute inset-0 border-4 border-t-[#00DBA8] border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin"
           style={{ animationDuration: "1s" }}
         />
         {/* Inner pulse */}
-        <div className="absolute inset-2 bg-[#00C896]/20 rounded-full animate-pulse" />
+        <div className="absolute inset-2 bg-[#00DBA8]/20 rounded-full animate-pulse" />
       </div>
 
       {/* Message */}
@@ -74,7 +74,7 @@ export default function ReconnectingOverlay({
       {/* Progress bar */}
       <div className="w-48 h-1.5 bg-zinc-700 rounded-full mb-4 overflow-hidden">
         <div
-          className="h-full bg-gradient-to-r from-[#00C896] to-blue-500 transition-all duration-300"
+          className="h-full bg-gradient-to-r from-[#00DBA8] to-blue-500 transition-all duration-300"
           style={{ width: `${progress}%` }}
         />
       </div>
@@ -86,9 +86,9 @@ export default function ReconnectingOverlay({
             key={i}
             className={`w-2 h-2 rounded-full transition-all duration-300 ${
               i < attempt
-                ? "bg-[#00C896]"
+                ? "bg-[#00DBA8]"
                 : i === attempt
-                  ? "bg-[#00C896] animate-pulse"
+                  ? "bg-[#00DBA8] animate-pulse"
                   : "bg-zinc-700"
             }`}
           />

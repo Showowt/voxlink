@@ -57,15 +57,15 @@ export default function AppShell({ children }: AppShellProps) {
       console.log("🌐 Network restored");
     };
 
-    window.addEventListener("voxlink-reconnect", handleReconnect);
-    window.addEventListener("voxlink-hard-recovery", handleHardRecovery);
-    window.addEventListener("voxlink-network-restored", handleNetworkRestored);
+    window.addEventListener("voxxo-reconnect", handleReconnect);
+    window.addEventListener("voxxo-hard-recovery", handleHardRecovery);
+    window.addEventListener("voxxo-network-restored", handleNetworkRestored);
 
     return () => {
-      window.removeEventListener("voxlink-reconnect", handleReconnect);
-      window.removeEventListener("voxlink-hard-recovery", handleHardRecovery);
+      window.removeEventListener("voxxo-reconnect", handleReconnect);
+      window.removeEventListener("voxxo-hard-recovery", handleHardRecovery);
       window.removeEventListener(
-        "voxlink-network-restored",
+        "voxxo-network-restored",
         handleNetworkRestored,
       );
     };
@@ -140,7 +140,7 @@ function OfflineIndicator() {
       if (offlineBanner) return;
 
       offlineBanner = document.createElement("div");
-      offlineBanner.id = "voxlink-offline-banner";
+      offlineBanner.id = "voxxo-offline-banner";
       offlineBanner.style.cssText = `
         position: fixed;
         top: 0;

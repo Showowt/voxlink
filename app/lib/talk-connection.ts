@@ -1,7 +1,7 @@
 import Peer, { DataConnection } from "peerjs";
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// VOXLINK TALK CONNECTION v2.0 - Bulletproof Face-to-Face Mode
+// VOXXO TALK CONNECTION v2.0 - Bulletproof Face-to-Face Mode
 // Fixed: Connection reliability, handshake timing, peer discovery
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -51,7 +51,7 @@ async function getIceServers(): Promise<RTCIceServer[]> {
       return data.iceServers || DEFAULT_ICE_SERVERS;
     }
   } catch (err) {
-    console.warn("[VoxLink] Failed to fetch TURN credentials:", err);
+    console.warn("[Voxxo] Failed to fetch TURN credentials:", err);
   }
   return DEFAULT_ICE_SERVERS;
 }
@@ -110,14 +110,14 @@ export class TalkConnection {
     // Generate peer IDs
     // Host: stable ID so guests can find them
     // Guest: unique ID with timestamp
-    this._hostPeerId = `voxlink-${this.roomId}-host`;
+    this._hostPeerId = `voxxo-${this.roomId}-host`;
 
     if (isHost) {
       this._peerId = this._hostPeerId;
     } else {
       // Guest needs unique ID to avoid conflicts
       const uniqueId = Math.random().toString(36).substring(2, 8);
-      this._peerId = `voxlink-${this.roomId}-guest-${uniqueId}`;
+      this._peerId = `voxxo-${this.roomId}-guest-${uniqueId}`;
     }
 
     this.setStatus("initializing", "Connecting to server...");
@@ -141,7 +141,7 @@ export class TalkConnection {
       });
 
       await this.waitForPeerOpen();
-      console.log("[VoxLink] Connected to PeerJS server as:", this._peerId);
+      console.log("[Voxxo] Connected to PeerJS server as:", this._peerId);
 
       this.setupPeerListeners();
 
@@ -157,7 +157,7 @@ export class TalkConnection {
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : "Connection failed";
-      console.error("[VoxLink] Initialization error:", error);
+      console.error("[Voxxo] Initialization error:", error);
       this.setStatus("failed", errorMessage);
       return false;
     }
@@ -201,14 +201,11 @@ export class TalkConnection {
 
     // Handle incoming connections (host receives these)
     this.peer.on("connection", (conn) => {
-      console.log("[VoxLink] Incoming connection from:", conn.peer);
+      console.log("[Voxxo] Incoming connection from:", conn.peer);
 
       // Check if host already has a connected partner
       if (this._isHost && this.dataConnection?.open && this.connectionHealthy) {
-        console.log(
-          "[VoxLink] Room full - rejecting new connection:",
-          conn.peer,
-        );
+        console.log("[Voxxo] Room full - rejecting new connection:", conn.peer);
         // Send room_full message to the new joiner and close their connection
         conn.on("open", () => {
           conn.send({ type: "room_full", data: {} });
@@ -232,12 +229,12 @@ export class TalkConnection {
     });
 
     this.peer.on("error", (error: { type: string; message?: string }) => {
-      console.error("[VoxLink] Peer error:", error.type, error.message);
+      console.error("[Voxxo] Peer error:", error.type, error.message);
 
       if (error.type === "peer-unavailable") {
         // Host not found yet - guest keeps trying
         if (!this._isHost && !this.isDestroyed) {
-          console.log("[VoxLink] Host not found, will retry...");
+          console.log("[Voxxo] Host not found, will retry...");
         }
       } else if (error.type === "unavailable-id") {
         // Our ID is taken - for host this is a problem
@@ -250,7 +247,7 @@ export class TalkConnection {
     });
 
     this.peer.on("disconnected", () => {
-      console.log("[VoxLink] Disconnected from signaling server");
+      console.log("[Voxxo] Disconnected from signaling server");
       if (!this.isDestroyed && this.peer) {
         // Try to reconnect to signaling server
         setTimeout(() => {
@@ -262,7 +259,7 @@ export class TalkConnection {
     });
 
     this.peer.on("close", () => {
-      console.log("[VoxLink] Peer connection closed");
+      console.log("[Voxxo] Peer connection closed");
     });
   }
 
@@ -285,7 +282,7 @@ export class TalkConnection {
         return;
       }
 
-      console.log(`[VoxLink] Connection attempt ${attempts}/${maxAttempts}`);
+      console.log(`[Voxxo] Connection attempt ${attempts}/${maxAttempts}`);
       this.connectToHost();
     };
 
@@ -309,17 +306,17 @@ export class TalkConnection {
     }
 
     if (!this.peer.open) {
-      console.log("[VoxLink] Peer not open yet, waiting...");
+      console.log("[Voxxo] Peer not open yet, waiting...");
       return;
     }
 
     // Don't create new connection if we have an active one
     if (this.dataConnection?.open) {
-      console.log("[VoxLink] Already connected, skipping");
+      console.log("[Voxxo] Already connected, skipping");
       return;
     }
 
-    console.log("[VoxLink] Connecting to host:", this._hostPeerId);
+    console.log("[Voxxo] Connecting to host:", this._hostPeerId);
 
     try {
       const conn = this.peer.connect(this._hostPeerId, {
@@ -329,7 +326,7 @@ export class TalkConnection {
 
       this.setupDataConnection(conn);
     } catch (error) {
-      console.error("[VoxLink] Connect error:", error);
+      console.error("[Voxxo] Connect error:", error);
     }
   }
 
@@ -352,7 +349,7 @@ export class TalkConnection {
     this.connectionHealthy = false;
 
     conn.on("open", () => {
-      console.log("[VoxLink] Data channel OPEN with:", conn.peer);
+      console.log("[Voxxo] Data channel OPEN with:", conn.peer);
 
       this.stopConnectionAttempts();
       this.reconnectAttempts = 0;
@@ -374,7 +371,7 @@ export class TalkConnection {
     });
 
     conn.on("close", () => {
-      console.log("[VoxLink] Data channel closed");
+      console.log("[Voxxo] Data channel closed");
       this.connectionHealthy = false;
       this.stopKeepAlive();
       this._partnerName = "";
@@ -387,7 +384,7 @@ export class TalkConnection {
     });
 
     conn.on("error", (error) => {
-      console.error("[VoxLink] Data channel error:", error);
+      console.error("[Voxxo] Data channel error:", error);
     });
   }
 
@@ -408,7 +405,7 @@ export class TalkConnection {
 
     // Room full message - 3rd person trying to join
     if (message.type === "room_full") {
-      console.log("[VoxLink] Room is full - cannot join");
+      console.log("[Voxxo] Room is full - cannot join");
       this.stopConnectionAttempts();
       this.setStatus(
         "room_full",
@@ -443,7 +440,7 @@ export class TalkConnection {
 
   private handlePresence(presenceData: Record<string, unknown>): void {
     const name = String(presenceData.name || "Partner");
-    console.log("[VoxLink] Partner presence:", name);
+    console.log("[Voxxo] Partner presence:", name);
 
     this._partnerName = name;
     this.callbacks.onPartnerConnected?.(name);
@@ -464,7 +461,7 @@ export class TalkConnection {
       // Check connection health
       const timeSinceLastPong = Date.now() - this.lastPongTime;
       if (timeSinceLastPong > 15000) {
-        console.warn("[VoxLink] No response for 15s, connection may be dead");
+        console.warn("[Voxxo] No response for 15s, connection may be dead");
         this.connectionHealthy = false;
       }
 
@@ -524,7 +521,7 @@ export class TalkConnection {
       this.dataConnection.send(message);
       return true;
     } catch (error) {
-      console.error("[VoxLink] Send error:", error);
+      console.error("[Voxxo] Send error:", error);
       return false;
     }
   }
@@ -543,12 +540,12 @@ export class TalkConnection {
 
   private setStatus(status: TalkConnectionStatus, message?: string): void {
     this._status = status;
-    console.log("[VoxLink] Status:", status, message || "");
+    console.log("[Voxxo] Status:", status, message || "");
     this.callbacks.onStatusChange?.(status, message);
   }
 
   disconnect(): void {
-    console.log("[VoxLink] Disconnecting...");
+    console.log("[Voxxo] Disconnecting...");
     this.isDestroyed = true;
 
     this.stopKeepAlive();

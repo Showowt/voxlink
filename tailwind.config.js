@@ -7,9 +7,12 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // VoxLink Brand Colors
-        'vox-green': '#00C896',
-        'link-blue': '#0066FF',
+        // Voxxo Brand Colors
+        'voxxo-green': '#00DBA8',
+        'link-blue': '#0088FF',
+        'signal-pink': '#FF3B7A',
+        'deep-space': '#0A0E14',
+        'card-dark': '#1A1F2E',
         'void': '#060810',
         'void-light': '#0a0a0f',
       },

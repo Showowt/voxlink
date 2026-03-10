@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "Join VoxLink Conversation | Unete a la Conversacion";
+export const alt = "Join Voxxo Conversation | Unete a la Conversacion";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -19,7 +19,7 @@ export default function Image({ params }: { params: { id: string } }) {
         justifyContent: "center",
         backgroundColor: "#060810",
         backgroundImage:
-          "radial-gradient(circle at 25% 25%, #00C896 0%, transparent 50%), radial-gradient(circle at 75% 75%, #0066FF 0%, transparent 50%)",
+          "radial-gradient(circle at 25% 25%, #00DBA8 0%, transparent 50%), radial-gradient(circle at 75% 75%, #0088FF 0%, transparent 50%)",
       }}
     >
       {/* Logo Container */}
@@ -31,7 +31,7 @@ export default function Image({ params }: { params: { id: string } }) {
           marginBottom: 28,
           padding: "20px 40px",
           borderRadius: 24,
-          background: "linear-gradient(135deg, #00c896, #0066ff)",
+          background: "linear-gradient(135deg, #00dba8, #0088ff)",
         }}
       >
         {/* Chat bubbles icon */}
@@ -60,7 +60,7 @@ export default function Image({ params }: { params: { id: string } }) {
             }}
           />
         </div>
-        {/* VoxLink text */}
+        {/* Voxxo text */}
         <div
           style={{
             fontSize: 52,
@@ -69,7 +69,7 @@ export default function Image({ params }: { params: { id: string } }) {
             letterSpacing: "-2px",
           }}
         >
-          VoxLink
+          Voxxo
         </div>
       </div>
 
@@ -99,11 +99,11 @@ export default function Image({ params }: { params: { id: string } }) {
       <div
         style={{
           fontSize: 48,
-          color: "#00C896",
+          color: "#00DBA8",
           marginBottom: 20,
           padding: "12px 48px",
           borderRadius: 12,
-          border: "3px solid #00C896",
+          border: "3px solid #00DBA8",
           fontWeight: 700,
           fontFamily: "monospace",
         }}

@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "Join my VoxLink Video Call";
+export const alt = "Join my Voxxo Video Call";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -19,7 +19,7 @@ export default function Image({ params }: { params: { id: string } }) {
         justifyContent: "center",
         backgroundColor: "#060810",
         backgroundImage:
-          "radial-gradient(circle at 25% 25%, #00C896 0%, transparent 50%), radial-gradient(circle at 75% 75%, #0066FF 0%, transparent 50%)",
+          "radial-gradient(circle at 25% 25%, #00DBA8 0%, transparent 50%), radial-gradient(circle at 75% 75%, #0088FF 0%, transparent 50%)",
       }}
     >
       {/* Video Icon */}
@@ -31,7 +31,7 @@ export default function Image({ params }: { params: { id: string } }) {
           width: 120,
           height: 120,
           borderRadius: 24,
-          background: "linear-gradient(135deg, #00C896, #0066FF)",
+          background: "linear-gradient(135deg, #00DBA8, #0088FF)",
           marginBottom: 32,
           fontSize: 64,
         }}
@@ -49,18 +49,18 @@ export default function Image({ params }: { params: { id: string } }) {
           letterSpacing: "-0.02em",
         }}
       >
-        Join my VoxLink Video Call
+        Join my Voxxo Video Call
       </div>
 
       {/* Room Code */}
       <div
         style={{
           fontSize: 36,
-          color: "#00C896",
+          color: "#00DBA8",
           marginBottom: 24,
           padding: "12px 32px",
           borderRadius: 12,
-          border: "2px solid #00C896",
+          border: "2px solid #00DBA8",
         }}
       >
         Room: {roomCode}
@@ -89,7 +89,7 @@ export default function Image({ params }: { params: { id: string } }) {
         }}
       >
         <span>🇺🇸</span>
-        <span style={{ color: "#00C896" }}>↔</span>
+        <span style={{ color: "#00DBA8" }}>↔</span>
         <span>🇪🇸</span>
       </div>
 
@@ -102,7 +102,7 @@ export default function Image({ params }: { params: { id: string } }) {
           color: "#6b7280",
         }}
       >
-        VoxLink™ by MachineMind
+        Voxxo™ by MachineMind
       </div>
     </div>,
     { ...size },

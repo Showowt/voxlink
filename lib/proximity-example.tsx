@@ -36,10 +36,10 @@ export default function ProximityConnectExample() {
   async function initProximity() {
     try {
       // Get or create session ID
-      let sessionId = localStorage.getItem("voxlink-session");
+      let sessionId = localStorage.getItem("voxxo-session");
       if (!sessionId) {
         sessionId = generateSessionId();
-        localStorage.setItem("voxlink-session", sessionId);
+        localStorage.setItem("voxxo-session", sessionId);
       }
 
       // Initialize client

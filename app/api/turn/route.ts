@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
   } else {
     // Fallback to public OpenRelay (less reliable but always works)
     console.warn(
-      "[VoxLink] TURN credentials not configured - using public relay",
+      "[Voxxo] TURN credentials not configured - using public relay",
     );
     iceServers.push({
       urls: "turn:openrelay.metered.ca:443",

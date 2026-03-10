@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "VoxLink Face-to-Face | Traduccion Cara a Cara";
+export const alt = "Voxxo Face-to-Face | Traduccion Cara a Cara";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -17,7 +17,7 @@ export default function Image() {
         justifyContent: "center",
         backgroundColor: "#060810",
         backgroundImage:
-          "radial-gradient(circle at 25% 25%, #00C896 0%, transparent 50%), radial-gradient(circle at 75% 75%, #0066FF 0%, transparent 50%)",
+          "radial-gradient(circle at 25% 25%, #00DBA8 0%, transparent 50%), radial-gradient(circle at 75% 75%, #0088FF 0%, transparent 50%)",
       }}
     >
       {/* Logo Container */}
@@ -29,7 +29,7 @@ export default function Image() {
           marginBottom: 32,
           padding: "20px 40px",
           borderRadius: 24,
-          background: "linear-gradient(135deg, #00c896, #0066ff)",
+          background: "linear-gradient(135deg, #00dba8, #0088ff)",
         }}
       >
         {/* Chat bubbles icon */}
@@ -58,7 +58,7 @@ export default function Image() {
             }}
           />
         </div>
-        {/* VoxLink text */}
+        {/* Voxxo text */}
         <div
           style={{
             fontSize: 52,
@@ -67,7 +67,7 @@ export default function Image() {
             letterSpacing: "-2px",
           }}
         >
-          VoxLink
+          Voxxo
         </div>
       </div>
 
@@ -97,7 +97,7 @@ export default function Image() {
       <div
         style={{
           fontSize: 24,
-          color: "#00C896",
+          color: "#00DBA8",
           marginBottom: 16,
           fontWeight: 600,
         }}

@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "VoxLink™ — Break Language Barriers Instantly";
+export const alt = "Voxxo — Your Voice. Any Language. Instantly.";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -17,7 +17,7 @@ export default function Image() {
         justifyContent: "center",
         backgroundColor: "#060810",
         backgroundImage:
-          "radial-gradient(circle at 25% 25%, #00C896 0%, transparent 50%), radial-gradient(circle at 75% 75%, #0066FF 0%, transparent 50%)",
+          "radial-gradient(circle at 25% 25%, #00DBA8 0%, transparent 50%), radial-gradient(circle at 75% 75%, #FF3B7A 0%, transparent 50%)",
       }}
     >
       {/* Logo */}
@@ -29,7 +29,7 @@ export default function Image() {
           width: 120,
           height: 120,
           borderRadius: 24,
-          background: "linear-gradient(135deg, #00C896, #0066FF)",
+          background: "linear-gradient(135deg, #00DBA8, #FF3B7A)",
           marginBottom: 32,
           fontSize: 64,
         }}
@@ -47,18 +47,18 @@ export default function Image() {
           letterSpacing: "-0.02em",
         }}
       >
-        VoxLink™
+        Voxxo
       </div>
 
       {/* Subtitle */}
       <div
         style={{
           fontSize: 32,
-          color: "#00C896",
+          color: "#00DBA8",
           marginBottom: 24,
         }}
       >
-        Break Language Barriers Instantly
+        Your Voice. Any Language. Instantly.
       </div>
 
       {/* Description */}
@@ -70,8 +70,8 @@ export default function Image() {
           maxWidth: 800,
         }}
       >
-        She speaks Spanish, you hear English. Real-time voice translation for
-        dating, travel, and business.
+        AI-powered real-time voice translation for real conversations. 12
+        languages.
       </div>
 
       {/* Language flags */}
@@ -84,7 +84,7 @@ export default function Image() {
         }}
       >
         <span>🇺🇸</span>
-        <span style={{ color: "#00C896" }}>↔</span>
+        <span style={{ color: "#00DBA8" }}>↔</span>
         <span>🇪🇸</span>
       </div>
 

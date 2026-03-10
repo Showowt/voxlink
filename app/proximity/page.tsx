@@ -71,7 +71,7 @@ function ProximityContent() {
 
   // Load saved language preference
   useEffect(() => {
-    const savedLang = localStorage.getItem("voxlink_lang");
+    const savedLang = localStorage.getItem("voxxo_lang");
     if (savedLang && LANGUAGES.find((l) => l.code === savedLang)) {
       setLanguage(savedLang);
     }
@@ -406,7 +406,7 @@ function ProximityContent() {
           onClick={() => setSelectedUser(user)}
           className={`absolute w-10 h-10 rounded-full flex items-center justify-center transform -translate-x-1/2 -translate-y-1/2 transition-all hover:scale-125 ${
             user.status === "available"
-              ? "bg-[#00C896] shadow-lg shadow-[#00C896]/50"
+              ? "bg-[#00DBA8] shadow-lg shadow-[#00DBA8]/50"
               : "bg-gray-600"
           }`}
           style={{
@@ -439,7 +439,7 @@ function ProximityContent() {
         {/* Status: Initializing */}
         {status === "initializing" && (
           <div className="text-center space-y-6">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#00C896] to-[#0066FF] flex items-center justify-center mx-auto">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#00DBA8] to-[#0088FF] flex items-center justify-center mx-auto">
               <span className="text-4xl">📡</span>
             </div>
             <div>
@@ -447,7 +447,7 @@ function ProximityContent() {
                 Proximity Connect
               </h2>
               <p className="text-gray-400 text-sm max-w-xs mx-auto">
-                Find nearby VoxLink users and start translated conversations
+                Find nearby Voxxo users and start translated conversations
                 instantly
               </p>
             </div>
@@ -464,7 +464,7 @@ function ProximityContent() {
                     onClick={() => setLanguage(lang.code)}
                     className={`p-3 rounded-lg text-center transition ${
                       language === lang.code
-                        ? "bg-[#00C896] text-white"
+                        ? "bg-[#00DBA8] text-white"
                         : "bg-[#1a1a2e] text-gray-400 hover:text-white"
                     }`}
                   >
@@ -488,7 +488,7 @@ function ProximityContent() {
 
             <button
               onClick={startProximity}
-              className="w-full max-w-xs py-4 bg-gradient-to-r from-[#00C896] to-[#0066FF] hover:from-[#00B085] hover:to-[#0055DD] rounded-xl text-white font-semibold text-lg transition shadow-lg shadow-[#00C896]/25"
+              className="w-full max-w-xs py-4 bg-gradient-to-r from-[#00DBA8] to-[#0088FF] hover:from-[#00C896] hover:to-[#0066DD] rounded-xl text-white font-semibold text-lg transition shadow-lg shadow-[#00DBA8]/25"
             >
               📍 Enable Location & Start
             </button>
@@ -503,7 +503,7 @@ function ProximityContent() {
         {/* Status: Requesting Permission */}
         {status === "requesting_permission" && (
           <div className="text-center space-y-4">
-            <div className="w-16 h-16 border-4 border-[#00C896] border-t-transparent rounded-full animate-spin mx-auto" />
+            <div className="w-16 h-16 border-4 border-[#00DBA8] border-t-transparent rounded-full animate-spin mx-auto" />
             <p className="text-white">Requesting location access...</p>
           </div>
         )}
@@ -528,28 +528,28 @@ function ProximityContent() {
               </p>
               <div className="space-y-2 text-xs text-gray-400">
                 <p className="flex items-start gap-2">
-                  <span className="text-[#00C896]">📱</span>
+                  <span className="text-[#00DBA8]">📱</span>
                   <span>
                     <strong className="text-gray-300">iPhone Safari:</strong>{" "}
                     Settings → Safari → Location → Allow
                   </span>
                 </p>
                 <p className="flex items-start gap-2">
-                  <span className="text-[#00C896]">📱</span>
+                  <span className="text-[#00DBA8]">📱</span>
                   <span>
                     <strong className="text-gray-300">iPhone Chrome:</strong>{" "}
                     Settings → Chrome → Location → Allow
                   </span>
                 </p>
                 <p className="flex items-start gap-2">
-                  <span className="text-[#00C896]">🤖</span>
+                  <span className="text-[#00DBA8]">🤖</span>
                   <span>
                     <strong className="text-gray-300">Android:</strong> Tap the
                     lock icon in address bar → Permissions → Location → Allow
                   </span>
                 </p>
                 <p className="flex items-start gap-2">
-                  <span className="text-[#00C896]">💻</span>
+                  <span className="text-[#00DBA8]">💻</span>
                   <span>
                     <strong className="text-gray-300">Desktop:</strong> Click
                     the lock icon next to URL → Site settings → Location → Allow
@@ -560,7 +560,7 @@ function ProximityContent() {
 
             <button
               onClick={() => window.location.reload()}
-              className="w-full py-4 bg-gradient-to-r from-[#00C896] to-[#0066FF] rounded-xl text-white font-semibold transition"
+              className="w-full py-4 bg-gradient-to-r from-[#00DBA8] to-[#0088FF] rounded-xl text-white font-semibold transition"
             >
               🔄 Reload & Try Again
             </button>
@@ -579,10 +579,10 @@ function ProximityContent() {
             {/* Radar */}
             <div className="relative w-72 h-72 mx-auto">
               {/* Radar circles */}
-              <div className="absolute inset-0 rounded-full border border-[#00C896]/20" />
-              <div className="absolute inset-8 rounded-full border border-[#00C896]/20" />
-              <div className="absolute inset-16 rounded-full border border-[#00C896]/20" />
-              <div className="absolute inset-24 rounded-full border border-[#00C896]/20" />
+              <div className="absolute inset-0 rounded-full border border-[#00DBA8]/20" />
+              <div className="absolute inset-8 rounded-full border border-[#00DBA8]/20" />
+              <div className="absolute inset-16 rounded-full border border-[#00DBA8]/20" />
+              <div className="absolute inset-24 rounded-full border border-[#00DBA8]/20" />
 
               {/* Radar sweep */}
               <div
@@ -594,7 +594,7 @@ function ProximityContent() {
 
               {/* Center dot (you) */}
               <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-                <div className="w-6 h-6 rounded-full bg-[#00C896] shadow-lg shadow-[#00C896]/50 flex items-center justify-center">
+                <div className="w-6 h-6 rounded-full bg-[#00DBA8] shadow-lg shadow-[#00DBA8]/50 flex items-center justify-center">
                   <div className="w-2 h-2 rounded-full bg-white" />
                 </div>
               </div>
@@ -618,7 +618,7 @@ function ProximityContent() {
                   <span className="text-gray-400">Scanning for users...</span>
                 ) : (
                   <>
-                    <span className="text-[#00C896]">{nearbyUsers.length}</span>{" "}
+                    <span className="text-[#00DBA8]">{nearbyUsers.length}</span>{" "}
                     user{nearbyUsers.length !== 1 ? "s" : ""} nearby
                   </>
                 )}
@@ -663,7 +663,7 @@ function ProximityContent() {
                       <div
                         className={`w-2 h-2 rounded-full ${
                           user.status === "available"
-                            ? "bg-[#00C896]"
+                            ? "bg-[#00DBA8]"
                             : "bg-gray-500"
                         }`}
                       />
@@ -675,9 +675,9 @@ function ProximityContent() {
 
             {/* Pending request indicator */}
             {pendingRequest && (
-              <div className="p-4 rounded-xl bg-[#00C896]/10 border border-[#00C896]/30 text-center">
-                <div className="w-8 h-8 border-2 border-[#00C896] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                <p className="text-[#00C896] text-sm">
+              <div className="p-4 rounded-xl bg-[#00DBA8]/10 border border-[#00DBA8]/30 text-center">
+                <div className="w-8 h-8 border-2 border-[#00DBA8] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                <p className="text-[#00DBA8] text-sm">
                   Waiting for response...
                 </p>
               </div>
@@ -691,7 +691,7 @@ function ProximityContent() {
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
           <div className="w-full max-w-sm bg-[#12121a] rounded-2xl border border-gray-800 overflow-hidden">
             <div className="p-6 text-center">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#00C896] to-[#0066FF] flex items-center justify-center mx-auto mb-4">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#00DBA8] to-[#0088FF] flex items-center justify-center mx-auto mb-4">
                 <span className="text-4xl">
                   {getLanguageFlag(selectedUser.language)}
                 </span>
@@ -711,13 +711,13 @@ function ProximityContent() {
                 onChange={(e) => setConnectionMessage(e.target.value)}
                 placeholder="Add a message (optional)"
                 maxLength={200}
-                className="w-full px-4 py-3 bg-[#1a1a2e] border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-[#00C896] transition"
+                className="w-full px-4 py-3 bg-[#1a1a2e] border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-[#00DBA8] transition"
               />
 
               <button
                 onClick={handleSendRequest}
                 disabled={isSending}
-                className="w-full py-4 bg-gradient-to-r from-[#00C896] to-[#0066FF] hover:from-[#00B085] hover:to-[#0055DD] rounded-xl text-white font-semibold text-lg transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-4 bg-gradient-to-r from-[#00DBA8] to-[#0088FF] hover:from-[#00C896] hover:to-[#0066DD] rounded-xl text-white font-semibold text-lg transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSending ? (
                   <span className="flex items-center justify-center gap-2">
@@ -745,7 +745,7 @@ function ProximityContent() {
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
           <div className="w-full max-w-sm bg-[#12121a] rounded-2xl border border-gray-800 overflow-hidden animate-pulse">
             <div className="p-6 text-center">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#00C896] to-[#0066FF] flex items-center justify-center mx-auto mb-4 animate-bounce">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#00DBA8] to-[#0088FF] flex items-center justify-center mx-auto mb-4 animate-bounce">
                 <span className="text-4xl">📡</span>
               </div>
               <h3 className="text-xl font-bold text-white">
@@ -765,7 +765,7 @@ function ProximityContent() {
               <button
                 onClick={() => handleRespondToRequest(true)}
                 disabled={isResponding}
-                className="w-full py-4 bg-gradient-to-r from-[#00C896] to-[#0066FF] hover:from-[#00B085] hover:to-[#0055DD] rounded-xl text-white font-semibold text-lg transition shadow-lg disabled:opacity-50"
+                className="w-full py-4 bg-gradient-to-r from-[#00DBA8] to-[#0088FF] hover:from-[#00C896] hover:to-[#0066DD] rounded-xl text-white font-semibold text-lg transition shadow-lg disabled:opacity-50"
               >
                 {isResponding ? (
                   <span className="flex items-center justify-center gap-2">
@@ -811,7 +811,7 @@ export default function ProximityPage() {
       fallback={
         <div className="min-h-screen bg-[#060810] flex items-center justify-center">
           <div className="text-center">
-            <div className="w-12 h-12 border-4 border-[#00C896] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <div className="w-12 h-12 border-4 border-[#00DBA8] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
             <p className="text-gray-400">Loading Proximity...</p>
           </div>
         </div>

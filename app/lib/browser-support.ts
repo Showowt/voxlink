@@ -1,5 +1,5 @@
 /**
- * VoxLink Browser Support Detection
+ * Voxxo Browser Support Detection
  *
  * Detects browser capabilities required for video calls, speech recognition,
  * and real-time communication features.

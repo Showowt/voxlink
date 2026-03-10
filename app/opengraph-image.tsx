@@ -1,8 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt =
-  "VoxLink™ — Break Language Barriers | Rompe las Barreras del Idioma";
+export const alt = "Voxxo — Your Voice. Any Language. Instantly.";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -18,7 +17,7 @@ export default function Image() {
         justifyContent: "center",
         backgroundColor: "#060810",
         backgroundImage:
-          "radial-gradient(circle at 25% 25%, #00C896 0%, transparent 50%), radial-gradient(circle at 75% 75%, #0066FF 0%, transparent 50%)",
+          "radial-gradient(circle at 25% 25%, #00DBA8 0%, transparent 50%), radial-gradient(circle at 75% 75%, #FF3B7A 0%, transparent 50%)",
       }}
     >
       {/* Logo Container */}
@@ -30,7 +29,7 @@ export default function Image() {
           marginBottom: 36,
           padding: "28px 48px",
           borderRadius: 28,
-          background: "linear-gradient(135deg, #00c896, #0066ff)",
+          background: "linear-gradient(135deg, #00DBA8, #FF3B7A)",
         }}
       >
         {/* Chat bubbles icon */}
@@ -59,7 +58,7 @@ export default function Image() {
             }}
           />
         </div>
-        {/* VoxLink text */}
+        {/* Voxxo text */}
         <div
           style={{
             fontSize: 72,
@@ -68,44 +67,46 @@ export default function Image() {
             letterSpacing: "-2px",
           }}
         >
-          VoxLink
+          Voxxo
         </div>
       </div>
 
-      {/* English Tagline */}
+      {/* Tagline */}
       <div
         style={{
           fontSize: 32,
-          color: "#00C896",
+          color: "#00DBA8",
           marginBottom: 8,
           fontWeight: 600,
         }}
       >
-        Break Language Barriers Instantly
+        Your Voice. Any Language. Instantly.
       </div>
 
-      {/* Spanish Tagline */}
+      {/* Description */}
       <div
         style={{
-          fontSize: 28,
+          fontSize: 24,
           color: "#9ca3af",
           marginBottom: 24,
           fontWeight: 500,
+          textAlign: "center",
+          maxWidth: 800,
         }}
       >
-        Rompe las Barreras del Idioma al Instante
+        AI-powered real-time voice translation for real conversations
       </div>
 
-      {/* Description - Bilingual */}
+      {/* Modes */}
       <div
         style={{
-          fontSize: 20,
+          fontSize: 18,
           color: "#6b7280",
           textAlign: "center",
           maxWidth: 800,
         }}
       >
-        Real-time voice translation | Traduccion de voz en tiempo real
+        Type • Voice • Face-to-Face • Video Call • Proximity Connect
       </div>
 
       {/* Flags - US + Latin America focus */}
