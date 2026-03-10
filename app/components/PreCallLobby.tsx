@@ -20,6 +20,7 @@ interface PreCallLobbyProps {
     userLang: string;
     partnerLang: string;
     videoEnabled: boolean;
+    cyranoEnabled: boolean;
   }) => void;
   onBack: () => void;
 }
@@ -51,6 +52,7 @@ export default function PreCallLobby({
     initialUserLang === "en" ? "es" : "en",
   );
   const [videoEnabled, setVideoEnabled] = useState(true);
+  const [cyranoEnabled, setCyranoEnabled] = useState(false);
 
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -213,9 +215,10 @@ export default function PreCallLobby({
         userLang,
         partnerLang,
         videoEnabled: withVideo,
+        cyranoEnabled,
       });
     },
-    [stream, userLang, partnerLang, onJoin],
+    [stream, userLang, partnerLang, cyranoEnabled, onJoin],
   );
 
   // Permission status icon
@@ -404,6 +407,49 @@ export default function PreCallLobby({
                 </div>
               </div>
             </div>
+
+            {/* Cyrano Mode Toggle */}
+            <button
+              onClick={() => setCyranoEnabled(!cyranoEnabled)}
+              className={`w-full p-4 rounded-xl border transition-all ${
+                cyranoEnabled
+                  ? "bg-gradient-to-r from-amber-500/20 to-orange-500/20 border-amber-500/50"
+                  : "bg-[#1a1a2e] border-gray-700 hover:border-gray-600"
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">🎭</span>
+                  <div className="text-left">
+                    <p
+                      className={`font-medium ${cyranoEnabled ? "text-amber-400" : "text-white"}`}
+                    >
+                      Cyrano Mode
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      AI coaching with real-time suggestions
+                    </p>
+                  </div>
+                </div>
+                <div
+                  className={`w-12 h-7 rounded-full p-1 transition-colors ${
+                    cyranoEnabled ? "bg-amber-500" : "bg-gray-600"
+                  }`}
+                >
+                  <div
+                    className={`w-5 h-5 rounded-full bg-white shadow-md transition-transform ${
+                      cyranoEnabled ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </div>
+              </div>
+              {cyranoEnabled && (
+                <p className="mt-3 text-xs text-amber-400/80 text-left pl-9">
+                  ⚡ Get Bold, Warm, and Safe response suggestions during your
+                  call
+                </p>
+              )}
+            </button>
           </div>
 
           {/* Join Buttons */}

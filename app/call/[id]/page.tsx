@@ -568,14 +568,19 @@ function VideoCallContent() {
       userLang: string;
       partnerLang: string;
       videoEnabled: boolean;
+      cyranoEnabled: boolean;
     }) => {
       setLobbyStream(settings.stream);
       setUserLang(settings.userLang);
       setExpectedPartnerLang(settings.partnerLang);
       setIsVideoOff(!settings.videoEnabled);
+      // Auto-activate Cyrano if enabled in lobby
+      if (settings.cyranoEnabled) {
+        cyrano.activate();
+      }
       setInLobby(false);
     },
-    [],
+    [cyrano],
   );
 
   const handleLobbyBack = useCallback(() => {
