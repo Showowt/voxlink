@@ -221,6 +221,7 @@ export default function CyranoOverlay({
     addTheirLine,
     dismissSuggestions,
     clearTranscript,
+    regenerateSuggestions,
   } = useCyrano("date");
 
   const [showTranscript, setShowTranscript] = useState(false);
@@ -235,6 +236,43 @@ export default function CyranoOverlay({
       transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
     }
   }, [transcript]);
+
+  // Keyboard shortcuts: Escape to dismiss, 1/2/3 to select suggestions
+  useEffect(() => {
+    if (!isActive || isCollapsed) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't capture if user is typing in an input
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+
+      // Escape dismisses suggestions
+      if (e.key === "Escape" && suggestions.length > 0) {
+        e.preventDefault();
+        dismissSuggestions();
+        return;
+      }
+
+      // 1/2/3 select Bold/Warm/Safe suggestions respectively
+      if (suggestions.length > 0 && ["1", "2", "3"].includes(e.key)) {
+        e.preventDefault();
+        const index = parseInt(e.key, 10) - 1;
+        if (suggestions[index]) {
+          handleSuggestionSelect(suggestions[index].text);
+          navigator.clipboard
+            .writeText(suggestions[index].text)
+            .catch(() => {});
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isActive, isCollapsed, suggestions, dismissSuggestions]);
 
   const handleSuggestionSelect = (text: string) => {
     onSuggestionSelected?.(text);
@@ -475,20 +513,25 @@ export default function CyranoOverlay({
                 ))}
               </div>
 
-              {/* Live caption bar */}
-              {liveCaption && (
-                <div className="mx-3 my-2 px-3 py-2 bg-white/[0.04] rounded-lg">
-                  <span className="text-white/40 text-xs italic">
-                    🎤 {liveCaption}
-                  </span>
-                </div>
-              )}
-
-              {/* Manual input */}
+              {/* Manual input section */}
               <div
                 className="px-3 py-3"
                 style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
               >
+                {/* Transcribing indicator */}
+                {isListening && liveCaption && (
+                  <div className="mb-2 px-2 py-1.5 bg-green-400/10 border border-green-400/20 rounded-lg">
+                    <span className="text-green-400/80 text-xs">
+                      🎤 Transcribing: {liveCaption}
+                    </span>
+                  </div>
+                )}
+
+                {/* Input label */}
+                <p className="text-white/50 text-xs font-medium mb-1.5 tracking-wide">
+                  What they said:
+                </p>
+
                 <ManualInput onSubmit={addTheirLine} />
                 <p className="text-white/20 text-xs mt-1.5 text-center">
                   Type what they said · mic auto-captures your side
@@ -504,9 +547,8 @@ export default function CyranoOverlay({
                     <div className="text-2xl opacity-30">
                       {activeMode.emoji}
                     </div>
-                    <p className="text-white/25 text-xs text-center max-w-[200px]">
-                      Suggestions appear after they speak. Type their message
-                      above or talk — Cyrano&apos;s listening.
+                    <p className="text-white/35 text-xs text-center max-w-[220px] leading-relaxed">
+                      Type what they just said, or speak — Cyrano hears you
                     </p>
                   </div>
                 )}
@@ -522,13 +564,23 @@ export default function CyranoOverlay({
                   ))}
 
                 {suggestions.length > 0 && (
-                  <button
-                    onClick={dismissSuggestions}
-                    className="text-white/20 text-xs text-center py-1
-                               hover:text-white/40 transition-colors"
-                  >
-                    dismiss
-                  </button>
+                  <div className="flex items-center justify-center gap-4 pt-1">
+                    <button
+                      onClick={regenerateSuggestions}
+                      disabled={isThinking}
+                      className="text-amber-400/60 text-xs hover:text-amber-400
+                                 transition-colors disabled:opacity-30 disabled:cursor-not-allowed
+                                 flex items-center gap-1"
+                    >
+                      <span className="text-sm">↻</span> Regenerate
+                    </button>
+                    <button
+                      onClick={dismissSuggestions}
+                      className="text-white/20 text-xs hover:text-white/40 transition-colors"
+                    >
+                      dismiss
+                    </button>
+                  </div>
                 )}
               </div>
 

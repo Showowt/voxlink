@@ -63,6 +63,7 @@ export interface UseCyranoReturn {
   addTheirLine: (text: string) => void; // For manual input or remote STT
   dismissSuggestions: () => void;
   clearTranscript: () => void;
+  regenerateSuggestions: () => void; // Get fresh suggestions on the same context
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -369,6 +370,31 @@ export function useCyrano(initialMode: CyranoMode = "date"): UseCyranoReturn {
     setSuggestions([]);
   }, []);
 
+  // Regenerate suggestions on the same context
+  const regenerateSuggestions = useCallback(async () => {
+    const current = transcriptRef.current;
+    if (current.length === 0) return;
+
+    const lastThemEntry = current
+      .filter((e) => e.speaker === "them")
+      .slice(-1)[0];
+    if (!lastThemEntry) return;
+
+    setIsThinking(true);
+    setError(null);
+    setSuggestions([]); // Clear current suggestions while regenerating
+
+    try {
+      const results = await generateSuggestions(current, modeRef.current);
+      setSuggestions(results);
+    } catch (err) {
+      setError("Failed to regenerate suggestions. Check your connection.");
+      console.error("[Cyrano] Regenerate error:", err);
+    } finally {
+      setIsThinking(false);
+    }
+  }, []);
+
   // Start/stop listening when active state changes
   useEffect(() => {
     if (isActive) {
@@ -402,5 +428,6 @@ export function useCyrano(initialMode: CyranoMode = "date"): UseCyranoReturn {
     addTheirLine,
     dismissSuggestions,
     clearTranscript,
+    regenerateSuggestions,
   };
 }

@@ -522,6 +522,9 @@ function VideoCallContent() {
     isListeningRef.current = isListening;
   }, [isListening]);
 
+  // Ref for auto-start tracking (defined early, used after startListening is defined)
+  const hasAutoStartedRef = useRef(false);
+
   // Enable controls when connected - either hasPartner OR we have remote video stream
   const isConnected = status === "connected" && (hasPartner || hasRemoteStream);
   const statusColor =
@@ -1031,6 +1034,40 @@ function VideoCallContent() {
     setMyLiveTranslation("");
   }, []);
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // AUTO-START SPEECH RECOGNITION
+  // When call connects AND partner joins, automatically start listening
+  // This enables bilateral real-time translation without manual activation
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  useEffect(() => {
+    // Auto-start conditions: connected + partner present + not already listening + not already auto-started
+    const shouldAutoStart =
+      status === "connected" &&
+      hasPartner &&
+      !isListening &&
+      !hasAutoStartedRef.current;
+
+    if (shouldAutoStart) {
+      console.log(
+        "🎤 Auto-starting speech recognition - call connected with partner",
+      );
+      hasAutoStartedRef.current = true;
+      // Small delay to ensure connection is fully stable
+      const timeout = setTimeout(() => {
+        if (mountedRef.current && !isListeningRef.current) {
+          startListening();
+        }
+      }, 500);
+      return () => clearTimeout(timeout);
+    }
+
+    // Reset auto-start flag if partner disconnects (allows re-auto-start if they rejoin)
+    if (!hasPartner) {
+      hasAutoStartedRef.current = false;
+    }
+  }, [status, hasPartner, isListening, startListening]);
+
   const addToTranscript = (
     speaker: "me" | "partner",
     name: string,
@@ -1478,9 +1515,97 @@ function VideoCallContent() {
           </div>
         )}
 
-        {/* Cyrano indicator when active but panel closed */}
-        {cyrano.isActive && !cyranoOpen && (
-          <div className="absolute top-4 right-4 z-20">
+        {/* Cyrano Quick Suggestions Strip - Shows inline when panel is closed but suggestions exist */}
+        {cyrano.isActive &&
+          !cyranoOpen &&
+          cyrano.suggestions.length > 0 &&
+          !cyrano.isThinking && (
+            <div
+              className={`absolute ${cyranoPhrase ? "top-20" : "top-4"} left-4 right-4 z-25 cyrano-slide-down`}
+              style={{ zIndex: 25 }}
+            >
+              <div
+                className="flex items-stretch gap-2 p-2 rounded-xl overflow-hidden"
+                style={{
+                  background: "rgba(6,6,10,0.92)",
+                  backdropFilter: "blur(20px)",
+                  border: "1px solid rgba(245,158,11,0.2)",
+                  boxShadow: "0 4px 24px rgba(0,0,0,0.4)",
+                }}
+              >
+                {/* Suggestions scroll container */}
+                <div className="flex-1 flex gap-2 overflow-x-auto scrollbar-hide">
+                  {cyrano.suggestions.slice(0, 3).map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => {
+                        navigator.clipboard.writeText(s.text).catch(() => {});
+                        setCyranoPhrase(s.text);
+                        cyrano.dismissSuggestions();
+                      }}
+                      className="flex-shrink-0 max-w-[200px] md:max-w-[280px] px-3 py-2 rounded-lg text-left transition-all hover:scale-[1.02] active:scale-[0.98]"
+                      style={{
+                        background: "rgba(255,255,255,0.05)",
+                        border: `1px solid ${TONE_COLORS[s.tone]}40`,
+                      }}
+                    >
+                      <span className="text-white/80 text-xs line-clamp-2 leading-relaxed">
+                        {s.text}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Expand button */}
+                <button
+                  onClick={() => setCyranoOpen(true)}
+                  className="flex-shrink-0 px-2 flex items-center justify-center text-amber-400/60 hover:text-amber-400 transition-colors"
+                  title="Open Cyrano panel"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
+                    />
+                  </svg>
+                </button>
+
+                {/* Dismiss button */}
+                <button
+                  onClick={() => cyrano.dismissSuggestions()}
+                  className="flex-shrink-0 px-2 flex items-center justify-center text-white/20 hover:text-white/50 transition-colors"
+                  title="Dismiss suggestions"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
+
+        {/* Cyrano indicator when active but panel closed and no suggestions */}
+        {cyrano.isActive && !cyranoOpen && cyrano.suggestions.length === 0 && (
+          <div
+            className={`absolute ${cyranoPhrase ? "top-20" : "top-4"} right-4 z-20`}
+          >
             <button
               onClick={() => setCyranoOpen(true)}
               className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-all hover:scale-105"
@@ -1694,6 +1819,21 @@ function VideoCallContent() {
             transform: scale(1);
             opacity: 1;
           }
+        }
+
+        /* Quick suggestions strip utilities */
+        .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+        }
+        .line-clamp-2 {
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
         }
       `}</style>
     </div>
