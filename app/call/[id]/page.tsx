@@ -499,6 +499,7 @@ function VideoCallContent() {
   const [cyranoOpen, setCyranoOpen] = useState(false);
   const [cyranoPhrase, setCyranoPhrase] = useState("");
   const cyrano = useCyrano("date");
+  const cyranoEnabledOnJoinRef = useRef(false);
 
   // Quality monitoring state
   const [quality, setQuality] = useState<ConnectionQuality | null>(null);
@@ -574,14 +575,20 @@ function VideoCallContent() {
       setUserLang(settings.userLang);
       setExpectedPartnerLang(settings.partnerLang);
       setIsVideoOff(!settings.videoEnabled);
-      // Auto-activate Cyrano if enabled in lobby
-      if (settings.cyranoEnabled) {
-        cyrano.activate();
-      }
+      // Store cyrano preference in ref - activation handled by useEffect
+      cyranoEnabledOnJoinRef.current = settings.cyranoEnabled;
       setInLobby(false);
     },
-    [cyrano],
+    [],
   );
+
+  // Activate Cyrano after leaving lobby if it was enabled
+  useEffect(() => {
+    if (!inLobby && cyranoEnabledOnJoinRef.current) {
+      cyrano.activate();
+      cyranoEnabledOnJoinRef.current = false; // Reset to prevent re-activation
+    }
+  }, [inLobby, cyrano]);
 
   const handleLobbyBack = useCallback(() => {
     router.push("/");
