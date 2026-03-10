@@ -26,6 +26,12 @@ import {
 } from "../../components/ErrorScreens";
 import ReconnectingOverlay from "../../components/ReconnectingOverlay";
 import { useBrowserSupport } from "../../lib/browser-support";
+import {
+  useCyrano,
+  type CyranoMode,
+  type Suggestion,
+  type UseCyranoReturn,
+} from "../../lib/useCyrano";
 
 // Text-to-Speech helper
 const speakText = (text: string, lang: string) => {
@@ -65,6 +71,369 @@ interface TranscriptEntry {
   translated: string;
   timestamp: Date;
   lang: string;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CYRANO PANEL COMPONENT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const CYRANO_MODES: {
+  id: CyranoMode;
+  label: string;
+  emoji: string;
+  color: string;
+}[] = [
+  { id: "date", label: "Date", emoji: "🔥", color: "#f97316" },
+  { id: "interview", label: "Interview", emoji: "💼", color: "#3b82f6" },
+  { id: "hardtalk", label: "Hard Talk", emoji: "⚖️", color: "#8b5cf6" },
+  { id: "sales", label: "Sales", emoji: "🎯", color: "#10b981" },
+];
+
+const TONE_COLORS: Record<string, string> = {
+  bold: "#f59e0b",
+  warm: "#ec4899",
+  safe: "#64748b",
+};
+
+function CyranoPanel({
+  cyrano,
+  onSuggestionPick,
+  onClose,
+}: {
+  cyrano: UseCyranoReturn;
+  onSuggestionPick: (text: string) => void;
+  onClose: () => void;
+}) {
+  const {
+    isActive,
+    isListening,
+    isThinking,
+    suggestions,
+    transcript,
+    currentMode,
+    error,
+    liveCaption,
+    activate,
+    deactivate,
+    setMode,
+    addTheirLine,
+    dismissSuggestions,
+    clearTranscript,
+  } = cyrano;
+
+  const [manualInput, setManualInput] = useState("");
+  const activeMode = CYRANO_MODES.find((m) => m.id === currentMode)!;
+
+  const submitManual = () => {
+    if (!manualInput.trim()) return;
+    addTheirLine(manualInput.trim());
+    setManualInput("");
+  };
+
+  return (
+    <div
+      className="flex flex-col rounded-2xl overflow-hidden h-full"
+      style={{
+        background: "rgba(6, 6, 10, 0.95)",
+        backdropFilter: "blur(24px)",
+        border: "1px solid rgba(255,255,255,0.07)",
+        boxShadow:
+          "0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.03)",
+      }}
+    >
+      {/* Header */}
+      <div
+        className="flex items-center justify-between px-4 py-3"
+        style={{
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          background: `linear-gradient(90deg, ${activeMode.color}18 0%, transparent 100%)`,
+        }}
+      >
+        <div className="flex items-center gap-2">
+          <div className="relative w-2 h-2">
+            <div
+              className={`w-2 h-2 rounded-full ${isListening ? "bg-green-400" : isActive ? "bg-amber-400" : "bg-zinc-600"}`}
+            />
+            {isListening && (
+              <div className="absolute inset-0 w-2 h-2 rounded-full bg-green-400 animate-ping opacity-60" />
+            )}
+          </div>
+          <span
+            className="text-xs font-black tracking-[0.15em] uppercase"
+            style={{ color: activeMode.color }}
+          >
+            Cyrano
+          </span>
+          {isActive && (
+            <span className="text-xs text-white/30 font-medium">
+              {activeMode.emoji} {activeMode.label}
+            </span>
+          )}
+        </div>
+        <button
+          onClick={onClose}
+          className="p-1.5 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/[0.06] transition-all"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* Setup (not active) */}
+      {!isActive && (
+        <div className="p-4 flex flex-col gap-4 flex-1">
+          <p className="text-white/30 text-xs text-center tracking-wide">
+            AI whispers what to say in real time
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {CYRANO_MODES.map((mode) => (
+              <button
+                key={mode.id}
+                onClick={() => setMode(mode.id)}
+                className="flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all duration-200"
+                style={{
+                  borderColor:
+                    currentMode === mode.id
+                      ? `${mode.color}55`
+                      : "rgba(255,255,255,0.06)",
+                  background:
+                    currentMode === mode.id
+                      ? `${mode.color}14`
+                      : "rgba(255,255,255,0.02)",
+                  boxShadow:
+                    currentMode === mode.id
+                      ? `0 0 16px ${mode.color}18`
+                      : "none",
+                }}
+              >
+                <span className="text-lg">{mode.emoji}</span>
+                <span
+                  className="text-xs font-semibold"
+                  style={{
+                    color:
+                      currentMode === mode.id
+                        ? mode.color
+                        : "rgba(255,255,255,0.4)",
+                  }}
+                >
+                  {mode.label}
+                </span>
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={activate}
+            className="w-full py-3 rounded-xl font-bold text-sm tracking-wide transition-all hover:scale-[1.02] active:scale-[0.98]"
+            style={{
+              background: `linear-gradient(135deg, ${activeMode.color} 0%, ${activeMode.color}cc 100%)`,
+              color: "#000",
+              boxShadow: `0 4px 24px ${activeMode.color}40`,
+            }}
+          >
+            Activate {activeMode.emoji}
+          </button>
+        </div>
+      )}
+
+      {/* Active state */}
+      {isActive && (
+        <div className="flex flex-col flex-1 overflow-hidden">
+          {/* Mode tabs */}
+          <div
+            className="flex px-3 pt-3 gap-1 shrink-0"
+            style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}
+          >
+            {CYRANO_MODES.map((mode) => (
+              <button
+                key={mode.id}
+                onClick={() => setMode(mode.id)}
+                className="flex-1 flex flex-col items-center gap-0.5 py-2 rounded-lg text-xs transition-all duration-200 mb-2"
+                style={{
+                  background:
+                    currentMode === mode.id ? `${mode.color}20` : "transparent",
+                  color:
+                    currentMode === mode.id
+                      ? mode.color
+                      : "rgba(255,255,255,0.22)",
+                  fontWeight: currentMode === mode.id ? 700 : 400,
+                }}
+              >
+                <span>{mode.emoji}</span>
+                <span className="tracking-wide">{mode.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Live caption */}
+          {liveCaption && (
+            <div className="mx-3 mt-3 px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.07] shrink-0">
+              <span className="text-white/40 text-xs italic">
+                🎤 {liveCaption}
+              </span>
+            </div>
+          )}
+
+          {/* Manual input */}
+          <div
+            className="px-3 pt-3 pb-0 shrink-0"
+            style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}
+          >
+            <div className="flex gap-2 pb-3">
+              <input
+                type="text"
+                value={manualInput}
+                onChange={(e) => setManualInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && submitManual()}
+                placeholder="Type what they said..."
+                className="flex-1 bg-white/[0.05] border border-white/[0.09] rounded-lg px-3 py-2 text-white/80 text-xs placeholder:text-white/20 outline-none focus:border-amber-400/40 focus:bg-white/[0.07] transition-all"
+              />
+              <button
+                onClick={submitManual}
+                disabled={!manualInput.trim()}
+                className="px-3 py-2 bg-amber-400 disabled:bg-white/10 rounded-lg text-black disabled:text-white/25 text-xs font-bold transition-all hover:bg-amber-300 disabled:cursor-not-allowed"
+              >
+                →
+              </button>
+            </div>
+          </div>
+
+          {/* Suggestions */}
+          <div className="p-3 flex flex-col gap-2 flex-1 overflow-y-auto">
+            {isThinking && (
+              <div className="flex items-center gap-3 py-2 px-1">
+                <div className="flex gap-1">
+                  {[0, 1, 2].map((i) => (
+                    <div
+                      key={i}
+                      className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"
+                      style={{ animationDelay: `${i * 0.2}s` }}
+                    />
+                  ))}
+                </div>
+                <span className="text-white/30 text-xs tracking-wide">
+                  Thinking...
+                </span>
+              </div>
+            )}
+
+            {!isThinking && suggestions.length === 0 && !liveCaption && (
+              <div className="flex flex-col items-center justify-center py-5 gap-2">
+                <span className="text-2xl opacity-20">{activeMode.emoji}</span>
+                <p className="text-white/20 text-xs text-center max-w-[200px] leading-relaxed">
+                  Suggestions appear after they speak. Cyrano is listening.
+                </p>
+              </div>
+            )}
+
+            {!isThinking &&
+              suggestions.map((s, i) => (
+                <SuggestionCard
+                  key={s.id}
+                  suggestion={s}
+                  index={i}
+                  onSelect={(text) => {
+                    onSuggestionPick(text);
+                    dismissSuggestions();
+                  }}
+                />
+              ))}
+
+            {suggestions.length > 0 && (
+              <button
+                onClick={dismissSuggestions}
+                className="text-white/15 text-[10px] text-center py-1 hover:text-white/30 transition-colors"
+              >
+                dismiss
+              </button>
+            )}
+
+            {error && (
+              <div className="px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-xs">
+                {error}
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div
+            className="flex items-center justify-between px-4 py-2.5 shrink-0"
+            style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}
+          >
+            <div className="flex items-center gap-2">
+              <div
+                className={`w-1.5 h-1.5 rounded-full ${isListening ? "bg-green-400 animate-pulse" : "bg-zinc-600"}`}
+              />
+              <span className="text-white/25 text-xs">
+                {isListening ? "Listening" : "Mic off"}
+              </span>
+            </div>
+            <div className="flex gap-3">
+              {transcript.length > 0 && (
+                <button
+                  onClick={clearTranscript}
+                  className="text-white/20 text-xs hover:text-white/40 transition-colors"
+                >
+                  clear
+                </button>
+              )}
+              <button
+                onClick={deactivate}
+                className="text-red-400/50 text-xs hover:text-red-400 transition-colors"
+              >
+                stop
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SuggestionCard({
+  suggestion,
+  index,
+  onSelect,
+}: {
+  suggestion: Suggestion;
+  index: number;
+  onSelect: (text: string) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const color = TONE_COLORS[suggestion.tone];
+
+  return (
+    <div
+      onClick={() => {
+        navigator.clipboard.writeText(suggestion.text).catch(() => {});
+        onSelect(suggestion.text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }}
+      style={{ borderLeft: `3px solid ${color}` }}
+      className="group relative bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] rounded-xl p-3.5 cursor-pointer transition-all duration-200 hover:scale-[1.01] hover:border-white/[0.16] active:scale-[0.99]"
+    >
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm">{suggestion.emoji}</span>
+          <span
+            className="text-[10px] font-black tracking-[0.15em] uppercase"
+            style={{ color }}
+          >
+            {suggestion.label}
+          </span>
+        </div>
+        <span
+          className="text-[10px] transition-all"
+          style={{ color: copied ? "#10b981" : "rgba(255,255,255,0.2)" }}
+        >
+          {copied ? "✓ copied" : "tap"}
+        </span>
+      </div>
+      <p className="text-white/85 text-xs leading-relaxed font-light">
+        {suggestion.text}
+      </p>
+    </div>
+  );
 }
 
 function VideoCallContent() {
@@ -125,6 +494,11 @@ function VideoCallContent() {
   // UI state
   const [copied, setCopied] = useState(false);
   const [iceState, setIceState] = useState<IceConnectionState | null>(null);
+
+  // Cyrano Mode state
+  const [cyranoOpen, setCyranoOpen] = useState(false);
+  const [cyranoPhrase, setCyranoPhrase] = useState("");
+  const cyrano = useCyrano("date");
 
   // Quality monitoring state
   const [quality, setQuality] = useState<ConnectionQuality | null>(null);
@@ -467,7 +841,7 @@ function VideoCallContent() {
         setTheirLiveTranslation("");
       }, 5000);
 
-      // If this is a final caption, add to transcript
+      // If this is a final caption, add to transcript and feed to Cyrano
       if (captionData.isFinal && captionData.text) {
         addToTranscript(
           "partner",
@@ -476,9 +850,14 @@ function VideoCallContent() {
           captionData.translation || captionData.text,
           captionData.lang || "en",
         );
+
+        // Feed partner's speech to Cyrano for suggestion generation
+        if (cyrano.isActive) {
+          cyrano.addTheirLine(captionData.text);
+        }
       }
     },
-    [partnerName, userLang],
+    [partnerName, userLang, cyrano],
   );
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -697,6 +1076,9 @@ function VideoCallContent() {
 
   const endCall = () => {
     stopListening();
+    cyrano.deactivate();
+    setCyranoOpen(false);
+    setCyranoPhrase("");
     if (localStreamRef.current) {
       stopCamera(localStreamRef.current);
     }
@@ -772,6 +1154,31 @@ function VideoCallContent() {
           playsInline
           className="absolute inset-0 w-full h-full object-cover"
         />
+
+        {/* Cyrano Teleprompter Bar */}
+        {cyranoPhrase && (
+          <div
+            className="absolute top-4 left-4 right-4 z-30 flex items-start gap-3 px-4 py-3 rounded-2xl cyrano-slide-down"
+            style={{
+              background: "rgba(6,6,10,0.92)",
+              backdropFilter: "blur(20px)",
+              border: "1px solid rgba(245,158,11,0.3)",
+              boxShadow:
+                "0 0 32px rgba(245,158,11,0.1), 0 8px 32px rgba(0,0,0,0.5)",
+            }}
+          >
+            <span className="text-amber-400 text-sm mt-0.5 shrink-0">🎭</span>
+            <p className="text-white/90 text-sm leading-relaxed flex-1">
+              {cyranoPhrase}
+            </p>
+            <button
+              onClick={() => setCyranoPhrase("")}
+              className="text-white/25 hover:text-white/60 transition-colors text-lg leading-none shrink-0 mt-0.5"
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {/* No partner overlay */}
         {!hasPartner && (
@@ -1059,6 +1466,35 @@ function VideoCallContent() {
             </div>
           </div>
         )}
+
+        {/* Cyrano Panel */}
+        {cyranoOpen && (
+          <div className="absolute top-0 right-0 bottom-20 w-[320px] p-3 z-20 overflow-y-auto cyrano-panel-in">
+            <CyranoPanel
+              cyrano={cyrano}
+              onSuggestionPick={(text) => setCyranoPhrase(text)}
+              onClose={() => setCyranoOpen(false)}
+            />
+          </div>
+        )}
+
+        {/* Cyrano indicator when active but panel closed */}
+        {cyrano.isActive && !cyranoOpen && (
+          <div className="absolute top-4 right-4 z-20">
+            <button
+              onClick={() => setCyranoOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-all hover:scale-105"
+              style={{
+                background: "rgba(6,6,10,0.88)",
+                border: "1px solid rgba(245,158,11,0.4)",
+                color: "#f59e0b",
+              }}
+            >
+              <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+              Cyrano
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Controls - Mobile optimized with flex wrap */}
@@ -1084,6 +1520,33 @@ function VideoCallContent() {
             }`}
           >
             {isVideoOff ? "📵" : "📹"}
+          </button>
+
+          {/* Cyrano Mode Toggle */}
+          <button
+            onClick={() => setCyranoOpen((v) => !v)}
+            title="Cyrano Mode"
+            className="w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center text-lg md:text-xl transition-all active:scale-95 relative"
+            style={{
+              background: cyrano.isActive
+                ? cyranoOpen
+                  ? "rgba(245,158,11,0.25)"
+                  : "rgba(245,158,11,0.15)"
+                : cyranoOpen
+                  ? "rgba(255,255,255,0.12)"
+                  : "rgba(255,255,255,0.1)",
+              border: cyrano.isActive
+                ? "1.5px solid rgba(245,158,11,0.5)"
+                : "1.5px solid transparent",
+              boxShadow: cyrano.isActive
+                ? "0 0 16px rgba(245,158,11,0.2)"
+                : "none",
+            }}
+          >
+            🎭
+            {cyrano.isActive && (
+              <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            )}
           </button>
 
           <button
@@ -1189,6 +1652,48 @@ function VideoCallContent() {
         }
         .caption-slide-in {
           animation: caption-slide 0.2s ease-out;
+        }
+
+        /* Cyrano animations */
+        @keyframes cyrano-slide-down {
+          from {
+            opacity: 0;
+            transform: translateY(-12px) scale(0.97);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+        .cyrano-slide-down {
+          animation: cyrano-slide-down 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes cyrano-panel-in {
+          from {
+            opacity: 0;
+            transform: translateX(16px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
+        }
+        .cyrano-panel-in {
+          animation: cyrano-panel-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes cyrano-pulse {
+          0%,
+          80%,
+          100% {
+            transform: scale(0.6);
+            opacity: 0.4;
+          }
+          40% {
+            transform: scale(1);
+            opacity: 1;
+          }
         }
       `}</style>
     </div>
