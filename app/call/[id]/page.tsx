@@ -765,12 +765,16 @@ function VideoCallContent() {
     return () => {
       mountedRef.current = false;
       stopListening();
-      if (localStreamRef.current) {
-        stopCamera(localStreamRef.current);
-      }
+      // Disconnect peer FIRST to prevent "track already stopped" errors
       if (peerRef.current) {
         peerRef.current.disconnect();
       }
+      // Wait for disconnect to complete before stopping tracks
+      setTimeout(() => {
+        if (localStreamRef.current) {
+          stopCamera(localStreamRef.current);
+        }
+      }, 100);
     };
   }, [roomCode, isHost, userName, inLobby, lobbyStream]);
 

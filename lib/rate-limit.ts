@@ -74,12 +74,15 @@ export async function checkRateLimit(
     }
   }
 
-  // Fallback to memory (development only - logs warning)
+  // In production, require Redis for proper rate limiting
+  // In-memory is trivially bypassed (just reconnect)
   if (process.env.NODE_ENV === "production" && !redis) {
-    console.warn(
-      "[RateLimit] WARNING: Using in-memory rate limiting in production! " +
-        "Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN for proper rate limiting.",
+    console.error(
+      "[RateLimit] CRITICAL: Redis not configured in production. " +
+        "Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN.",
     );
+    // Still allow requests but log for monitoring
+    // Remove this line to block requests entirely: throw new Error("Rate limiting unavailable");
   }
 
   const record = memoryStore.get(identifier);

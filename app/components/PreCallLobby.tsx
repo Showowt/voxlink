@@ -144,9 +144,14 @@ export default function PreCallLobby({
   // Mic level monitoring
   const startMicLevelMonitor = useCallback((stream: MediaStream) => {
     try {
-      // Close existing context to prevent duplicates
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
+      // Close existing context to prevent duplicates and memory leaks
+      if (
+        audioContextRef.current &&
+        audioContextRef.current.state !== "closed"
+      ) {
+        audioContextRef.current.close().catch(() => {
+          // Ignore close errors - context may already be closing
+        });
       }
 
       const audioContext = new AudioContext();

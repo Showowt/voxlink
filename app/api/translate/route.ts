@@ -70,7 +70,16 @@ function getCached(key: string): string | null {
 
 function setCache(key: string, value: string) {
   cache.set(key, { value, timestamp: Date.now() });
-  // Cleanup if too large
+
+  // Cleanup stale entries by TTL first (prevents memory leak)
+  const now = Date.now();
+  Array.from(cache.entries()).forEach(([k, v]) => {
+    if (now - v.timestamp > CACHE_TTL) {
+      cache.delete(k);
+    }
+  });
+
+  // Then cleanup by size if still too large
   if (cache.size > MAX_CACHE_SIZE) {
     const entries = Array.from(cache.entries()).sort(
       (a, b) => a[1].timestamp - b[1].timestamp,
@@ -82,6 +91,18 @@ function setCache(key: string, value: string) {
 }
 
 // Legacy rate limit function removed - now using lib/rate-limit.ts with Upstash Redis
+
+// Helper to add timeout to promises (prevents hanging on slow APIs)
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  fallback: T,
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // INSTANT DICTIONARY - Zero latency for common phrases
@@ -496,9 +517,10 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. API Translation - Run Google + MyMemory in PARALLEL for speed
+    // Each translator has 2s timeout to prevent hanging on slow APIs
     const [googleResult, myMemoryResult] = await Promise.allSettled([
-      translateGoogle(cleanText, from, to),
-      translateMyMemory(cleanText, from, to),
+      withTimeout(translateGoogle(cleanText, from, to), 2000, null),
+      withTimeout(translateMyMemory(cleanText, from, to), 2000, null),
     ]);
 
     let translation: string | null = null;
@@ -513,9 +535,13 @@ export async function POST(req: NextRequest) {
       source = "mymemory";
     }
 
-    // 5. Fallback to LibreTranslate if both failed
+    // 5. Fallback to LibreTranslate if both failed (with 2s timeout)
     if (!translation) {
-      translation = await translateLibre(cleanText, from, to);
+      translation = await withTimeout(
+        translateLibre(cleanText, from, to),
+        2000,
+        null,
+      );
       if (translation) source = "libre";
     }
 
