@@ -327,7 +327,8 @@ export default function FaceToFacePage() {
           </p>
           <button
             onClick={() => router.push("/")}
-            className="px-6 py-3 bg-[#00C896] text-white rounded-xl font-medium"
+            className="px-6 py-3 bg-[#00C896] text-white rounded-xl font-medium min-h-[44px]"
+            aria-label="Go Back"
           >
             Go Back
           </button>
@@ -350,7 +351,7 @@ export default function FaceToFacePage() {
               <h2 className="text-2xl font-bold text-white mb-1">
                 Face-to-Face Translation
               </h2>
-              <p className="text-gray-400 text-sm">
+              <p className="text-white/70 text-sm">
                 Place phone between two people
               </p>
             </div>
@@ -366,7 +367,7 @@ export default function FaceToFacePage() {
             <div className="space-y-4">
               {/* Your Language (Top Speaker) */}
               <div>
-                <label className="block text-sm text-gray-400 mb-2 flex items-center gap-2">
+                <label className="block text-sm text-white/70 mb-2 flex items-center gap-2">
                   <span className="text-lg">👆</span>
                   <span>Top Speaker (You)</span>
                 </label>
@@ -381,7 +382,8 @@ export default function FaceToFacePage() {
               <div className="flex justify-center">
                 <button
                   onClick={swapLanguages}
-                  className="p-3 rounded-xl bg-[#1a1a2e] border border-gray-700 text-[#00C896] hover:bg-[#00C896]/10 hover:border-[#00C896]/50 transition"
+                  className="p-3 rounded-xl bg-[#1a1a2e] border border-gray-700 text-[#00C896] hover:bg-[#00C896]/10 hover:border-[#00C896]/50 transition min-h-[44px]"
+                  aria-label="Swap languages"
                 >
                   <svg
                     className="w-6 h-6"
@@ -401,7 +403,7 @@ export default function FaceToFacePage() {
 
               {/* Partner's Language (Bottom Speaker) */}
               <div>
-                <label className="block text-sm text-gray-400 mb-2 flex items-center gap-2">
+                <label className="block text-sm text-white/70 mb-2 flex items-center gap-2">
                   <span className="text-lg">👇</span>
                   <span>Bottom Speaker (Partner)</span>
                 </label>
@@ -418,12 +420,12 @@ export default function FaceToFacePage() {
               <div className="flex items-center justify-center gap-4">
                 <div className="text-center">
                   <span className="text-3xl">{getFlag(topLang)}</span>
-                  <p className="text-xs text-gray-400 mt-1">Top</p>
+                  <p className="text-xs text-white/70 mt-1">Top</p>
                 </div>
-                <span className="text-2xl text-white/50">↔</span>
+                <span className="text-2xl text-white/70">↔</span>
                 <div className="text-center">
                   <span className="text-3xl">{getFlag(bottomLang)}</span>
-                  <p className="text-xs text-gray-400 mt-1">Bottom</p>
+                  <p className="text-xs text-white/70 mt-1">Bottom</p>
                 </div>
               </div>
             </div>
@@ -431,7 +433,8 @@ export default function FaceToFacePage() {
             {/* Start Button */}
             <button
               onClick={startSession}
-              className="w-full mt-6 py-4 bg-gradient-to-r from-[#00C896] to-[#0066FF] hover:from-[#00B085] hover:to-[#0055DD] rounded-xl text-white font-semibold text-lg transition shadow-lg"
+              className="w-full mt-6 py-4 bg-gradient-to-r from-[#00C896] to-[#0066FF] hover:from-[#00B085] hover:to-[#0055DD] rounded-xl text-white font-semibold text-lg transition shadow-lg min-h-[44px]"
+              aria-label="Start Translation"
             >
               🚀 Start Translation
             </button>
@@ -439,7 +442,8 @@ export default function FaceToFacePage() {
             {/* Back Link */}
             <button
               onClick={() => router.push("/")}
-              className="w-full mt-3 py-3 bg-[#1a1a2e] border border-gray-700 rounded-xl text-gray-400 hover:text-white hover:border-gray-600 transition"
+              className="w-full mt-3 py-3 bg-[#1a1a2e] border border-gray-700 rounded-xl text-white/70 hover:text-white hover:border-gray-600 transition min-h-[44px]"
+              aria-label="Back to Home"
             >
               ← Back to Home
             </button>
@@ -450,14 +454,15 @@ export default function FaceToFacePage() {
   }
 
   return (
-    <div className="h-screen bg-[#060810] flex flex-col overflow-hidden select-none">
+    <div className="h-screen-safe min-h-screen-safe bg-[#060810] flex flex-col overflow-hidden select-none safe-x">
       {/* Error Banner */}
       {error && (
         <div className="absolute top-0 left-0 right-0 bg-red-500/90 text-white text-center py-2 px-4 z-50">
           {error}
           <button
             onClick={() => setError("")}
-            className="ml-4 text-white/80 hover:text-white"
+            className="ml-4 text-white/80 hover:text-white min-h-[44px]"
+            aria-label="Dismiss error"
           >
             ✕
           </button>
@@ -470,58 +475,73 @@ export default function FaceToFacePage() {
         <div className="flex items-center justify-between p-3 border-b border-white/10">
           <button
             onClick={() => setIsSetupMode(true)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition"
+            className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition min-h-[44px]"
+            aria-label="Change top speaker language"
           >
             <span className="text-2xl">{getFlag(topLang)}</span>
             <span className="text-white font-medium uppercase">{topLang}</span>
-            <span className="text-gray-400 text-xs">✏️</span>
+            <span className="text-white/70 text-xs">✏️</span>
           </button>
           <div className="flex items-center gap-2">
             <button
               onClick={swapLanguages}
-              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm transition"
+              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm transition min-h-[44px]"
+              aria-label="Swap languages"
             >
               ⇄ Swap
             </button>
             <button
               onClick={() => router.push("/")}
-              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm transition"
+              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm transition min-h-[44px]"
+              aria-label="Close"
             >
               ✕
             </button>
           </div>
         </div>
 
-        {/* Top content area */}
-        <div className="flex-1 flex flex-col items-center justify-center p-4 gap-4">
+        {/* Top content area - responsive padding */}
+        <div className="flex-1 flex flex-col items-center justify-center p-3 sm:p-4 gap-3 sm:gap-4">
           {/* What I said (my original text) */}
           {topState.original && (
-            <div className="w-full max-w-lg">
-              <p className="text-xs text-gray-500 mb-1 uppercase">You said:</p>
-              <p className="text-white text-lg">{topState.original}</p>
+            <div className="w-full max-w-lg px-1 sm:px-0">
+              <p className="text-[10px] sm:text-xs text-gray-500 mb-1 uppercase">
+                You said:
+              </p>
+              <p className="text-white text-base sm:text-lg">
+                {topState.original}
+              </p>
             </div>
           )}
 
           {/* Translation from bottom speaker (what they said, translated for me) */}
           {topState.translated && (
-            <div className="w-full max-w-lg bg-[#00C896]/20 rounded-xl p-4">
-              <p className="text-xs text-[#00C896] mb-1 uppercase">
+            <div
+              className="w-full max-w-lg bg-[#00C896]/20 rounded-xl p-3 sm:p-4"
+              role="region"
+              aria-live="polite"
+              aria-label="Translation"
+            >
+              <p className="text-[10px] sm:text-xs text-[#00C896] mb-1 uppercase">
                 They said (translated):
               </p>
-              <p className="text-white text-xl font-medium">
+              <p className="text-white text-lg sm:text-xl font-medium">
                 {topState.translated}
               </p>
             </div>
           )}
 
-          {/* Big mic button */}
+          {/* Big mic button - responsive size */}
           <button
             onClick={() => toggleListening("top")}
-            className={`w-24 h-24 rounded-full flex items-center justify-center text-4xl transition-all shadow-lg ${
+            className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center text-3xl sm:text-4xl transition-all shadow-lg ${
               topState.isListening
                 ? "bg-red-500 animate-pulse scale-110"
                 : "bg-[#00C896] hover:bg-[#00B085] hover:scale-105"
             }`}
+            aria-label={
+              topState.isListening ? "Stop speaking" : "Start speaking"
+            }
           >
             {topState.isListening ? "⏹" : "🎤"}
           </button>
@@ -553,52 +573,66 @@ export default function FaceToFacePage() {
         <div className="flex items-center justify-between p-3 border-b border-white/10">
           <button
             onClick={() => setIsSetupMode(true)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition"
+            className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition min-h-[44px]"
+            aria-label="Change bottom speaker language"
           >
             <span className="text-2xl">{getFlag(bottomLang)}</span>
             <span className="text-white font-medium uppercase">
               {bottomLang}
             </span>
-            <span className="text-gray-400 text-xs">✏️</span>
+            <span className="text-white/70 text-xs">✏️</span>
           </button>
           <button
             onClick={clearAll}
-            className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm transition"
+            className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm transition min-h-[44px]"
+            aria-label="Clear all translations"
           >
             Clear
           </button>
         </div>
 
-        {/* Bottom content area */}
-        <div className="flex-1 flex flex-col items-center justify-center p-4 gap-4">
+        {/* Bottom content area - responsive padding */}
+        <div className="flex-1 flex flex-col items-center justify-center p-3 sm:p-4 gap-3 sm:gap-4">
           {/* What I said (my original text) */}
           {bottomState.original && (
-            <div className="w-full max-w-lg">
-              <p className="text-xs text-gray-500 mb-1 uppercase">You said:</p>
-              <p className="text-white text-lg">{bottomState.original}</p>
+            <div className="w-full max-w-lg px-1 sm:px-0">
+              <p className="text-[10px] sm:text-xs text-gray-500 mb-1 uppercase">
+                You said:
+              </p>
+              <p className="text-white text-base sm:text-lg">
+                {bottomState.original}
+              </p>
             </div>
           )}
 
           {/* Translation from top speaker (what they said, translated for me) */}
           {bottomState.translated && (
-            <div className="w-full max-w-lg bg-[#0066FF]/20 rounded-xl p-4">
-              <p className="text-xs text-[#0066FF] mb-1 uppercase">
+            <div
+              className="w-full max-w-lg bg-[#0066FF]/20 rounded-xl p-3 sm:p-4"
+              role="region"
+              aria-live="polite"
+              aria-label="Translation"
+            >
+              <p className="text-[10px] sm:text-xs text-[#0066FF] mb-1 uppercase">
                 They said (translated):
               </p>
-              <p className="text-white text-xl font-medium">
+              <p className="text-white text-lg sm:text-xl font-medium">
                 {bottomState.translated}
               </p>
             </div>
           )}
 
-          {/* Big mic button */}
+          {/* Big mic button - responsive size */}
           <button
             onClick={() => toggleListening("bottom")}
-            className={`w-24 h-24 rounded-full flex items-center justify-center text-4xl transition-all shadow-lg ${
+            className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center text-3xl sm:text-4xl transition-all shadow-lg ${
               bottomState.isListening
                 ? "bg-red-500 animate-pulse scale-110"
                 : "bg-[#0066FF] hover:bg-[#0055DD] hover:scale-105"
             }`}
+            aria-label={
+              bottomState.isListening ? "Stop speaking" : "Start speaking"
+            }
           >
             {bottomState.isListening ? "⏹" : "🎤"}
           </button>

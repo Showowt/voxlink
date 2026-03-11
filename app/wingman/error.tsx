@@ -23,13 +23,13 @@ export default function WingmanError({
       <div className="max-w-md text-center">
         <div className="text-5xl mb-4">🎧</div>
         <h1 className="text-2xl font-bold mb-2">Wingman Hit a Snag</h1>
-        <p className="text-white/50 text-sm mb-6">
+        <p className="text-white/70 text-sm mb-6">
           Something went wrong loading Wingman Mode. This might be due to
           browser permissions or an unsupported browser.
         </p>
 
         <div className="bg-white/5 rounded-xl p-4 mb-6 text-left">
-          <p className="text-xs text-white/30 font-mono break-all">
+          <p className="text-xs text-white/70 font-mono break-all">
             {error.message || "Unknown error"}
           </p>
         </div>
@@ -49,7 +49,7 @@ export default function WingmanError({
           </a>
         </div>
 
-        <div className="mt-8 text-xs text-white/30">
+        <div className="mt-8 text-xs text-white/70">
           <p className="font-semibold mb-2">Troubleshooting:</p>
           <ul className="space-y-1 text-left">
             <li>• Use Chrome, Safari, or Edge (latest version)</li>

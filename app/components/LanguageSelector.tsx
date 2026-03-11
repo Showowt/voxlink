@@ -63,7 +63,7 @@ export function LanguageSelector({
         </span>
         {!disabled && (
           <svg
-            className={`w-4 h-4 text-white/60 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+            className={`w-4 h-4 text-white/70 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -110,7 +110,7 @@ export function LanguageSelector({
               </span>
               <span className="flex-1 text-sm">{lang.name}</span>
               {lang.nativeName !== lang.name && (
-                <span className="text-xs text-white/40">{lang.nativeName}</span>
+                <span className="text-xs text-white/70">{lang.nativeName}</span>
               )}
             </button>
           ))}

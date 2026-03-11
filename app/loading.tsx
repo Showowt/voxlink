@@ -1,6 +1,11 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+// VOXXO - PREMIUM ROOT LOADING STATE
+// World-class loading animation with brand identity
+// ═══════════════════════════════════════════════════════════════════════════════
+
 export default function Loading() {
   return (
-    <div className="min-h-screen bg-void-DEFAULT flex items-center justify-center">
+    <div className="min-h-screen bg-void-DEFAULT flex items-center justify-center safe-all">
       <div className="text-center">
         {/* Premium spinning loader */}
         <div className="relative w-16 h-16 mx-auto mb-4">
@@ -32,7 +37,7 @@ export default function Loading() {
         <p className="text-white/60 text-base font-medium">Loading Voxxo...</p>
 
         {/* Subtle tagline */}
-        <p className="text-white/30 text-sm mt-1">
+        <p className="text-white/40 text-sm mt-1">
           Your Voice. Any Language. Instantly.
         </p>
       </div>

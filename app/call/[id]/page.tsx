@@ -202,14 +202,14 @@ function CyranoPanel({
             Cyrano
           </span>
           {isActive && (
-            <span className="text-xs text-white/30 font-medium">
+            <span className="text-xs text-white/70 font-medium">
               {activeMode.emoji} {activeMode.label}
             </span>
           )}
         </div>
         <button
           onClick={onClose}
-          className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg text-white/30 hover:text-white/60 hover:bg-white/[0.06] transition-all"
+          className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg text-white/70 hover:text-white/90 hover:bg-white/[0.06] transition-all"
         >
           ✕
         </button>
@@ -229,7 +229,7 @@ function CyranoPanel({
             >
               <button
                 onClick={() => setShowOnboarding(false)}
-                className="absolute top-2 right-2 text-amber-400/50 hover:text-amber-400 text-xs"
+                className="absolute top-2 right-2 text-amber-400/50 hover:text-amber-400 text-xs min-w-[44px] min-h-[44px] flex items-center justify-center"
               >
                 ✕
               </button>
@@ -254,7 +254,7 @@ function CyranoPanel({
             </div>
           )}
 
-          <p className="text-white/40 text-xs text-center tracking-wide">
+          <p className="text-white/70 text-xs text-center tracking-wide">
             Choose a mode for your conversation
           </p>
 
@@ -293,7 +293,7 @@ function CyranoPanel({
                   >
                     {mode.label}
                   </span>
-                  <span className="text-[11px] text-white/30 block truncate">
+                  <span className="text-[11px] text-white/70 block truncate">
                     {mode.shortDesc}
                   </span>
                 </div>
@@ -308,7 +308,7 @@ function CyranoPanel({
           </div>
 
           {/* Selected mode description */}
-          <p className="text-white/25 text-[11px] text-center leading-relaxed px-2">
+          <p className="text-white/70 text-[11px] text-center leading-relaxed px-2">
             {activeMode.description}
           </p>
 
@@ -345,7 +345,7 @@ function CyranoPanel({
                   color:
                     currentMode === mode.id
                       ? mode.color
-                      : "rgba(255,255,255,0.22)",
+                      : "rgba(255,255,255,0.70)",
                   fontWeight: currentMode === mode.id ? 700 : 400,
                 }}
               >
@@ -358,7 +358,7 @@ function CyranoPanel({
           {/* Live caption */}
           {liveCaption && (
             <div className="mx-3 mt-3 px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.07] shrink-0">
-              <span className="text-white/40 text-xs italic">
+              <span className="text-white/70 text-xs italic">
                 🎤 {liveCaption}
               </span>
             </div>
@@ -376,12 +376,18 @@ function CyranoPanel({
                 onChange={(e) => setManualInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && submitManual()}
                 placeholder="Type what they said..."
-                className="flex-1 bg-white/[0.05] border border-white/[0.09] rounded-lg px-3 py-2 text-white/80 text-xs placeholder:text-white/20 outline-none focus:border-amber-400/40 focus:bg-white/[0.07] transition-all"
+                inputMode="text"
+                autoComplete="off"
+                autoCorrect="on"
+                autoCapitalize="sentences"
+                spellCheck={true}
+                enterKeyHint="send"
+                className="flex-1 bg-white/[0.05] border border-white/[0.09] rounded-lg px-3 py-2 text-white/80 text-base placeholder:text-white/70 outline-none focus:border-amber-400/40 focus:bg-white/[0.07] transition-all min-h-[44px]"
               />
               <button
                 onClick={submitManual}
                 disabled={!manualInput.trim()}
-                className="px-3 py-2 bg-amber-400 disabled:bg-white/10 rounded-lg text-black disabled:text-white/25 text-xs font-bold transition-all hover:bg-amber-300 disabled:cursor-not-allowed"
+                className="px-3 py-2 bg-amber-400 disabled:bg-white/10 rounded-lg text-black disabled:text-white/70 text-xs font-bold transition-all hover:bg-amber-300 disabled:cursor-not-allowed min-w-[44px] min-h-[44px]"
               >
                 →
               </button>
@@ -401,7 +407,7 @@ function CyranoPanel({
                     />
                   ))}
                 </div>
-                <span className="text-white/30 text-xs tracking-wide">
+                <span className="text-white/70 text-xs tracking-wide">
                   Thinking...
                 </span>
               </div>
@@ -410,7 +416,7 @@ function CyranoPanel({
             {!isThinking && suggestions.length === 0 && !liveCaption && (
               <div className="flex flex-col items-center justify-center py-5 gap-2">
                 <span className="text-2xl opacity-20">{activeMode.emoji}</span>
-                <p className="text-white/20 text-xs text-center max-w-[200px] leading-relaxed">
+                <p className="text-white/70 text-xs text-center max-w-[200px] leading-relaxed">
                   Suggestions appear after they speak. Cyrano is listening.
                 </p>
               </div>
@@ -454,7 +460,7 @@ function CyranoPanel({
                 </button>
                 <button
                   onClick={dismissSuggestions}
-                  className="text-white/20 text-[11px] hover:text-white/40 transition-colors min-h-[36px] px-2"
+                  className="text-white/70 text-[11px] hover:text-white/90 transition-colors min-h-[36px] px-2"
                 >
                   dismiss
                 </button>
@@ -477,7 +483,7 @@ function CyranoPanel({
               <div
                 className={`w-2 h-2 rounded-full ${isListening ? "bg-green-400 animate-pulse" : "bg-zinc-600"}`}
               />
-              <span className="text-white/30 text-xs">
+              <span className="text-white/70 text-xs">
                 {isListening ? "Listening" : "Mic off"}
               </span>
             </div>
@@ -485,14 +491,14 @@ function CyranoPanel({
               {transcript.length > 0 && (
                 <button
                   onClick={clearTranscript}
-                  className="text-white/25 text-xs hover:text-white/50 transition-colors min-h-[44px] px-3"
+                  className="text-white/70 text-xs hover:text-white/90 transition-colors min-w-[44px] min-h-[44px] px-3"
                 >
                   clear
                 </button>
               )}
               <button
                 onClick={deactivate}
-                className="text-red-400/60 text-xs font-medium hover:text-red-400 transition-colors min-h-[44px] px-3"
+                className="text-red-400/60 text-xs font-medium hover:text-red-400 transition-colors min-w-[44px] min-h-[44px] px-3"
               >
                 stop
               </button>
@@ -539,7 +545,7 @@ function SuggestionCard({
         </div>
         <span
           className="text-[10px] transition-all"
-          style={{ color: copied ? "#10b981" : "rgba(255,255,255,0.2)" }}
+          style={{ color: copied ? "#10b981" : "rgba(255,255,255,0.70)" }}
         >
           {copied ? "✓ copied" : "tap"}
         </span>
@@ -1470,7 +1476,7 @@ function VideoCallContent() {
   }
 
   return (
-    <div className="min-h-screen bg-black flex flex-col">
+    <div className="min-h-screen-safe bg-black flex flex-col safe-x">
       {/* Video Container */}
       <div className="flex-1 relative overflow-hidden">
         {/* Remote Video (full screen) */}
@@ -1492,6 +1498,10 @@ function VideoCallContent() {
               boxShadow:
                 "0 0 32px rgba(245,158,11,0.1), 0 8px 32px rgba(0,0,0,0.5)",
             }}
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            aria-label="Cyrano suggestion"
           >
             <span className="text-amber-400 text-sm mt-0.5 shrink-0">🎭</span>
             <p className="text-white/90 text-sm leading-relaxed flex-1">
@@ -1499,7 +1509,8 @@ function VideoCallContent() {
             </p>
             <button
               onClick={() => setCyranoPhrase("")}
-              className="text-white/25 hover:text-white/60 transition-colors text-lg leading-none shrink-0 mt-0.5"
+              className="text-white/70 hover:text-white/90 transition-colors text-lg leading-none shrink-0 mt-0.5 min-w-[44px] min-h-[44px] flex items-center justify-center"
+              aria-label="Dismiss suggestion"
             >
               ×
             </button>
@@ -1535,7 +1546,12 @@ function VideoCallContent() {
               ) : (
                 <>
                   <div className="w-16 h-16 md:w-20 md:h-20 border-4 border-[#00C896] border-t-transparent rounded-full animate-spin mx-auto mb-6" />
-                  <p className="text-white text-lg md:text-xl mb-2">
+                  <p
+                    className="text-white text-lg md:text-xl mb-2"
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                  >
                     {statusMessage}
                   </p>
                   {isHost &&
@@ -1549,7 +1565,7 @@ function VideoCallContent() {
                         </p>
                         <button
                           onClick={copyLink}
-                          className="mt-3 px-4 py-2 bg-[#00C896]/20 text-[#00C896] text-sm min-h-[44px]"
+                          className="mt-3 px-4 py-2 bg-[#00C896]/20 text-[#00C896] text-sm min-w-[44px] min-h-[44px]"
                         >
                           {copied ? "✓ Link Copied" : "🔗 Copy Join Link"}
                         </button>
@@ -1562,7 +1578,7 @@ function VideoCallContent() {
         )}
 
         {/* Local video PIP - Mobile optimized */}
-        <div className="absolute top-safe right-2 w-20 h-28 sm:w-24 sm:h-32 md:w-40 md:h-56 bg-black/50 overflow-hidden shadow-2xl border border-white/20">
+        <div className="absolute top-safe right-1 sm:right-2 w-16 h-22 xs:w-20 xs:h-28 sm:w-24 sm:h-32 md:w-40 md:h-56 bg-black/50 overflow-hidden shadow-2xl border border-white/20 rounded-lg sm:rounded-none">
           <video
             ref={localVideoRef}
             autoPlay
@@ -1583,20 +1599,20 @@ function VideoCallContent() {
         </div>
 
         {/* Header - Mobile optimized */}
-        <div className="absolute top-safe left-2 right-24 sm:right-28 md:right-44 flex items-center gap-2">
-          <div className="flex items-center gap-1.5 bg-black/50 backdrop-blur px-2 py-1.5 md:px-3 md:py-2 min-h-[44px]">
+        <div className="absolute top-safe left-1 sm:left-2 right-18 xs:right-24 sm:right-28 md:right-44 flex items-center gap-1 sm:gap-2 flex-wrap">
+          <div className="flex items-center gap-1 sm:gap-1.5 bg-black/50 backdrop-blur px-1.5 sm:px-2 py-1 sm:py-1.5 md:px-3 md:py-2 min-h-[36px] sm:min-h-[44px] rounded-md sm:rounded-none">
             <div
-              className={`w-2 h-2 md:w-2.5 md:h-2.5 rounded-full ${statusColor}`}
+              className={`w-1.5 h-1.5 sm:w-2 sm:h-2 md:w-2.5 md:h-2.5 rounded-full ${statusColor}`}
             />
-            <span className="text-gray-400 text-xs md:text-sm font-mono">
+            <span className="text-gray-400 text-[10px] sm:text-xs md:text-sm font-mono">
               #{roomCode}
             </span>
           </div>
 
           {/* Call Duration Timer */}
           {hasPartner && callDuration > 0 && (
-            <div className="flex items-center gap-1.5 bg-black/50 backdrop-blur px-2 py-1.5 md:px-3 md:py-2 min-h-[44px]">
-              <span className="text-white text-xs md:text-sm font-mono">
+            <div className="flex items-center gap-1 sm:gap-1.5 bg-black/50 backdrop-blur px-1.5 sm:px-2 py-1 sm:py-1.5 md:px-3 md:py-2 min-h-[36px] sm:min-h-[44px] rounded-md sm:rounded-none">
+              <span className="text-white text-[10px] sm:text-xs md:text-sm font-mono">
                 {formatDuration(callDuration)}
               </span>
             </div>
@@ -1604,18 +1620,18 @@ function VideoCallContent() {
 
           {/* Connection Quality Indicator */}
           {hasPartner && quality && (
-            <div className="flex items-center gap-1.5 bg-black/50 backdrop-blur px-2 py-1.5 md:px-3 md:py-2 min-h-[44px]">
+            <div className="hidden xs:flex items-center gap-1 sm:gap-1.5 bg-black/50 backdrop-blur px-1.5 sm:px-2 py-1 sm:py-1.5 md:px-3 md:py-2 min-h-[36px] sm:min-h-[44px] rounded-md sm:rounded-none">
               {/* Quality bars */}
-              <div className="flex items-end gap-0.5 h-4">
+              <div className="flex items-end gap-0.5 h-3 sm:h-4">
                 {[1, 2, 3, 4].map((bar) => {
                   const { count, color } = getQualityBars(quality);
                   return (
                     <div
                       key={bar}
-                      className={`w-1 rounded-sm transition-all ${
+                      className={`w-0.5 sm:w-1 rounded-sm transition-all ${
                         bar <= count ? color : "bg-gray-600"
                       }`}
-                      style={{ height: `${bar * 4}px` }}
+                      style={{ height: `${bar * 3}px` }}
                     />
                   );
                 })}
@@ -1629,7 +1645,11 @@ function VideoCallContent() {
 
           {/* Unstable connection warning */}
           {hasPartner && quality && quality.quality === "poor" && (
-            <div className="flex items-center gap-1.5 bg-red-500/20 backdrop-blur px-2 py-1.5 md:px-3 md:py-2 min-h-[44px] border border-red-500/30">
+            <div
+              className="flex items-center gap-1.5 bg-red-500/20 backdrop-blur px-2 py-1.5 md:px-3 md:py-2 min-h-[44px] border border-red-500/30"
+              role="alert"
+              aria-live="assertive"
+            >
               <span className="text-red-400 text-[10px] md:text-xs">
                 ⚠️ Unstable
               </span>
@@ -1638,7 +1658,12 @@ function VideoCallContent() {
 
           {/* ICE Connection State Indicator */}
           {iceState && iceState !== "connected" && iceState !== "completed" && (
-            <div className="flex items-center gap-1.5 bg-black/50 backdrop-blur px-2 py-1.5 md:px-3 md:py-2 min-h-[44px]">
+            <div
+              className="flex items-center gap-1.5 bg-black/50 backdrop-blur px-2 py-1.5 md:px-3 md:py-2 min-h-[44px]"
+              role="status"
+              aria-live={iceState === "failed" ? "assertive" : "polite"}
+              aria-atomic="true"
+            >
               <div
                 className={`w-2 h-2 rounded-full ${
                   iceState === "checking" || iceState === "new"
@@ -1675,7 +1700,7 @@ function VideoCallContent() {
                         : "small",
                   )
                 }
-                className="bg-black/50 backdrop-blur px-2 py-1.5 md:px-3 md:py-2 text-xs md:text-sm min-h-[44px] text-white hover:text-[#00C896] transition-colors"
+                className="bg-black/50 backdrop-blur px-2 py-1.5 md:px-3 md:py-2 text-xs md:text-sm min-w-[44px] min-h-[44px] text-white hover:text-[#00C896] transition-colors"
                 title={`Caption size: ${fontSize}`}
               >
                 {fontSize === "small"
@@ -1686,7 +1711,7 @@ function VideoCallContent() {
               </button>
               <button
                 onClick={() => setShowHistory(!showHistory)}
-                className={`bg-black/50 backdrop-blur px-2 py-1.5 md:px-3 md:py-2 text-xs md:text-sm min-h-[44px] ${showHistory ? "text-[#00C896]" : "text-white"}`}
+                className={`bg-black/50 backdrop-blur px-2 py-1.5 md:px-3 md:py-2 text-xs md:text-sm min-w-[44px] min-h-[44px] ${showHistory ? "text-[#00C896]" : "text-white"}`}
               >
                 📜 {transcript.length > 0 && `(${transcript.length})`}
               </button>
@@ -1700,7 +1725,13 @@ function VideoCallContent() {
           {theirLiveText && (
             <div className="flex justify-start caption-slide-in">
               <div className="max-w-[95%] md:max-w-[75%]">
-                <div className="bg-purple-500/20 backdrop-blur-xl border border-purple-500/30 px-3 py-2 md:px-4 md:py-3 shadow-lg">
+                <div
+                  className="bg-purple-500/20 backdrop-blur-xl border border-purple-500/30 px-3 py-2 md:px-4 md:py-3 shadow-lg"
+                  role="log"
+                  aria-live="polite"
+                  aria-atomic="true"
+                  aria-label="Partner speaking"
+                >
                   <div className="flex items-center gap-2 mb-1.5">
                     <span className="text-purple-400 text-xs font-medium">
                       {partnerName || "Partner"}
@@ -1721,6 +1752,7 @@ function VideoCallContent() {
                             ? "text-base md:text-lg"
                             : "text-lg md:text-2xl"
                       }`}
+                      aria-label="Translation"
                     >
                       {theirLiveTranslation}
                     </p>
@@ -1734,7 +1766,13 @@ function VideoCallContent() {
           {myLiveText && (
             <div className="flex justify-end caption-slide-in">
               <div className="max-w-[95%] md:max-w-[75%]">
-                <div className="bg-[#00C896]/20 backdrop-blur-xl border border-[#00C896]/30 px-3 py-2 md:px-4 md:py-3 shadow-lg">
+                <div
+                  className="bg-[#00C896]/20 backdrop-blur-xl border border-[#00C896]/30 px-3 py-2 md:px-4 md:py-3 shadow-lg"
+                  role="log"
+                  aria-live="polite"
+                  aria-atomic="true"
+                  aria-label="You speaking"
+                >
                   <div className="flex items-center gap-2 mb-1.5">
                     <span className="text-[#00C896] text-xs font-medium">
                       You
@@ -1756,6 +1794,7 @@ function VideoCallContent() {
                             ? "text-base md:text-lg"
                             : "text-lg md:text-2xl"
                       }`}
+                      aria-label="Translation"
                     >
                       → {myLiveTranslation}
                     </p>
@@ -1768,7 +1807,11 @@ function VideoCallContent() {
 
         {/* History Panel - Mobile full width */}
         {showHistory && (
-          <div className="absolute inset-x-0 md:left-4 md:right-auto top-14 md:top-16 bottom-24 md:bottom-28 md:w-96 bg-black/95 md:bg-black/90 backdrop-blur-xl border-y md:border border-white/10 flex flex-col z-10">
+          <div
+            className="absolute inset-x-0 md:left-4 md:right-auto top-14 md:top-16 bottom-24 md:bottom-28 md:w-96 bg-black/95 md:bg-black/90 backdrop-blur-xl border-y md:border border-white/10 flex flex-col z-10"
+            role="region"
+            aria-label="Conversation history"
+          >
             <div className="p-3 border-b border-white/10 flex items-center justify-between">
               <h3 className="text-white font-medium text-sm md:text-base">
                 History
@@ -1776,11 +1819,17 @@ function VideoCallContent() {
               <button
                 onClick={() => setShowHistory(false)}
                 className="text-gray-400 hover:text-white min-w-[44px] min-h-[44px] flex items-center justify-center"
+                aria-label="Close history"
               >
                 ✕
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-3 space-y-3">
+            <div
+              className="flex-1 overflow-y-auto p-3 space-y-3"
+              role="log"
+              aria-live="polite"
+              aria-relevant="additions"
+            >
               {transcript.length === 0 ? (
                 <p className="text-gray-500 text-sm text-center py-8">
                   Start speaking to see history
@@ -1870,7 +1919,7 @@ function VideoCallContent() {
                 {/* Expand button */}
                 <button
                   onClick={() => setCyranoOpen(true)}
-                  className="flex-shrink-0 px-2 flex items-center justify-center text-amber-400/60 hover:text-amber-400 transition-colors"
+                  className="flex-shrink-0 px-2 flex items-center justify-center text-amber-400/60 hover:text-amber-400 transition-colors min-w-[44px] min-h-[44px]"
                   title="Open Cyrano panel"
                 >
                   <svg
@@ -1891,7 +1940,7 @@ function VideoCallContent() {
                 {/* Dismiss button */}
                 <button
                   onClick={() => cyrano.dismissSuggestions()}
-                  className="flex-shrink-0 px-2 flex items-center justify-center text-white/20 hover:text-white/50 transition-colors"
+                  className="flex-shrink-0 px-2 flex items-center justify-center text-white/70 hover:text-white/90 transition-colors min-w-[44px] min-h-[44px]"
                   title="Dismiss suggestions"
                 >
                   <svg
@@ -1919,7 +1968,7 @@ function VideoCallContent() {
           >
             <button
               onClick={() => setCyranoOpen(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-all hover:scale-105"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-all hover:scale-105 min-w-[44px] min-h-[44px]"
               style={{
                 background: "rgba(6,6,10,0.88)",
                 border: "1px solid rgba(245,158,11,0.4)",
@@ -2028,7 +2077,12 @@ function VideoCallContent() {
           </button>
         </div>
 
-        <p className="text-center text-xs md:text-sm mt-2 md:mt-3 text-gray-400">
+        <p
+          className="text-center text-xs md:text-sm mt-2 md:mt-3 text-gray-400"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
           {!isConnected ? (
             statusMessage
           ) : isListening ? (

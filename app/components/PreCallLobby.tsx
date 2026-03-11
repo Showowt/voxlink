@@ -404,7 +404,7 @@ export default function PreCallLobby({
                   <span className="text-2xl">{getFlag(userLang)}</span>
                   <p className="text-xs text-gray-400 mt-1">You</p>
                 </div>
-                <span className="text-xl text-white/50">↔</span>
+                <span className="text-xl text-white/70">↔</span>
                 <div className="text-center">
                   <span className="text-2xl">{getFlag(partnerLang)}</span>
                   <p className="text-xs text-gray-400 mt-1">Partner</p>

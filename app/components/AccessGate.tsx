@@ -215,6 +215,12 @@ export default function AccessGate({ children }: AccessGateProps) {
                 disabled={isLoading}
                 onChange={(e) => handleDigitChange(index, e.target.value)}
                 onKeyDown={(e) => handleKeyDown(index, e)}
+                autoComplete="one-time-code"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                enterKeyHint={index === 3 ? "go" : "next"}
+                aria-label={`Digit ${index + 1} of 4`}
                 className={`w-14 h-16 text-center text-2xl font-bold rounded-xl border-2 bg-[#1a1a2e] text-white focus:outline-none transition-all disabled:opacity-50 ${
                   error
                     ? "border-red-500"

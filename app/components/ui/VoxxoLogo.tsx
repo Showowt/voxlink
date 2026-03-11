@@ -86,7 +86,7 @@ const VoxxoLogo: FC<VoxxoLogoProps> = ({
           </h1>
 
           {/* Tagline */}
-          <p className="text-white/50 text-sm mt-1">
+          <p className="text-white/70 text-sm mt-1">
             Your Voice. Any Language. Instantly.
           </p>
         </div>

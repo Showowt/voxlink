@@ -3,8 +3,9 @@
 import { type FC, type ReactNode } from "react";
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ANIMATED BACKGROUND - Premium gradient mesh with optional particles
-// Features: gradient mesh, noise overlay, animated orbs
+// ANIMATED BACKGROUND - GPU-ACCELERATED PREMIUM GRADIENT MESH
+// Performance optimized for 60fps with compositor-only animations
+// Features: gradient mesh, noise overlay, animated orbs (GPU-accelerated)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 interface AnimatedBackgroundProps {
@@ -28,72 +29,58 @@ const AnimatedBackground: FC<AnimatedBackgroundProps> = ({
 
   return (
     <div
-      className={`relative min-h-[100dvh] ${backgrounds[variant]} ${className}`}
+      className={`relative min-h-screen-safe safe-x ${backgrounds[variant]} ${className}`}
     >
-      {/* Animated Gradient Orbs */}
+      {/* Animated Gradient Orbs - GPU-accelerated with will-change and transform3d */}
       {(variant === "mesh" || variant === "premium") && (
         <>
-          {/* Top-left orb */}
+          {/* Top-left orb - uses floatOrb animation from globals.css */}
           <div
-            className="absolute top-0 left-0 w-[600px] h-[600px] rounded-full opacity-30 blur-3xl pointer-events-none"
+            className="absolute top-0 left-0 w-[600px] h-[600px] rounded-full opacity-30 blur-3xl pointer-events-none animate-float-orb gpu-accelerated"
             style={{
               background:
                 "radial-gradient(circle, rgba(0, 229, 160, 0.15) 0%, transparent 70%)",
-              animation: "float 20s ease-in-out infinite",
+              willChange: "transform",
             }}
+            aria-hidden="true"
           />
 
           {/* Bottom-right orb */}
           <div
-            className="absolute bottom-0 right-0 w-[500px] h-[500px] rounded-full opacity-25 blur-3xl pointer-events-none"
+            className="absolute bottom-0 right-0 w-[500px] h-[500px] rounded-full opacity-25 blur-3xl pointer-events-none animate-float-orb-reverse gpu-accelerated"
             style={{
               background:
                 "radial-gradient(circle, rgba(0, 136, 255, 0.15) 0%, transparent 70%)",
-              animation: "float 25s ease-in-out infinite reverse",
+              willChange: "transform",
             }}
+            aria-hidden="true"
           />
 
-          {/* Center subtle orb */}
+          {/* Center subtle orb - uses pulseSoft for opacity animation (GPU-accelerated) */}
           <div
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full opacity-10 blur-3xl pointer-events-none"
+            className="absolute top-1/2 left-1/2 w-[800px] h-[800px] rounded-full opacity-10 blur-3xl pointer-events-none animate-pulse-soft gpu-accelerated"
             style={{
               background:
                 "radial-gradient(circle, rgba(0, 229, 160, 0.1) 0%, transparent 60%)",
-              animation: "pulse-soft 10s ease-in-out infinite",
+              transform: "translate3d(-50%, -50%, 0)",
+              willChange: "opacity",
             }}
+            aria-hidden="true"
           />
         </>
       )}
 
-      {/* Noise overlay for texture */}
+      {/* Noise overlay for texture - static, no animation needed */}
       <div
         className="absolute inset-0 opacity-[0.015] pointer-events-none"
         style={{
           backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
         }}
+        aria-hidden="true"
       />
 
       {/* Content */}
       <div className="relative z-10">{children}</div>
-
-      {/* Float animation */}
-      <style jsx>{`
-        @keyframes float {
-          0%,
-          100% {
-            transform: translateY(0) translateX(0);
-          }
-          25% {
-            transform: translateY(-20px) translateX(10px);
-          }
-          50% {
-            transform: translateY(0) translateX(20px);
-          }
-          75% {
-            transform: translateY(20px) translateX(10px);
-          }
-        }
-      `}</style>
     </div>
   );
 };

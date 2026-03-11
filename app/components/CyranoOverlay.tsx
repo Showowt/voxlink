@@ -86,7 +86,7 @@ function SuggestionCard({
         {/* Copy indicator */}
         <div
           className="text-xs transition-all duration-200"
-          style={{ color: copied ? "#10b981" : "rgba(255,255,255,0.3)" }}
+          style={{ color: copied ? "#10b981" : "rgba(255,255,255,0.7)" }}
         >
           {copied ? "✓ Copied" : "tap to copy"}
         </div>
@@ -113,7 +113,11 @@ function SuggestionCard({
 
 function ThinkingDots() {
   return (
-    <div className="flex items-center gap-3 py-3 px-4">
+    <div
+      className="flex items-center gap-3 py-3 px-4"
+      aria-live="polite"
+      aria-label="AI is thinking"
+    >
       <div className="flex gap-1">
         {[0, 1, 2].map((i) => (
           <div
@@ -125,7 +129,7 @@ function ThinkingDots() {
           />
         ))}
       </div>
-      <span className="text-white/40 text-xs tracking-wide">Thinking...</span>
+      <span className="text-white/70 text-xs tracking-wide">Thinking...</span>
     </div>
   );
 }
@@ -174,15 +178,22 @@ function ManualInput({ onSubmit }: { onSubmit: (text: string) => void }) {
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
         placeholder="Type what they just said..."
+        inputMode="text"
+        autoComplete="off"
+        autoCorrect="on"
+        autoCapitalize="sentences"
+        spellCheck={true}
+        enterKeyHint="send"
+        aria-label="Type what they said for AI suggestions"
         className="flex-1 bg-white/[0.06] border border-white/10 rounded-lg px-3 py-2
-                   text-white/80 text-xs placeholder:text-white/25 outline-none
-                   focus:border-amber-400/50 focus:bg-white/[0.08] transition-all"
+                   text-white/80 text-base placeholder:text-white/70 outline-none
+                   focus:border-amber-400/50 focus:bg-white/[0.08] transition-all min-h-[44px]"
       />
       <button
         onClick={handleSubmit}
         disabled={!value.trim()}
         className="px-3 py-2 bg-amber-400 disabled:bg-white/10 rounded-lg text-black
-                   disabled:text-white/30 text-xs font-bold transition-all
+                   disabled:text-white/70 text-xs font-bold transition-all
                    hover:bg-amber-300 disabled:cursor-not-allowed"
       >
         →
@@ -384,7 +395,11 @@ export default function CyranoOverlay({
               </span>
 
               {isActive && (
-                <span className="text-xs text-white/30">
+                <span
+                  className="text-xs text-white/70"
+                  aria-live="polite"
+                  aria-label={`Current mode: ${activeMode.label}`}
+                >
                   {activeMode.emoji} {activeMode.label}
                 </span>
               )}
@@ -395,7 +410,7 @@ export default function CyranoOverlay({
               {isActive && (
                 <button
                   onClick={() => setShowTranscript((v) => !v)}
-                  className="p-1.5 rounded-lg text-white/30 hover:text-white/60
+                  className="p-1.5 rounded-lg text-white/70 hover:text-white/90
                              hover:bg-white/[0.06] transition-all text-xs"
                   title="Toggle transcript"
                 >
@@ -406,7 +421,7 @@ export default function CyranoOverlay({
               {/* Collapse */}
               <button
                 onClick={() => setIsCollapsed(true)}
-                className="p-1.5 rounded-lg text-white/30 hover:text-white/60
+                className="p-1.5 rounded-lg text-white/70 hover:text-white/90
                            hover:bg-white/[0.06] transition-all"
               >
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -424,7 +439,7 @@ export default function CyranoOverlay({
           {/* ── MODE SELECTOR ──────────────────────────────────────── */}
           {!isActive && (
             <div className="p-4 flex flex-col gap-3">
-              <p className="text-white/40 text-xs text-center tracking-wide">
+              <p className="text-white/70 text-xs text-center tracking-wide">
                 Select your mode to start
               </p>
               <div className="grid grid-cols-2 gap-2">
@@ -503,7 +518,7 @@ export default function CyranoOverlay({
                       color:
                         currentMode === mode.id
                           ? mode.color
-                          : "rgba(255,255,255,0.25)",
+                          : "rgba(255,255,255,0.7)",
                       fontWeight: currentMode === mode.id ? 700 : 400,
                     }}
                   >
@@ -533,13 +548,17 @@ export default function CyranoOverlay({
                 </p>
 
                 <ManualInput onSubmit={addTheirLine} />
-                <p className="text-white/20 text-xs mt-1.5 text-center">
+                <p className="text-white/70 text-xs mt-1.5 text-center">
                   Type what they said · mic auto-captures your side
                 </p>
               </div>
 
               {/* Suggestions area */}
-              <div className="p-3 flex flex-col gap-2 min-h-[120px]">
+              <div
+                className="p-3 flex flex-col gap-2 min-h-[120px]"
+                aria-live="polite"
+                aria-label="AI coaching suggestions"
+              >
                 {isThinking && <ThinkingDots />}
 
                 {!isThinking && suggestions.length === 0 && (
@@ -547,7 +566,7 @@ export default function CyranoOverlay({
                     <div className="text-2xl opacity-30">
                       {activeMode.emoji}
                     </div>
-                    <p className="text-white/35 text-xs text-center max-w-[220px] leading-relaxed">
+                    <p className="text-white/70 text-xs text-center max-w-[220px] leading-relaxed">
                       Type what they just said, or speak — Cyrano hears you
                     </p>
                   </div>
@@ -576,7 +595,7 @@ export default function CyranoOverlay({
                     </button>
                     <button
                       onClick={dismissSuggestions}
-                      className="text-white/20 text-xs hover:text-white/40 transition-colors"
+                      className="text-white/70 text-xs hover:text-white/90 transition-colors"
                     >
                       dismiss
                     </button>
@@ -602,10 +621,10 @@ export default function CyranoOverlay({
                 <div className="flex items-center gap-2">
                   <div
                     className={`w-1.5 h-1.5 rounded-full ${
-                      isListening ? "bg-green-400 animate-pulse" : "bg-white/20"
+                      isListening ? "bg-green-400 animate-pulse" : "bg-white/70"
                     }`}
                   />
-                  <span className="text-white/30 text-xs">
+                  <span className="text-white/70 text-xs">
                     {isListening ? "Listening" : "Mic off"}
                   </span>
                 </div>
@@ -614,7 +633,7 @@ export default function CyranoOverlay({
                   {transcript.length > 0 && (
                     <button
                       onClick={clearTranscript}
-                      className="text-white/25 hover:text-white/50 text-xs transition-colors"
+                      className="text-white/70 hover:text-white/90 text-xs transition-colors"
                     >
                       clear
                     </button>
@@ -643,7 +662,7 @@ export default function CyranoOverlay({
               animation: "slideUp 0.2s ease",
             }}
           >
-            <p className="text-white/20 text-xs font-semibold tracking-widest uppercase">
+            <p className="text-white/70 text-xs font-semibold tracking-widest uppercase">
               Transcript
             </p>
             {transcript.map((entry, i) => (
@@ -695,7 +714,7 @@ export function CyranoPage() {
         >
           Cyrano Mode
         </h1>
-        <p className="text-white/40 text-sm max-w-xs mx-auto leading-relaxed">
+        <p className="text-white/70 text-sm max-w-xs mx-auto leading-relaxed">
           Real-time AI that tells you exactly what to say — on dates,
           interviews, hard conversations, and sales calls.
         </p>
@@ -721,8 +740,8 @@ export function CyranoPage() {
               opacity: 0.3,
             }}
           />
-          <p className="text-white/20 text-sm">Your call goes here</p>
-          <p className="text-white/15 text-xs">
+          <p className="text-white/70 text-sm">Your call goes here</p>
+          <p className="text-white/70 text-xs">
             Cyrano listens in the background ↘
           </p>
         </div>

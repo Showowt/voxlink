@@ -437,9 +437,9 @@ function ProximityContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#060810] via-[#0d1117] to-[#060810] flex flex-col">
+    <div className="min-h-screen-safe bg-gradient-to-br from-[#060810] via-[#0d1117] to-[#060810] flex flex-col safe-x">
       {/* Header */}
-      <div className="p-4 flex items-center justify-between">
+      <div className="p-4 flex items-center justify-between safe-top">
         <button
           onClick={() => router.push("/")}
           aria-label="Go back to home"
@@ -463,7 +463,7 @@ function ProximityContent() {
               <h2 className="text-xl font-bold text-white mb-2">
                 Proximity Connect
               </h2>
-              <p className="text-gray-400 text-sm max-w-xs mx-auto">
+              <p className="text-white/70 text-sm max-w-xs mx-auto">
                 Find nearby Voxxo users and start translated conversations
                 instantly
               </p>
@@ -471,7 +471,7 @@ function ProximityContent() {
 
             {/* Language Selection */}
             <div className="w-full max-w-xs mx-auto">
-              <label className="block text-sm text-gray-400 mb-2 text-center">
+              <label className="block text-sm text-white/70 mb-2 text-center">
                 You speak
               </label>
               <div className="grid grid-cols-4 gap-2">
@@ -481,10 +481,10 @@ function ProximityContent() {
                     onClick={() => setLanguage(lang.code)}
                     aria-label={`Select ${getLanguageName(lang.code)} as your language`}
                     aria-pressed={language === lang.code}
-                    className={`p-3 rounded-lg text-center transition ${
+                    className={`p-3 rounded-lg text-center transition min-h-[44px] min-w-[44px] flex items-center justify-center ${
                       language === lang.code
                         ? "bg-[#00DBA8] text-white"
-                        : "bg-[#1a1a2e] text-gray-400 hover:text-white"
+                        : "bg-[#1a1a2e] text-white/70 hover:text-white"
                     }`}
                   >
                     <span className="text-xl" aria-hidden="true">
@@ -508,12 +508,12 @@ function ProximityContent() {
             <button
               onClick={startProximity}
               aria-label="Enable location access and start discovering nearby users"
-              className="w-full max-w-xs py-4 bg-gradient-to-r from-[#00DBA8] to-[#0088FF] hover:from-[#00C896] hover:to-[#0066DD] rounded-xl text-white font-semibold text-lg transition shadow-lg shadow-[#00DBA8]/25"
+              className="w-full max-w-xs py-4 bg-gradient-to-r from-[#00DBA8] to-[#0088FF] hover:from-[#00C896] hover:to-[#0066DD] rounded-xl text-white font-semibold text-lg transition shadow-lg shadow-[#00DBA8]/25 min-h-[44px]"
             >
               📍 Enable Location & Start
             </button>
 
-            <p className="text-xs text-gray-500 max-w-xs mx-auto">
+            <p className="text-xs text-white/70 max-w-xs mx-auto">
               Your location is only shared with nearby users and deleted when
               you leave
             </p>
@@ -538,7 +538,7 @@ function ProximityContent() {
               <h2 className="text-xl font-bold text-white mb-2">
                 Location Access Needed
               </h2>
-              <p className="text-gray-400 text-sm">{error}</p>
+              <p className="text-white/70 text-sm">{error}</p>
             </div>
 
             {/* Instructions to enable location */}
@@ -546,33 +546,33 @@ function ProximityContent() {
               <p className="text-white text-sm font-medium">
                 How to enable location:
               </p>
-              <div className="space-y-2 text-xs text-gray-400">
+              <div className="space-y-2 text-xs text-white/70">
                 <p className="flex items-start gap-2">
                   <span className="text-[#00DBA8]">📱</span>
                   <span>
-                    <strong className="text-gray-300">iPhone Safari:</strong>{" "}
+                    <strong className="text-white">iPhone Safari:</strong>{" "}
                     Settings → Safari → Location → Allow
                   </span>
                 </p>
                 <p className="flex items-start gap-2">
                   <span className="text-[#00DBA8]">📱</span>
                   <span>
-                    <strong className="text-gray-300">iPhone Chrome:</strong>{" "}
+                    <strong className="text-white">iPhone Chrome:</strong>{" "}
                     Settings → Chrome → Location → Allow
                   </span>
                 </p>
                 <p className="flex items-start gap-2">
                   <span className="text-[#00DBA8]">🤖</span>
                   <span>
-                    <strong className="text-gray-300">Android:</strong> Tap the
+                    <strong className="text-white">Android:</strong> Tap the
                     lock icon in address bar → Permissions → Location → Allow
                   </span>
                 </p>
                 <p className="flex items-start gap-2">
                   <span className="text-[#00DBA8]">💻</span>
                   <span>
-                    <strong className="text-gray-300">Desktop:</strong> Click
-                    the lock icon next to URL → Site settings → Location → Allow
+                    <strong className="text-white">Desktop:</strong> Click the
+                    lock icon next to URL → Site settings → Location → Allow
                   </span>
                 </p>
               </div>
@@ -581,14 +581,14 @@ function ProximityContent() {
             <button
               onClick={() => window.location.reload()}
               aria-label="Reload page and try enabling location again"
-              className="w-full py-4 bg-gradient-to-r from-[#00DBA8] to-[#0088FF] rounded-xl text-white font-semibold transition"
+              className="w-full py-4 bg-gradient-to-r from-[#00DBA8] to-[#0088FF] rounded-xl text-white font-semibold transition min-h-[44px]"
             >
               🔄 Reload & Try Again
             </button>
             <button
               onClick={() => router.push("/")}
               aria-label="Go back to home page"
-              className="w-full py-3 bg-[#1a1a2e] border border-gray-700 rounded-xl text-gray-400 hover:text-white transition"
+              className="w-full py-3 bg-[#1a1a2e] border border-gray-700 rounded-xl text-white/70 hover:text-white transition min-h-[44px]"
             >
               Go Back
             </button>
@@ -597,14 +597,14 @@ function ProximityContent() {
 
         {/* Status: Broadcasting (Radar View) */}
         {status === "broadcasting" && (
-          <div className="w-full max-w-sm space-y-6">
-            {/* Radar */}
-            <div className="relative w-72 h-72 mx-auto">
-              {/* Radar circles */}
+          <div className="w-full max-w-sm space-y-4 sm:space-y-6 px-2 sm:px-0">
+            {/* Radar - responsive size for iPhone SE (375px) */}
+            <div className="relative w-56 h-56 sm:w-72 sm:h-72 mx-auto">
+              {/* Radar circles - responsive insets */}
               <div className="absolute inset-0 rounded-full border border-[#00DBA8]/20" />
-              <div className="absolute inset-8 rounded-full border border-[#00DBA8]/20" />
-              <div className="absolute inset-16 rounded-full border border-[#00DBA8]/20" />
-              <div className="absolute inset-24 rounded-full border border-[#00DBA8]/20" />
+              <div className="absolute inset-6 sm:inset-8 rounded-full border border-[#00DBA8]/20" />
+              <div className="absolute inset-12 sm:inset-16 rounded-full border border-[#00DBA8]/20" />
+              <div className="absolute inset-[72px] sm:inset-24 rounded-full border border-[#00DBA8]/20" />
 
               {/* Radar sweep */}
               <div
@@ -625,10 +625,10 @@ function ProximityContent() {
               {renderUserDots()}
 
               {/* Distance labels */}
-              <span className="absolute top-2 left-1/2 transform -translate-x-1/2 text-xs text-gray-500">
+              <span className="absolute top-2 left-1/2 transform -translate-x-1/2 text-xs text-white/70">
                 5km
               </span>
-              <span className="absolute top-1/4 left-1/2 transform -translate-x-1/2 text-xs text-gray-500">
+              <span className="absolute top-1/4 left-1/2 transform -translate-x-1/2 text-xs text-white/70">
                 2.5km
               </span>
             </div>
@@ -637,7 +637,7 @@ function ProximityContent() {
             <div className="text-center" role="status" aria-live="polite">
               <p className="text-white text-lg font-medium">
                 {nearbyUsers.length === 0 ? (
-                  <span className="text-gray-400">Scanning for users...</span>
+                  <span className="text-white/70">Scanning for users...</span>
                 ) : (
                   <>
                     <span className="text-[#00DBA8]">{nearbyUsers.length}</span>{" "}
@@ -645,7 +645,7 @@ function ProximityContent() {
                   </>
                 )}
               </p>
-              <p className="text-gray-500 text-sm mt-1">
+              <p className="text-white/70 text-sm mt-1">
                 {getLanguageFlag(language)} Broadcasting as{" "}
                 {getLanguageName(language)} speaker
               </p>
@@ -666,7 +666,7 @@ function ProximityContent() {
                       onClick={() => setSelectedUser(user)}
                       disabled={user.status !== "available"}
                       aria-label={`${getLanguageName(user.language)} speaker, ${formatDistance(user.distance)} away${user.status !== "available" ? ", currently unavailable" : ""}`}
-                      className={`w-full p-3 flex items-center gap-3 transition ${
+                      className={`w-full p-3 flex items-center gap-3 transition min-h-[44px] ${
                         user.status === "available"
                           ? "hover:bg-[#1a1a2e]"
                           : "opacity-50 cursor-not-allowed"
@@ -679,7 +679,7 @@ function ProximityContent() {
                         <p className="text-white text-sm">
                           {getLanguageName(user.language)} speaker
                         </p>
-                        <p className="text-gray-500 text-xs">
+                        <p className="text-white/70 text-xs">
                           {formatDistance(user.distance)} away
                         </p>
                       </div>
@@ -722,7 +722,7 @@ function ProximityContent() {
               <h3 className="text-xl font-bold text-white">
                 {getLanguageName(selectedUser.language)} Speaker
               </h3>
-              <p className="text-gray-400 text-sm mt-1">
+              <p className="text-white/70 text-sm mt-1">
                 {formatDistance(selectedUser.distance)} away
               </p>
             </div>
@@ -734,13 +734,20 @@ function ProximityContent() {
                 onChange={(e) => setConnectionMessage(e.target.value)}
                 placeholder="Add a message (optional)"
                 maxLength={200}
-                className="w-full px-4 py-3 bg-[#1a1a2e] border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-[#00DBA8] transition"
+                inputMode="text"
+                autoComplete="off"
+                autoCorrect="on"
+                autoCapitalize="sentences"
+                spellCheck={true}
+                enterKeyHint="send"
+                aria-label="Optional message to include with connection request"
+                className="w-full px-4 py-3 bg-[#1a1a2e] border border-gray-700 rounded-xl text-base text-white placeholder-white/70 focus:outline-none focus:border-[#00DBA8] transition min-h-[44px]"
               />
 
               <button
                 onClick={handleSendRequest}
                 disabled={isSending}
-                className="w-full py-4 bg-gradient-to-r from-[#00DBA8] to-[#0088FF] hover:from-[#00C896] hover:to-[#0066DD] rounded-xl text-white font-semibold text-lg transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-4 bg-gradient-to-r from-[#00DBA8] to-[#0088FF] hover:from-[#00C896] hover:to-[#0066DD] rounded-xl text-white font-semibold text-lg transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
               >
                 {isSending ? (
                   <span className="flex items-center justify-center gap-2">
@@ -754,7 +761,7 @@ function ProximityContent() {
 
               <button
                 onClick={() => setSelectedUser(null)}
-                className="w-full py-3 bg-[#1a1a2e] border border-gray-700 rounded-xl text-gray-400 hover:text-white transition"
+                className="w-full py-3 bg-[#1a1a2e] border border-gray-700 rounded-xl text-white/70 hover:text-white transition min-h-[44px]"
               >
                 Cancel
               </button>
@@ -774,7 +781,7 @@ function ProximityContent() {
               <h3 className="text-xl font-bold text-white">
                 Connection Request!
               </h3>
-              <p className="text-gray-400 text-sm mt-1">
+              <p className="text-white/70 text-sm mt-1">
                 Someone nearby wants to connect
               </p>
               {incomingRequest.message && (
@@ -788,7 +795,7 @@ function ProximityContent() {
               <button
                 onClick={() => handleRespondToRequest(true)}
                 disabled={isResponding}
-                className="w-full py-4 bg-gradient-to-r from-[#00DBA8] to-[#0088FF] hover:from-[#00C896] hover:to-[#0066DD] rounded-xl text-white font-semibold text-lg transition shadow-lg disabled:opacity-50"
+                className="w-full py-4 bg-gradient-to-r from-[#00DBA8] to-[#0088FF] hover:from-[#00C896] hover:to-[#0066DD] rounded-xl text-white font-semibold text-lg transition shadow-lg disabled:opacity-50 min-h-[44px]"
               >
                 {isResponding ? (
                   <span className="flex items-center justify-center gap-2">
@@ -803,7 +810,7 @@ function ProximityContent() {
               <button
                 onClick={() => handleRespondToRequest(false)}
                 disabled={isResponding}
-                className="w-full py-3 bg-red-500/20 border border-red-500/30 rounded-xl text-red-400 hover:bg-red-500/30 transition disabled:opacity-50"
+                className="w-full py-3 bg-red-500/20 border border-red-500/30 rounded-xl text-red-400 hover:bg-red-500/30 transition disabled:opacity-50 min-h-[44px]"
               >
                 ✕ Decline
               </button>
@@ -818,7 +825,8 @@ function ProximityContent() {
           {error}
           <button
             onClick={() => setError(null)}
-            className="ml-2 text-red-300 hover:text-white"
+            aria-label="Dismiss error message"
+            className="ml-2 text-red-300 hover:text-white min-h-[44px] min-w-[44px]"
           >
             ✕
           </button>
@@ -835,7 +843,7 @@ export default function ProximityPage() {
         <div className="min-h-screen bg-[#060810] flex items-center justify-center">
           <div className="text-center">
             <div className="w-12 h-12 border-4 border-[#00DBA8] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-gray-400">Loading Proximity...</p>
+            <p className="text-white/70">Loading Proximity...</p>
           </div>
         </div>
       }

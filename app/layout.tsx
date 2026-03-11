@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import AppShell from "./components/AppShell";
+import { AuthProvider } from "@/hooks/useAuth";
 
 export const metadata: Metadata = {
   title: "Voxxo — Your Voice. Any Language. Instantly.",
@@ -157,7 +158,9 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icons/apple-icon-180.png" />
       </head>
       <body className="safe-top safe-bottom overscroll-none">
-        <AppShell>{children}</AppShell>
+        <AuthProvider>
+          <AppShell>{children}</AppShell>
+        </AuthProvider>
       </body>
     </html>
   );

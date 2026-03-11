@@ -173,7 +173,7 @@ function SuggestionCard({
     <button
       onClick={onClick}
       className={[
-        "w-full text-left rounded-2xl border p-4 transition-all duration-200 group",
+        "w-full text-left rounded-2xl border p-4 transition-all duration-200 group min-h-[56px]",
         "active:scale-[0.98] hover:scale-[1.01]",
         c.bg,
         c.border,
@@ -225,6 +225,10 @@ export default function WingmanPage() {
   );
   const transcriptEndRef = useRef<HTMLDivElement>(null);
 
+  // ── Accessibility announcements ──
+  const [statusAnnouncement, setStatusAnnouncement] = useState("");
+  const [errorAnnouncement, setErrorAnnouncement] = useState("");
+
   // ── TTS hook ──
   const tts = useTTS({ language: myLang, enabled: ttsEnabled && isRunning });
 
@@ -258,6 +262,33 @@ export default function WingmanPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRunning, outputMode]);
 
+  // ── Accessibility announcements for mode changes ──
+  useEffect(() => {
+    if (isRunning) {
+      const modeName = CYRANO_MODES.find((m) => m.id === cyranoMode)?.label;
+      setStatusAnnouncement(`Wingman activated in ${modeName} mode`);
+    }
+  }, [cyranoMode, isRunning]);
+
+  useEffect(() => {
+    const lang = LANGUAGES.find((l) => l.code === myLang)?.label;
+    setStatusAnnouncement(`Language changed to ${lang}`);
+  }, [myLang]);
+
+  useEffect(() => {
+    if (wingman.suggestions.length > 0) {
+      setStatusAnnouncement(
+        `${wingman.suggestions.length} suggestions available`,
+      );
+    }
+  }, [wingman.suggestions.length]);
+
+  useEffect(() => {
+    if (autoTextMode) {
+      setStatusAnnouncement("Switched to text mode due to loud environment");
+    }
+  }, [autoTextMode]);
+
   // ── Auto-scroll transcript ──
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -268,23 +299,30 @@ export default function WingmanPage() {
     setShowSetup(false);
     setIsRunning(true);
     wingman.start();
+    setStatusAnnouncement("Wingman is now active and listening");
   };
 
   const handleStop = () => {
     setIsRunning(false);
     wingman.stop();
     tts.cancel();
+    setStatusAnnouncement("Wingman paused");
   };
 
   const handleTextSubmit = () => {
-    if (!textInput.trim()) return;
+    if (!textInput.trim()) {
+      setErrorAnnouncement("Please enter text before submitting");
+      return;
+    }
     wingman.addTheirText(textInput.trim());
     setTextInput("");
+    setStatusAnnouncement("Message received, generating suggestions");
   };
 
   const handleSelectSuggestion = (s: WingmanSuggestion) => {
     setCurrentSpeakingId(s.id);
     wingman.selectSuggestion(s);
+    setStatusAnnouncement(`Selected suggestion: ${s.text}`);
     setTimeout(() => setCurrentSpeakingId(null), 4000);
   };
 
@@ -293,26 +331,28 @@ export default function WingmanPage() {
   // ─────────────────────────────────────────────────────────────────────────────
   if (showSetup) {
     return (
-      <div className="min-h-screen bg-[#080808] text-white flex flex-col">
+      <div className="min-h-screen-safe bg-[#080808] text-white flex flex-col safe-x">
         {/* Ambient background */}
         <div className="fixed inset-0 pointer-events-none">
           <div className="absolute top-[-20%] left-[10%] w-[600px] h-[600px] rounded-full bg-indigo-600/[0.08] blur-[120px]" />
           <div className="absolute bottom-[-10%] right-[5%] w-[400px] h-[400px] rounded-full bg-violet-600/[0.06] blur-[100px]" />
         </div>
 
-        <div className="relative z-10 flex-1 flex flex-col max-w-lg mx-auto w-full px-5 py-8">
+        <div className="relative z-10 flex-1 flex flex-col max-w-lg mx-auto w-full px-3 sm:px-5 py-6 sm:py-8 safe-top">
           {/* Header */}
-          <div className="flex items-center justify-between mb-10">
+          <div className="flex items-center justify-between mb-6 sm:mb-10">
             <button
               onClick={() => router.back()}
-              className="text-white/40 hover:text-white/80 transition-colors"
+              className="text-white/70 hover:text-white/80 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
             >
               ←
             </button>
             <div className="text-center">
-              <div className="text-2xl mb-1">🎧</div>
-              <h1 className="text-xl font-bold tracking-tight">Wingman Mode</h1>
-              <p className="text-white/40 text-xs mt-0.5">
+              <div className="text-xl sm:text-2xl mb-1">🎧</div>
+              <h1 className="text-lg sm:text-xl font-bold tracking-tight">
+                Wingman Mode
+              </h1>
+              <p className="text-white/70 text-[10px] sm:text-xs mt-0.5">
                 AI in your ear, live
               </p>
             </div>
@@ -320,54 +360,66 @@ export default function WingmanPage() {
           </div>
 
           {/* Situation Mode */}
-          <section className="mb-8">
-            <label className="text-xs font-semibold uppercase tracking-widest text-white/40 mb-3 block">
+          <section className="mb-6 sm:mb-8">
+            <label className="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-white/70 mb-2 sm:mb-3 block">
               What&apos;s the situation?
             </label>
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
               {CYRANO_MODES.map((m) => (
                 <button
                   key={m.id}
                   onClick={() => setCyranoMode(m.id)}
                   className={[
-                    "rounded-2xl border p-4 text-left transition-all duration-200",
+                    "rounded-xl sm:rounded-2xl border p-3 sm:p-4 text-left transition-all duration-200 min-h-[52px] sm:min-h-[56px]",
                     cyranoMode === m.id
                       ? "bg-white/10 border-white/30"
                       : "bg-white/[0.03] border-white/[0.08] hover:bg-white/[0.06]",
                   ].join(" ")}
                 >
-                  <div className="text-2xl mb-2">{m.emoji}</div>
-                  <div className="font-semibold text-sm">{m.label}</div>
-                  <div className="text-white/40 text-xs mt-0.5">{m.desc}</div>
+                  <div className="text-xl sm:text-2xl mb-1.5 sm:mb-2">
+                    {m.emoji}
+                  </div>
+                  <div className="font-semibold text-xs sm:text-sm">
+                    {m.label}
+                  </div>
+                  <div className="text-white/70 text-[10px] sm:text-xs mt-0.5">
+                    {m.desc}
+                  </div>
                 </button>
               ))}
             </div>
           </section>
 
           {/* Output Mode */}
-          <section className="mb-8">
-            <label className="text-xs font-semibold uppercase tracking-widest text-white/40 mb-3 block">
+          <section className="mb-6 sm:mb-8">
+            <label className="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-white/70 mb-2 sm:mb-3 block">
               How should Wingman deliver?
             </label>
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1.5 sm:gap-2">
               {OUTPUT_MODES.map((m) => (
                 <button
                   key={m.id}
                   onClick={() => setOutputMode(m.id)}
                   className={[
-                    "rounded-xl border p-3.5 flex items-center gap-3 transition-all",
+                    "rounded-lg sm:rounded-xl border p-2.5 sm:p-3.5 flex items-center gap-2 sm:gap-3 transition-all min-h-[48px] sm:min-h-[56px]",
                     outputMode === m.id
                       ? "bg-white/10 border-white/25"
                       : "bg-white/[0.02] border-white/[0.08] hover:bg-white/[0.05]",
                   ].join(" ")}
                 >
-                  <span className="text-xl w-8 text-center">{m.icon}</span>
-                  <div className="text-left">
-                    <div className="font-semibold text-sm">{m.label}</div>
-                    <div className="text-white/40 text-xs">{m.desc}</div>
+                  <span className="text-lg sm:text-xl w-7 sm:w-8 text-center">
+                    {m.icon}
+                  </span>
+                  <div className="text-left flex-1 min-w-0">
+                    <div className="font-semibold text-xs sm:text-sm">
+                      {m.label}
+                    </div>
+                    <div className="text-white/70 text-[10px] sm:text-xs truncate">
+                      {m.desc}
+                    </div>
                   </div>
                   {outputMode === m.id && (
-                    <div className="ml-auto w-2 h-2 rounded-full bg-white" />
+                    <div className="ml-auto w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-white flex-shrink-0" />
                   )}
                 </button>
               ))}
@@ -375,17 +427,21 @@ export default function WingmanPage() {
           </section>
 
           {/* Languages */}
-          <section className="mb-8">
-            <label className="text-xs font-semibold uppercase tracking-widest text-white/40 mb-3 block">
+          <section className="mb-6 sm:mb-8">
+            <label className="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-white/70 mb-2 sm:mb-3 block">
               Languages
             </label>
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <div className="text-xs text-white/40 mb-1.5">You speak</div>
+            <div className="flex gap-2 sm:gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="text-[10px] sm:text-xs text-white/70 mb-1 sm:mb-1.5">
+                  You speak
+                </div>
                 <select
                   value={myLang}
                   onChange={(e) => setMyLang(e.target.value)}
-                  className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-white/25"
+                  autoComplete="language"
+                  aria-label="Select your language"
+                  className="w-full bg-white/[0.05] border border-white/10 rounded-lg sm:rounded-xl px-2 sm:px-3 py-2 sm:py-2.5 text-sm sm:text-base text-white outline-none focus:border-white/25 min-h-[44px]"
                 >
                   {LANGUAGES.map((l) => (
                     <option key={l.code} value={l.code}>
@@ -394,12 +450,16 @@ export default function WingmanPage() {
                   ))}
                 </select>
               </div>
-              <div className="flex-1">
-                <div className="text-xs text-white/40 mb-1.5">They speak</div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[10px] sm:text-xs text-white/70 mb-1 sm:mb-1.5">
+                  They speak
+                </div>
                 <select
                   value={theirLang}
                   onChange={(e) => setTheirLang(e.target.value)}
-                  className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-white/25"
+                  autoComplete="language"
+                  aria-label="Select their language"
+                  className="w-full bg-white/[0.05] border border-white/10 rounded-lg sm:rounded-xl px-2 sm:px-3 py-2 sm:py-2.5 text-sm sm:text-base text-white outline-none focus:border-white/25 min-h-[44px]"
                 >
                   {LANGUAGES.map((l) => (
                     <option key={l.code} value={l.code}>
@@ -412,35 +472,37 @@ export default function WingmanPage() {
           </section>
 
           {/* TTS toggle */}
-          <section className="mb-10">
+          <section className="mb-8 sm:mb-10">
             <button
               onClick={() => setTtsEnabled(!ttsEnabled)}
               className={[
-                "w-full flex items-center justify-between p-4 rounded-xl border transition-all",
+                "w-full flex items-center justify-between p-3 sm:p-4 rounded-lg sm:rounded-xl border transition-all min-h-[52px] sm:min-h-[56px]",
                 ttsEnabled
                   ? "bg-white/5 border-white/15"
                   : "bg-white/[0.02] border-white/[0.08]",
               ].join(" ")}
             >
-              <div className="flex items-center gap-3">
-                <span className="text-xl">🔊</span>
+              <div className="flex items-center gap-2 sm:gap-3">
+                <span className="text-lg sm:text-xl">🔊</span>
                 <div className="text-left">
-                  <div className="text-sm font-medium">Voice in AirPods</div>
-                  <div className="text-xs text-white/40">
+                  <div className="text-xs sm:text-sm font-medium">
+                    Voice in AirPods
+                  </div>
+                  <div className="text-[10px] sm:text-xs text-white/70">
                     Wingman speaks suggestions aloud
                   </div>
                 </div>
               </div>
               <div
                 className={[
-                  "w-11 h-6 rounded-full transition-all relative",
+                  "w-10 h-5 sm:w-11 sm:h-6 rounded-full transition-all relative flex-shrink-0",
                   ttsEnabled ? "bg-white/80" : "bg-white/15",
                 ].join(" ")}
               >
                 <div
                   className={[
-                    "absolute top-1 w-4 h-4 rounded-full bg-black transition-all",
-                    ttsEnabled ? "left-6" : "left-1",
+                    "absolute top-0.5 sm:top-1 w-4 h-4 rounded-full bg-black transition-all",
+                    ttsEnabled ? "left-5 sm:left-6" : "left-0.5 sm:left-1",
                   ].join(" ")}
                 />
               </div>
@@ -450,7 +512,7 @@ export default function WingmanPage() {
           {/* Start button */}
           <button
             onClick={handleStart}
-            className="w-full bg-white text-black font-bold py-4 rounded-2xl text-base tracking-tight hover:bg-white/90 active:bg-white/80 transition-all"
+            className="w-full bg-white text-black font-bold py-3 sm:py-4 rounded-xl sm:rounded-2xl text-sm sm:text-base tracking-tight hover:bg-white/90 active:bg-white/80 transition-all min-h-[48px] sm:min-h-[56px]"
           >
             Activate Wingman
           </button>
@@ -466,7 +528,7 @@ export default function WingmanPage() {
   const activeModeMeta = CYRANO_MODES.find((m) => m.id === cyranoMode)!;
 
   return (
-    <div className="min-h-screen bg-[#080808] text-white flex flex-col">
+    <div className="min-h-screen-safe bg-[#080808] text-white flex flex-col safe-x">
       {/* Ambient glow */}
       <div className="fixed inset-0 pointer-events-none">
         <div
@@ -481,15 +543,15 @@ export default function WingmanPage() {
         />
       </div>
 
-      <div className="relative z-10 flex flex-col h-screen max-w-lg mx-auto w-full">
+      <div className="relative z-10 flex flex-col h-screen-safe max-w-lg mx-auto w-full">
         {/* ── Top bar ── */}
-        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/[0.06]">
+        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/[0.06] safe-top">
           <button
             onClick={() => {
               handleStop();
               setShowSetup(true);
             }}
-            className="text-white/40 hover:text-white/70 text-sm transition-colors"
+            className="text-white/70 hover:text-white/90 text-sm transition-colors min-h-[44px] flex items-center"
           >
             ← Setup
           </button>
@@ -504,7 +566,7 @@ export default function WingmanPage() {
                 "flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border",
                 isRunning
                   ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/25"
-                  : "bg-white/5 text-white/40 border-white/10",
+                  : "bg-white/5 text-white/70 border-white/10",
               ].join(" ")}
             >
               <span
@@ -516,7 +578,7 @@ export default function WingmanPage() {
 
           <button
             onClick={isRunning ? handleStop : wingman.start}
-            className="text-white/60 hover:text-white text-xs border border-white/15 rounded-lg px-3 py-1.5 transition-all"
+            className="text-white/60 hover:text-white text-xs border border-white/15 rounded-lg px-3 py-1.5 transition-all min-h-[44px] flex items-center"
           >
             {isRunning ? "Pause" : "Resume"}
           </button>
@@ -548,7 +610,7 @@ export default function WingmanPage() {
               )}
             </div>
           ) : (
-            <div className="flex items-center gap-1.5 text-white/30 text-xs">
+            <div className="flex items-center gap-1.5 text-white/70 text-xs">
               <span>🎧</span>
               <span>
                 {OUTPUT_MODES.find((m) => m.id === outputMode)?.label} mode
@@ -581,7 +643,7 @@ export default function WingmanPage() {
               waveform={noise.waveform}
               isActive={wingman.isListening}
             />
-            <div className="text-xs text-white/30">
+            <div className="text-xs text-white/70">
               {wingman.isListening && effectiveMode !== "text"
                 ? `Listening for ${LANGUAGES.find((l) => l.code === theirLang)?.flag} …`
                 : effectiveMode === "text"
@@ -593,7 +655,7 @@ export default function WingmanPage() {
           {/* ── Last heard ── */}
           {wingman.lastTheirText && (
             <div className="mx-5 mb-3 px-4 py-3 bg-white/[0.04] rounded-xl border border-white/[0.08]">
-              <div className="text-xs text-white/35 mb-1 uppercase tracking-wider">
+              <div className="text-xs text-white/70 mb-1 uppercase tracking-wider">
                 They said
               </div>
               <p className="text-sm text-white/80 italic">
@@ -606,12 +668,12 @@ export default function WingmanPage() {
           {wingman.suggestions.length > 0 ? (
             <div className="px-5 flex flex-col gap-3 mb-4">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-white/35 uppercase tracking-widest">
+                <span className="text-xs text-white/70 uppercase tracking-widest">
                   Suggestions
                 </span>
                 <button
                   onClick={wingman.dismissSuggestions}
-                  className="text-xs text-white/20 hover:text-white/50 transition-colors"
+                  className="text-xs text-white/70 hover:text-white/90 transition-colors min-h-[44px] flex items-center"
                 >
                   dismiss
                 </button>
@@ -647,7 +709,7 @@ export default function WingmanPage() {
             {wingman.transcript.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center gap-3 pb-8">
                 <div className="text-4xl opacity-30">🎧</div>
-                <div className="text-white/25 text-sm max-w-[220px]">
+                <div className="text-white/70 text-sm max-w-[220px]">
                   {effectiveMode === "text"
                     ? "Type what they say. Wingman gives you the perfect response."
                     : `Wingman is listening for ${LANGUAGES.find((l) => l.code === theirLang)?.label}. Start the conversation.`}
@@ -668,7 +730,7 @@ export default function WingmanPage() {
                           : "bg-white/[0.05] text-white/75",
                       ].join(" ")}
                     >
-                      <div className="text-xs text-white/30 mb-0.5">
+                      <div className="text-xs text-white/70 mb-0.5">
                         {line.speaker === "you" ? "You" : "Them"}
                       </div>
                       {line.text}
@@ -682,10 +744,10 @@ export default function WingmanPage() {
         </div>
 
         {/* ── Bottom input (text mode / loud environment) ── */}
-        <div className="px-5 pb-6 pt-3 border-t border-white/[0.06]">
+        <div className="px-5 pb-6 pt-3 border-t border-white/[0.06] safe-area-bottom">
           {effectiveMode === "text" || noise.reading.autoTextMode ? (
             <div>
-              <div className="text-xs text-white/30 mb-2 flex items-center gap-1.5">
+              <div className="text-xs text-white/70 mb-2 flex items-center gap-1.5">
                 {noise.reading.autoTextMode && (
                   <span className="text-orange-300">🔇 Too loud for mic —</span>
                 )}
@@ -698,13 +760,20 @@ export default function WingmanPage() {
                   onChange={(e) => setTextInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleTextSubmit()}
                   placeholder="What did they say?"
-                  className="flex-1 bg-white/[0.06] border border-white/[0.12] rounded-xl px-4 py-3 text-sm text-white placeholder-white/25 outline-none focus:border-white/25 transition-colors"
+                  inputMode="text"
+                  autoComplete="off"
+                  autoCorrect="on"
+                  autoCapitalize="sentences"
+                  spellCheck={true}
+                  enterKeyHint="send"
+                  aria-label="Type what they said"
+                  className="flex-1 bg-white/[0.06] border border-white/[0.12] rounded-xl px-4 py-3 text-base text-white placeholder-white/70 outline-none focus:border-white/25 transition-colors min-h-[44px]"
                   autoFocus
                 />
                 <button
                   onClick={handleTextSubmit}
                   disabled={!textInput.trim()}
-                  className="bg-white text-black font-bold px-4 rounded-xl text-sm disabled:opacity-30 transition-all active:scale-95"
+                  className="bg-white text-black font-bold px-4 rounded-xl text-sm disabled:opacity-30 transition-all active:scale-95 min-h-[44px] min-w-[44px] flex items-center justify-center"
                 >
                   →
                 </button>
@@ -724,10 +793,10 @@ export default function WingmanPage() {
                   }
                 }}
                 className={[
-                  "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border text-sm font-medium transition-all",
+                  "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border text-sm font-medium transition-all min-h-[44px]",
                   noise.isActive
                     ? "bg-white/[0.08] border-white/20 text-white"
-                    : "bg-white/[0.03] border-white/[0.08] text-white/40",
+                    : "bg-white/[0.03] border-white/[0.08] text-white/70",
                 ].join(" ")}
               >
                 🔊{" "}
@@ -740,16 +809,24 @@ export default function WingmanPage() {
               <button
                 onClick={() => setTtsEnabled(!ttsEnabled)}
                 className={[
-                  "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border text-sm font-medium transition-all",
+                  "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border text-sm font-medium transition-all min-h-[44px]",
                   ttsEnabled
                     ? "bg-white/[0.08] border-white/20 text-white"
-                    : "bg-white/[0.03] border-white/[0.08] text-white/40",
+                    : "bg-white/[0.03] border-white/[0.08] text-white/70",
                 ].join(" ")}
               >
                 🎧 <span>{ttsEnabled ? "AirPods On" : "AirPods Off"}</span>
               </button>
             </div>
           )}
+        </div>
+
+        {/* ── Accessibility live regions ── */}
+        <div className="sr-only" aria-live="polite" aria-atomic="true">
+          {statusAnnouncement}
+        </div>
+        <div className="sr-only" aria-live="assertive" aria-atomic="true">
+          {errorAnnouncement}
         </div>
       </div>
     </div>

@@ -1,18 +1,31 @@
 "use client";
 
-import { forwardRef, type ReactNode, type HTMLAttributes } from "react";
+import {
+  forwardRef,
+  type ReactNode,
+  type HTMLAttributes,
+  type CSSProperties,
+} from "react";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // GLASS CARD - Premium glassmorphism container
-// Apple-level aesthetic with depth and blur effects
+// Apple-level iOS Control Center aesthetic with depth, blur, and inner highlights
 // ═══════════════════════════════════════════════════════════════════════════════
 
 interface GlassCardProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
-  variant?: "default" | "elevated" | "subtle" | "interactive";
+  variant?: "default" | "elevated" | "subtle" | "interactive" | "premium";
   padding?: "none" | "sm" | "md" | "lg";
-  glow?: "none" | "voxxo" | "blue" | "gold" | "error";
+  glow?: "none" | "voxxo" | "blue" | "gold" | "error" | "success";
   animate?: boolean;
+}
+
+// Extended CSSProperties to include webkit prefixes
+interface GlassStyles extends CSSProperties {
+  WebkitBackdropFilter?: string;
+  WebkitBackfaceVisibility?: "hidden" | "visible";
+  WebkitTapHighlightColor?: string;
+  WebkitUserSelect?: "none" | "auto" | "text" | "all";
 }
 
 const GlassCard = forwardRef<HTMLDivElement, GlassCardProps>(
@@ -28,19 +41,57 @@ const GlassCard = forwardRef<HTMLDivElement, GlassCardProps>(
     },
     ref,
   ) => {
-    // Base styles
+    // Base styles with GPU acceleration for smooth backdrop-filter
     const baseStyles =
-      "relative backdrop-blur-xl rounded-2xl border transition-all duration-300";
+      "relative rounded-2xl border transition-all duration-200";
 
-    // Variant styles
-    const variants = {
-      default:
-        "bg-gradient-to-br from-white/[0.08] to-white/[0.02] border-white/[0.12]",
-      elevated:
-        "bg-gradient-to-br from-white/[0.10] to-white/[0.04] border-white/[0.15] shadow-glass-lg",
-      subtle: "bg-white/[0.04] border-white/[0.08]",
-      interactive:
-        "bg-gradient-to-br from-white/[0.08] to-white/[0.02] border-white/[0.12] hover:border-white/[0.20] hover:bg-white/[0.10] cursor-pointer",
+    // Variant-specific inline styles for premium glassmorphism
+    // Using inline styles ensures -webkit-backdrop-filter is always applied for Safari
+    const variantStyles: Record<string, GlassStyles> = {
+      default: {
+        background:
+          "linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%)",
+        backdropFilter: "blur(24px) saturate(150%)",
+        WebkitBackdropFilter: "blur(24px) saturate(150%)",
+        borderColor: "rgba(255, 255, 255, 0.12)",
+        boxShadow:
+          "0 4px 24px rgba(0, 0, 0, 0.4), 0 0 0 0.5px rgba(255, 255, 255, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.08)",
+      },
+      elevated: {
+        background:
+          "linear-gradient(135deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.04) 100%)",
+        backdropFilter: "blur(40px) saturate(180%)",
+        WebkitBackdropFilter: "blur(40px) saturate(180%)",
+        borderColor: "rgba(255, 255, 255, 0.15)",
+        boxShadow:
+          "0 8px 32px rgba(0, 0, 0, 0.5), 0 16px 64px rgba(0, 0, 0, 0.3), 0 0 0 0.5px rgba(255, 255, 255, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
+      },
+      subtle: {
+        background: "rgba(255, 255, 255, 0.04)",
+        backdropFilter: "blur(16px) saturate(120%)",
+        WebkitBackdropFilter: "blur(16px) saturate(120%)",
+        borderColor: "rgba(255, 255, 255, 0.06)",
+        boxShadow:
+          "0 2px 12px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)",
+      },
+      interactive: {
+        background:
+          "linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%)",
+        backdropFilter: "blur(24px) saturate(150%)",
+        WebkitBackdropFilter: "blur(24px) saturate(150%)",
+        borderColor: "rgba(255, 255, 255, 0.12)",
+        boxShadow:
+          "0 4px 24px rgba(0, 0, 0, 0.4), 0 0 0 0.5px rgba(255, 255, 255, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.08)",
+        cursor: "pointer",
+      },
+      premium: {
+        background: "rgba(255, 255, 255, 0.06)",
+        backdropFilter: "blur(40px) saturate(180%)",
+        WebkitBackdropFilter: "blur(40px) saturate(180%)",
+        borderColor: "rgba(255, 255, 255, 0.1)",
+        boxShadow:
+          "0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 0.5px rgba(255, 255, 255, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 -1px 0 rgba(0, 0, 0, 0.1)",
+      },
     };
 
     // Padding styles
@@ -51,29 +102,62 @@ const GlassCard = forwardRef<HTMLDivElement, GlassCardProps>(
       lg: "p-6 sm:p-8",
     };
 
-    // Glow styles (applied via box-shadow)
-    const glowStyles = {
+    // Glow styles (applied via additional box-shadow)
+    const glowShadows: Record<string, string> = {
       none: "",
-      voxxo: "shadow-glow-voxxo",
-      blue: "shadow-glow-blue",
-      gold: "shadow-glow-gold",
-      error: "shadow-glow-error",
+      voxxo:
+        ", 0 0 40px rgba(0, 229, 160, 0.3), 0 0 80px rgba(0, 229, 160, 0.15)",
+      blue: ", 0 0 40px rgba(0, 136, 255, 0.3), 0 0 80px rgba(0, 136, 255, 0.15)",
+      gold: ", 0 0 40px rgba(245, 184, 0, 0.3), 0 0 80px rgba(245, 184, 0, 0.15)",
+      error: ", 0 0 20px rgba(255, 71, 87, 0.3)",
+      success: ", 0 0 20px rgba(0, 230, 118, 0.3)",
     };
 
-    // Animation
+    // Animation class
     const animationStyles = animate ? "animate-fade-up" : "";
 
-    // Box shadow for depth
-    const shadowStyle =
-      variant === "elevated"
-        ? "0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06)"
-        : "0 4px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.04)";
+    // Hover/active classes for interactive variant
+    const interactiveClasses =
+      variant === "interactive"
+        ? "hover:border-white/[0.20] active:scale-[0.995] active:opacity-95 select-none"
+        : "";
+
+    // Combine box shadow with glow
+    const baseShadow = (variantStyles[variant].boxShadow as string) || "";
+    const combinedStyle: GlassStyles = {
+      ...variantStyles[variant],
+      boxShadow: baseShadow + glowShadows[glow],
+      // GPU acceleration for smooth animations
+      transform: "translateZ(0)",
+      backfaceVisibility: "hidden",
+      WebkitBackfaceVisibility: "hidden",
+    };
+
+    // Touch interaction props for interactive variant
+    const touchProps =
+      variant === "interactive"
+        ? {
+            "data-haptic": "impact-light",
+            "data-touch-feedback": "true",
+            role: "button" as const,
+            tabIndex: 0,
+          }
+        : {};
+
+    // Add touch-specific styles for interactive
+    if (variant === "interactive") {
+      combinedStyle.touchAction = "manipulation";
+      combinedStyle.WebkitTapHighlightColor = "transparent";
+      combinedStyle.WebkitUserSelect = "none";
+      combinedStyle.userSelect = "none";
+    }
 
     return (
       <div
         ref={ref}
-        className={`${baseStyles} ${variants[variant]} ${paddings[padding]} ${glowStyles[glow]} ${animationStyles} ${className}`}
-        style={{ boxShadow: shadowStyle }}
+        className={`${baseStyles} ${paddings[padding]} ${interactiveClasses} ${animationStyles} ${className}`}
+        style={combinedStyle}
+        {...touchProps}
         {...props}
       >
         {children}

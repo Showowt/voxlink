@@ -36,14 +36,66 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
-/* Typography Hierarchy */
+/* ═══════════════════════════════════════════════════════════════════════════════
+   FLUID TYPOGRAPHY SYSTEM
+   World-class responsive type scaling with clamp()
+   Targets: iPhone SE (375px) → iPhone 14 Pro Max (430px) → iPad (768px+)
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* Base Typography */
 h1, h2, h3, h4, h5, h6, .font-syne, .font-display {
   font-family: 'Syne', sans-serif;
   letter-spacing: -0.02em;
+  text-wrap: balance; /* Modern text wrapping */
+  overflow-wrap: break-word;
+  word-break: break-word;
+  -webkit-hyphens: auto;
+  hyphens: auto;
 }
 
 code, pre, .font-mono {
   font-family: 'JetBrains Mono', monospace;
+}
+
+/* Prevent text overflow on small screens */
+p, span, div {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+/* Native heading fluid sizes (semantic HTML) */
+h1 {
+  font-size: clamp(1.75rem, 5vw + 0.5rem, 3rem);
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+}
+
+h2 {
+  font-size: clamp(1.5rem, 4vw + 0.25rem, 2.25rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+h3 {
+  font-size: clamp(1.25rem, 3vw + 0.25rem, 2rem);
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+}
+
+h4 {
+  font-size: clamp(1.125rem, 2.5vw + 0.25rem, 1.5rem);
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+h5 {
+  font-size: clamp(1rem, 2vw + 0.125rem, 1.125rem);
+  line-height: 1.3;
+}
+
+h6 {
+  font-size: clamp(0.875rem, 1.5vw + 0.25rem, 1rem);
+  line-height: 1.4;
 }
 
 /* Mobile viewport fix */
@@ -55,194 +107,410 @@ code, pre, .font-mono {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   GLASSMORPHISM UTILITIES
+   GLASSMORPHISM UTILITIES - Apple-Level Premium Glass Effects
+   iOS Control Center inspired frosted glass with depth and inner highlights
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 @layer components {
-  /* Glass Card - Primary container */
+  /* ─────────────────────────────────────────────────────────────────────────────
+     PREMIUM GLASS - iOS Control Center Quality
+     Layered shadows + inner highlight for true depth
+     ───────────────────────────────────────────────────────────────────────────── */
+
+  .glass-premium {
+    background: rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(40px) saturate(180%);
+    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1rem;
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.4),
+      0 0 0 0.5px rgba(255, 255, 255, 0.05),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+
+  .glass-premium:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow:
+      0 12px 48px rgba(0, 0, 0, 0.5),
+      0 0 0 0.5px rgba(255, 255, 255, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+  }
+
+  /* Primary Glass - Default container (GPU-accelerated) */
   .glass {
-    @apply bg-white/[0.06] backdrop-blur-xl border border-white/[0.08] rounded-2xl;
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.04);
+    @apply rounded-2xl;
+    background: rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(24px) saturate(150%);
+    -webkit-backdrop-filter: blur(24px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow:
+      0 4px 24px rgba(0, 0, 0, 0.4),
+      0 0 0 0.5px rgba(255, 255, 255, 0.04),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
   }
 
+  /* Elevated Glass - For modal/overlay layers */
+  .glass-elevated {
+    @apply rounded-2xl;
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(40px) saturate(180%);
+    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.5),
+      0 16px 64px rgba(0, 0, 0, 0.3),
+      0 0 0 0.5px rgba(255, 255, 255, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+
+  /* Subtle Glass - For backgrounds and less prominent elements */
+  .glass-subtle {
+    @apply rounded-2xl;
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(16px) saturate(120%);
+    -webkit-backdrop-filter: blur(16px) saturate(120%);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow:
+      0 2px 12px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+
+  /* Light Glass variant */
   .glass-light {
-    @apply bg-white/[0.08] backdrop-blur-md border border-white/[0.12] rounded-2xl;
+    @apply rounded-2xl;
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(16px) saturate(150%);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
   }
 
+  /* Dark Glass variant */
   .glass-dark {
-    @apply bg-black/40 backdrop-blur-xl border border-white/[0.06] rounded-2xl;
+    @apply rounded-2xl;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(24px) saturate(150%);
+    -webkit-backdrop-filter: blur(24px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow:
+      0 4px 24px rgba(0, 0, 0, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
   }
 
+  /* Glass Card - Premium interactive container */
   .glass-card {
-    @apply bg-gradient-to-br from-white/[0.08] to-white/[0.02] backdrop-blur-xl rounded-3xl border border-white/[0.12];
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06);
+    @apply rounded-3xl;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+    backdrop-filter: blur(40px) saturate(180%);
+    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.5),
+      0 0 0 0.5px rgba(255, 255, 255, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.05);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
   }
 
   .glass-card:hover {
-    @apply border-white/[0.18];
-    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.18);
+    box-shadow:
+      0 12px 48px rgba(0, 0, 0, 0.6),
+      0 0 0 0.5px rgba(255, 255, 255, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.05);
   }
 
-  /* Glass Button */
+  /* ─────────────────────────────────────────────────────────────────────────────
+     GLASS BUTTONS - Premium interactive elements with inner highlight
+     ───────────────────────────────────────────────────────────────────────────── */
+
   .glass-button {
-    @apply px-5 py-3 bg-white/[0.08] border border-white/[0.15] rounded-xl;
-    @apply hover:bg-white/[0.12] hover:border-white/25;
+    @apply px-5 py-3 rounded-xl;
+    @apply text-white/90 font-medium;
     @apply transition-all duration-200;
-    @apply text-white/90 hover:text-white font-medium;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(20px) saturate(150%);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow:
+      0 4px 16px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
   }
 
   .glass-button:hover {
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.25);
+    color: white;
+    box-shadow:
+      0 6px 24px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
     transform: translateY(-1px);
   }
 
   .glass-button:active {
     transform: translateY(0) scale(0.98);
+    box-shadow:
+      0 2px 8px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
   }
 
-  /* Primary Glow Button */
+  /* Primary Glow Button - CTA actions with inner highlight */
   .btn-primary {
     @apply px-6 py-3 font-semibold rounded-2xl;
     @apply bg-gradient-to-r from-voxxo-500 to-voxxo-600;
     @apply text-void-DEFAULT;
-    @apply shadow-btn-primary;
     @apply transition-all duration-200;
+    box-shadow:
+      0 4px 20px rgba(0, 229, 160, 0.25),
+      0 8px 40px rgba(0, 229, 160, 0.15),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
   }
 
   .btn-primary:hover {
     @apply from-voxxo-400 to-voxxo-500;
-    @apply shadow-btn-primary-hover;
+    box-shadow:
+      0 6px 30px rgba(0, 229, 160, 0.35),
+      0 12px 50px rgba(0, 229, 160, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.25);
     transform: translateY(-2px);
   }
 
   .btn-primary:active {
     @apply scale-95;
     transform: translateY(0);
+    box-shadow:
+      0 2px 10px rgba(0, 229, 160, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15);
   }
 
-  /* Glass Input */
+  /* ─────────────────────────────────────────────────────────────────────────────
+     GLASS INPUT - Form elements with depth
+     ───────────────────────────────────────────────────────────────────────────── */
+
   .glass-input {
-    @apply w-full px-4 py-3 bg-white/[0.06] border border-white/[0.15] rounded-xl;
+    @apply w-full px-4 py-3 rounded-xl;
     @apply text-white placeholder:text-white/40;
-    @apply focus:bg-white/[0.10] focus:border-voxxo-500/50 focus:outline-none;
     @apply transition-all duration-200;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    background: rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(16px) saturate(120%);
+    -webkit-backdrop-filter: blur(16px) saturate(120%);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow:
+      0 2px 8px rgba(0, 0, 0, 0.2),
+      inset 0 1px 2px rgba(0, 0, 0, 0.1),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.05);
   }
 
   .glass-input:focus {
-    box-shadow: 0 0 0 3px rgba(0, 229, 160, 0.15), 0 4px 16px rgba(0, 0, 0, 0.3);
+    @apply outline-none;
+    background: rgba(255, 255, 255, 0.10);
+    border-color: rgba(0, 229, 160, 0.5);
+    box-shadow:
+      0 0 0 3px rgba(0, 229, 160, 0.15),
+      0 4px 16px rgba(0, 0, 0, 0.3),
+      inset 0 1px 2px rgba(0, 0, 0, 0.1),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.08);
   }
 
-  /* Premium Status Badge */
+  /* ─────────────────────────────────────────────────────────────────────────────
+     STATUS BADGES - Premium indicator pills with glow
+     ───────────────────────────────────────────────────────────────────────────── */
+
   .status-badge {
     @apply inline-flex items-center gap-2 px-3 py-1.5 rounded-full;
     @apply text-xs font-semibold tracking-wide;
-    @apply bg-white/[0.08] border border-white/[0.12];
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
 
   .status-badge-success {
     @apply bg-status-success/15 border-status-success/30 text-status-success;
+    box-shadow:
+      0 0 12px rgba(0, 230, 118, 0.15),
+      inset 0 1px 0 rgba(0, 230, 118, 0.1);
   }
 
   .status-badge-error {
     @apply bg-status-error/15 border-status-error/30 text-status-error;
+    box-shadow:
+      0 0 12px rgba(255, 71, 87, 0.15),
+      inset 0 1px 0 rgba(255, 71, 87, 0.1);
   }
 
   .status-badge-warning {
     @apply bg-status-warning/15 border-status-warning/30 text-status-warning;
+    box-shadow:
+      0 0 12px rgba(255, 184, 0, 0.15),
+      inset 0 1px 0 rgba(255, 184, 0, 0.1);
   }
 
-  /* Premium Divider */
+  /* ─────────────────────────────────────────────────────────────────────────────
+     UTILITY ELEMENTS
+     ───────────────────────────────────────────────────────────────────────────── */
+
+  /* Premium Divider with fade */
   .divider {
     @apply w-full h-px bg-gradient-to-r from-transparent via-white/[0.12] to-transparent;
   }
 
-  /* Ring Glow Effect */
+  /* Ring Glow Effect - Enhanced */
   .ring-glow {
     @apply ring-2 ring-voxxo-500/30;
-    box-shadow: 0 0 20px rgba(0, 229, 160, 0.2);
+    box-shadow:
+      0 0 20px rgba(0, 229, 160, 0.2),
+      0 0 40px rgba(0, 229, 160, 0.1);
+  }
+
+  /* ─────────────────────────────────────────────────────────────────────────────
+     FALLBACK FOR BROWSERS WITHOUT BACKDROP-FILTER SUPPORT
+     ───────────────────────────────────────────────────────────────────────────── */
+  @supports not (backdrop-filter: blur(1px)) {
+    .glass,
+    .glass-premium,
+    .glass-elevated,
+    .glass-subtle,
+    .glass-light,
+    .glass-dark,
+    .glass-card,
+    .glass-button,
+    .glass-input,
+    .status-badge {
+      background: rgba(12, 16, 21, 0.95);
+    }
+
+    .glass-light {
+      background: rgba(18, 23, 31, 0.95);
+    }
   }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   PREMIUM ANIMATIONS
+   PREMIUM ANIMATIONS - GPU-ACCELERATED FOR 60FPS
+   All animations use transform and opacity only (compositor-only properties)
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 @keyframes fadeUp {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translate3d(0, 20px, 0);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0);
   }
 }
 
 @keyframes slideIn {
   from {
     opacity: 0;
-    transform: translateX(-10px);
+    transform: translate3d(-10px, 0, 0);
   }
   to {
     opacity: 1;
-    transform: translateX(0);
+    transform: translate3d(0, 0, 0);
   }
 }
 
 @keyframes scaleIn {
   from {
     opacity: 0;
-    transform: scale(0.95);
+    transform: scale3d(0.95, 0.95, 1);
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: scale3d(1, 1, 1);
   }
 }
 
+/* GPU-accelerated glow pulse using opacity and scale instead of box-shadow */
 @keyframes glowPulse {
   0%, 100% {
-    box-shadow: 0 0 20px rgba(0, 229, 160, 0.3);
+    opacity: 0.3;
+    transform: scale3d(1, 1, 1);
   }
   50% {
-    box-shadow: 0 0 40px rgba(0, 229, 160, 0.5), 0 0 60px rgba(0, 229, 160, 0.2);
+    opacity: 0.6;
+    transform: scale3d(1.02, 1.02, 1);
   }
 }
 
+/* Shimmer now uses transform for GPU acceleration */
 @keyframes shimmer {
   0% {
-    background-position: -200% 0;
+    transform: translate3d(-100%, 0, 0);
   }
   100% {
-    background-position: 200% 0;
+    transform: translate3d(100%, 0, 0);
   }
 }
 
 @keyframes float {
   0%, 100% {
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0);
   }
   50% {
-    transform: translateY(-10px);
+    transform: translate3d(0, -10px, 0);
   }
 }
 
 @keyframes pulse-ring {
   0% {
-    transform: scale(0.95);
+    transform: scale3d(0.95, 0.95, 1);
     opacity: 1;
   }
   100% {
-    transform: scale(1.5);
+    transform: scale3d(1.5, 1.5, 1);
     opacity: 0;
   }
 }
 
 @keyframes radar-sweep {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from { transform: rotate3d(0, 0, 1, 0deg); }
+  to { transform: rotate3d(0, 0, 1, 360deg); }
+}
+
+/* Float animation for background orbs - GPU-accelerated */
+@keyframes floatOrb {
+  0%, 100% {
+    transform: translate3d(0, 0, 0);
+  }
+  25% {
+    transform: translate3d(10px, -20px, 0);
+  }
+  50% {
+    transform: translate3d(20px, 0, 0);
+  }
+  75% {
+    transform: translate3d(10px, 20px, 0);
+  }
 }
 
 /* Stagger children animation utility */
@@ -269,13 +537,93 @@ code, pre, .font-mono {
   transform: scaleX(-1);
 }
 
-/* Safe area for notched phones */
+/* ═══════════════════════════════════════════════════════════════════════════════
+   SAFE AREA UTILITIES - For notched phones, Dynamic Island, home indicator
+   Works with viewportFit: cover in layout.tsx viewport config
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* Padding-based safe areas */
 .safe-top {
   padding-top: env(safe-area-inset-top, 0px);
 }
 
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.safe-left {
+  padding-left: env(safe-area-inset-left, 0px);
+}
+
+.safe-right {
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Combined safe areas */
+.safe-x {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+.safe-y {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.safe-all {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Margin-based safe areas (for absolute positioned elements) */
+.safe-top-margin {
+  margin-top: env(safe-area-inset-top, 0px);
+}
+
+.safe-bottom-margin {
+  margin-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Top offset for absolute/fixed positioned headers */
+.top-safe {
+  top: env(safe-area-inset-top, 0px);
+}
+
+.top-safe-plus {
+  top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
+}
+
+/* Bottom offset for absolute/fixed positioned footers */
+.bottom-safe {
+  bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.bottom-safe-plus {
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+}
+
+/* Safe area for bottom CTAs with minimum padding */
+.safe-area-bottom {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+}
+
+.safe-area-bottom-lg {
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom, 0px));
+}
+
+/* Full height with safe areas - use for full-screen layouts */
+.h-screen-safe {
+  height: 100vh;
+  height: 100dvh;
+  min-height: -webkit-fill-available;
+}
+
+.min-h-screen-safe {
+  min-height: 100vh;
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
 }
 
 /* Talk mode - full screen transcript */
@@ -305,16 +653,26 @@ code, pre, .font-mono {
   background-clip: text;
 }
 
-/* Shimmer loading effect */
+/* Shimmer loading effect - GPU-accelerated version */
 .skeleton {
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.05) 0%,
-    rgba(255, 255, 255, 0.1) 50%,
-    rgba(255, 255, 255, 0.05) 100%
+    transparent 0%,
+    rgba(255, 255, 255, 0.08) 50%,
+    transparent 100%
   );
-  background-size: 200% 100%;
   animation: shimmer 1.5s linear infinite;
+  will-change: transform;
+  transform: translateZ(0);
 }
 
 /* Noise texture overlay */
@@ -356,6 +714,93 @@ code, pre, .font-mono {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
+   PREMIUM TOUCH INTERACTIONS
+   Native iOS-quality touch feedback and states
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+@layer components {
+  /* Touch feedback - universal class for tappable elements */
+  .touch-feedback {
+    @apply active:scale-[0.98] transition-transform duration-150 ease-out;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Touch feedback with glow - for primary actions */
+  .touch-feedback-glow {
+    @apply active:scale-[0.98] transition-all duration-150 ease-out;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  .touch-feedback-glow:active {
+    box-shadow: 0 0 0 4px rgba(0, 229, 160, 0.2);
+  }
+
+  /* Subtle press - for cards and larger elements */
+  .touch-press-subtle {
+    @apply active:scale-[0.995] transition-transform duration-100 ease-out;
+    touch-action: manipulation;
+  }
+
+  /* Strong press - for important CTAs */
+  .touch-press-strong {
+    @apply active:scale-[0.96] transition-transform duration-100 ease-out;
+    touch-action: manipulation;
+  }
+
+  /* Button touch states */
+  .btn-touch {
+    @apply active:scale-[0.98] transition-all duration-150 ease-out;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* Card touch states */
+  .card-touch {
+    @apply active:scale-[0.995] active:opacity-95 transition-all duration-150 ease-out;
+    touch-action: manipulation;
+  }
+
+  /* Tab touch states */
+  .tab-touch {
+    @apply active:scale-[0.97] active:opacity-90 transition-all duration-100 ease-out;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
+/* Desktop-only hover glow effects */
+@media (hover: hover) and (pointer: fine) {
+  .hover-glow:hover {
+    box-shadow: 0 0 20px rgba(0, 229, 160, 0.15);
+  }
+
+  .hover-glow-strong:hover {
+    box-shadow: 0 0 30px rgba(0, 229, 160, 0.25);
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-2px);
+  }
+}
+
+/* Ensure no delay on touch devices */
+button,
+[role="button"],
+a,
+input[type="submit"],
+input[type="button"],
+.touchable {
+  touch-action: manipulation;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
    FOCUS & ACCESSIBILITY
    ═══════════════════════════════════════════════════════════════════════════════ */
 
@@ -365,35 +810,77 @@ code, pre, .font-mono {
   box-shadow: 0 0 0 3px rgba(0, 229, 160, 0.4);
 }
 
-/* Reduce motion for accessibility */
+/* Reduce motion for accessibility - COMPREHENSIVE */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
     scroll-behavior: auto !important;
+    background-attachment: scroll !important;
   }
 
+  /* Remove will-change to prevent GPU layer overhead */
+  .will-change-transform,
+  .will-change-opacity,
+  .will-change-animation,
+  .gpu-accelerated,
+  .gpu-layer {
+    will-change: auto !important;
+  }
+
+  /* Ensure all animated elements are visible */
   .stagger-children > * {
-    opacity: 1;
-    animation: none;
+    opacity: 1 !important;
+    animation: none !important;
+    transform: none !important;
+  }
+
+  /* Disable floating/pulsing background orbs */
+  .animate-float,
+  .animate-pulse-soft,
+  .animate-glow-pulse,
+  .animate-radar-sweep,
+  .animate-shimmer {
+    animation: none !important;
+  }
+
+  /* Ensure skeleton loaders still indicate loading without animation */
+  .skeleton::after {
+    animation: none !important;
+    opacity: 0.5;
+  }
+
+  /* Disable parallax and scroll-driven animations */
+  [data-scroll-animation],
+  [data-parallax] {
+    transform: none !important;
+  }
+
+  /* Static hover states */
+  .hover-lift:hover,
+  .glass-button:hover,
+  .btn-primary:hover {
+    transform: none !important;
   }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   LEGACY ANIMATIONS (for backwards compatibility)
+   LEGACY ANIMATIONS - GPU-ACCELERATED (for backwards compatibility)
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 @keyframes pulse {
   0%, 100% {
-    transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+    transform: scale3d(1, 1, 1);
+    opacity: 1;
   }
   50% {
-    transform: scale(1.05);
-    box-shadow: 0 0 0 20px rgba(239, 68, 68, 0);
+    transform: scale3d(1.05, 1.05, 1);
+    opacity: 0.8;
   }
 }
 
@@ -404,13 +891,659 @@ code, pre, .font-mono {
 
 .animate-pulse-soft {
   animation: pulse-soft 2s ease-in-out infinite;
+  will-change: opacity;
 }
 
 @keyframes fade-in {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translate3d(0, 10px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
 }
 
 .animate-fade-in {
   animation: fade-in 0.3s ease-out;
+  will-change: transform, opacity;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   GPU ACCELERATION UTILITIES - For silky smooth 60fps animations
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* Force GPU layer creation - use sparingly on animated elements */
+.gpu-accelerated {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* Alternative GPU acceleration with will-change */
+.gpu-layer {
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+}
+
+/* will-change utilities - apply before animation starts, remove after */
+.will-change-transform {
+  will-change: transform;
+}
+
+.will-change-opacity {
+  will-change: opacity;
+}
+
+.will-change-auto {
+  will-change: auto;
+}
+
+/* Combined will-change for common animation patterns */
+.will-change-animation {
+  will-change: transform, opacity;
+}
+
+/* Backdrop-filter GPU acceleration */
+.gpu-blur {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Prevent paint flashing on animated elements */
+.contain-paint {
+  contain: paint;
+}
+
+/* Isolation for stacking context (prevents repaint propagation) */
+.isolate-layer {
+  isolation: isolate;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOBILE INPUT OPTIMIZATIONS
+   Prevent iOS zoom on focus, native keyboard UX
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Prevent iOS zoom on input focus - requires minimum 16px font */
+input,
+textarea,
+select {
+  font-size: 16px !important;
+  /* Ensure proper touch sizing */
+  min-height: 44px;
+}
+
+/* Allow smaller fonts on hover-capable devices (desktop) */
+@media (hover: hover) and (pointer: fine) {
+  input,
+  textarea,
+  select {
+    font-size: inherit !important;
+    min-height: auto;
+  }
+}
+
+/* Keyboard avoiding - ensure content scrolls when keyboard opens */
+@supports (padding-bottom: env(keyboard-inset-height)) {
+  .keyboard-avoiding {
+    padding-bottom: env(keyboard-inset-height, 0);
+    transition: padding-bottom 0.25s ease-out;
+  }
+}
+
+/* Better touch targets for form elements */
+input[type="text"],
+input[type="search"],
+input[type="email"],
+input[type="tel"],
+input[type="number"],
+textarea {
+  /* Larger touch target */
+  padding: 12px 16px;
+  /* Prevent text selection issues */
+  -webkit-user-select: text;
+  user-select: text;
+  /* Better caret visibility */
+  caret-color: #00E5A0;
+}
+
+/* Ensure inputs don't zoom or resize on iOS */
+@supports (-webkit-touch-callout: none) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+    transform: translateZ(0);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FOCUS STATES (WCAG 2.4.7)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Global focus-visible for all interactive elements */
+a:focus-visible,
+button:focus-visible,
+[role="button"]:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #7C3AED;
+  outline-offset: 2px;
+}
+
+/* High contrast focus for buttons */
+button:focus-visible {
+  outline: 3px solid #7C3AED;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px rgba(124, 58, 237, 0.25);
+}
+
+/* Skip focus styles when using mouse */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Screen reader only utility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   PREMIUM SKELETON SHIMMER SYSTEM
+   World-class loading states with subtle gradient sweeps
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* Premium Shimmer - World-class loading states */
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.03) 0%,
+    rgba(255, 255, 255, 0.06) 50%,
+    rgba(255, 255, 255, 0.03) 100%
+  );
+  border-radius: inherit;
+}
+
+.skeleton-shimmer::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.03) 15%,
+    rgba(255, 255, 255, 0.06) 30%,
+    rgba(255, 255, 255, 0.10) 50%,
+    rgba(255, 255, 255, 0.06) 70%,
+    rgba(255, 255, 255, 0.03) 85%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: shimmer-sweep 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  will-change: transform;
+}
+
+@keyframes shimmer-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Skeleton with brand color glow sweep */
+.skeleton-shimmer-voxxo {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(
+    135deg,
+    rgba(0, 229, 160, 0.03) 0%,
+    rgba(0, 229, 160, 0.06) 50%,
+    rgba(0, 229, 160, 0.03) 100%
+  );
+  border-radius: inherit;
+}
+
+.skeleton-shimmer-voxxo::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0, 229, 160, 0.05) 20%,
+    rgba(0, 229, 160, 0.10) 50%,
+    rgba(0, 229, 160, 0.05) 80%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: shimmer-sweep 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  will-change: transform;
+}
+
+/* Skeleton with subtle glow pulse */
+.skeleton-glow {
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+  animation: skeleton-pulse 2s ease-in-out infinite;
+}
+
+.skeleton-glow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0, 229, 160, 0.05) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: shimmer-sweep 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  will-change: transform;
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+/* Skeleton line sizes */
+.skeleton-line-xs { height: 8px; }
+.skeleton-line-sm { height: 12px; }
+.skeleton-line-md { height: 16px; }
+.skeleton-line-lg { height: 20px; }
+.skeleton-line-xl { height: 24px; }
+
+/* Skeleton widths */
+.skeleton-w-1\/4 { width: 25%; }
+.skeleton-w-1\/3 { width: 33.333%; }
+.skeleton-w-1\/2 { width: 50%; }
+.skeleton-w-2\/3 { width: 66.666%; }
+.skeleton-w-3\/4 { width: 75%; }
+.skeleton-w-full { width: 100%; }
+
+/* Skeleton card (compound) */
+.skeleton-card {
+  @apply glass rounded-2xl p-4 sm:p-6;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+/* Staggered skeleton animation delays */
+.skeleton-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.skeleton-stagger > *:nth-child(2) { animation-delay: 75ms; }
+.skeleton-stagger > *:nth-child(3) { animation-delay: 150ms; }
+.skeleton-stagger > *:nth-child(4) { animation-delay: 225ms; }
+.skeleton-stagger > *:nth-child(5) { animation-delay: 300ms; }
+.skeleton-stagger > *:nth-child(6) { animation-delay: 375ms; }
+.skeleton-stagger > *:nth-child(7) { animation-delay: 450ms; }
+.skeleton-stagger > *:nth-child(8) { animation-delay: 525ms; }
+
+/* Reduce motion support for skeletons */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer::before,
+  .skeleton-shimmer-voxxo::before,
+  .skeleton-glow::before {
+    animation: none;
+    transform: translateX(0);
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .skeleton-glow {
+    animation: none;
+    opacity: 0.8;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   FLUID TYPOGRAPHY UTILITY CLASSES
+   Use these classes for responsive text that scales smoothly across viewports
+   Screen targets: iPhone SE (375px) → iPhone 14 (390px) → Pro Max (430px) → iPad (768px+)
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+@layer utilities {
+  /* ─── Hero Text ───────────────────────────────────────────────────────────────
+     Use for: Main page headlines, splash screens
+     Scale: 28px @ 375px → 48px @ 768px+ */
+  .text-fluid-hero {
+    font-size: clamp(1.75rem, 5vw + 0.5rem, 3rem);
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+  }
+
+  /* ─── Display Text ────────────────────────────────────────────────────────────
+     Use for: Section headlines, feature titles
+     Scale: 24px @ 375px → 36px @ 768px+ */
+  .text-fluid-display {
+    font-size: clamp(1.5rem, 4vw + 0.25rem, 2.25rem);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+  }
+
+  /* ─── Title Text ──────────────────────────────────────────────────────────────
+     Use for: Card titles, modal headers, list headers
+     Scale: 20px @ 375px → 32px @ 768px+ */
+  .text-fluid-title {
+    font-size: clamp(1.25rem, 3vw + 0.25rem, 2rem);
+    line-height: 1.2;
+    letter-spacing: -0.015em;
+  }
+
+  /* ─── Subtitle Text ───────────────────────────────────────────────────────────
+     Use for: Secondary headings, emphasized labels
+     Scale: 18px @ 375px → 24px @ 768px+ */
+  .text-fluid-subtitle {
+    font-size: clamp(1.125rem, 2.5vw + 0.25rem, 1.5rem);
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+  }
+
+  /* ─── Body Large Text ─────────────────────────────────────────────────────────
+     Use for: Lead paragraphs, emphasized body text
+     Scale: 16px @ 375px → 18px @ 768px+ */
+  .text-fluid-body-lg {
+    font-size: clamp(1rem, 2vw + 0.125rem, 1.125rem);
+    line-height: 1.6;
+  }
+
+  /* ─── Body Text ───────────────────────────────────────────────────────────────
+     Use for: Standard paragraph text, descriptions
+     Scale: 14px @ 375px → 16px @ 768px+ */
+  .text-fluid-body {
+    font-size: clamp(0.875rem, 1.5vw + 0.25rem, 1rem);
+    line-height: 1.6;
+  }
+
+  /* ─── Body Small Text ─────────────────────────────────────────────────────────
+     Use for: Compact body text, secondary descriptions
+     Scale: 13px @ 375px → 14px @ 768px+ */
+  .text-fluid-body-sm {
+    font-size: clamp(0.8125rem, 1.25vw + 0.25rem, 0.875rem);
+    line-height: 1.5;
+    letter-spacing: 0.005em;
+  }
+
+  /* ─── Caption Text ────────────────────────────────────────────────────────────
+     Use for: Labels, metadata, form hints
+     Scale: 12px @ 375px → 14px @ 768px+ */
+  .text-fluid-caption {
+    font-size: clamp(0.75rem, 1.5vw, 0.875rem);
+    line-height: 1.4;
+    letter-spacing: 0.01em;
+  }
+
+  /* ─── Tiny Text ───────────────────────────────────────────────────────────────
+     Use for: Micro text, badges, timestamps, legal
+     Scale: 10px @ 375px → 12px @ 768px+ */
+  .text-fluid-tiny {
+    font-size: clamp(0.625rem, 1vw + 0.125rem, 0.75rem);
+    line-height: 1.4;
+    letter-spacing: 0.02em;
+  }
+
+  /* ─── Button Text ─────────────────────────────────────────────────────────────
+     Use for: Button labels (stable, minimal scaling)
+     Scale: 14px @ 375px → 16px @ 768px+ */
+  .text-fluid-btn {
+    font-size: clamp(0.875rem, 1vw + 0.5rem, 1rem);
+    line-height: 1;
+    letter-spacing: 0.01em;
+    font-weight: 600;
+  }
+
+  /* ─── Button Small Text ───────────────────────────────────────────────────────
+     Use for: Small button labels
+     Scale: 12px @ 375px → 14px @ 768px+ */
+  .text-fluid-btn-sm {
+    font-size: clamp(0.75rem, 0.75vw + 0.5rem, 0.875rem);
+    line-height: 1;
+    letter-spacing: 0.01em;
+    font-weight: 600;
+  }
+
+  /* ─── Code Text ───────────────────────────────────────────────────────────────
+     Use for: Inline code, code snippets, monospace
+     Scale: 12px @ 375px → 14px @ 768px+ */
+  .text-fluid-code {
+    font-size: clamp(0.75rem, 1.25vw + 0.125rem, 0.875rem);
+    line-height: 1.5;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ─── Emoji scaling ───────────────────────────────────────────────────────────
+     Emojis that scale appropriately with text */
+  .emoji-fluid-lg {
+    font-size: clamp(1.5rem, 4vw, 2.5rem);
+    line-height: 1;
+  }
+
+  .emoji-fluid-md {
+    font-size: clamp(1.25rem, 3vw, 1.75rem);
+    line-height: 1;
+  }
+
+  .emoji-fluid-sm {
+    font-size: clamp(1rem, 2vw, 1.25rem);
+    line-height: 1;
+  }
+
+  /* ─── Text wrapping utilities ─────────────────────────────────────────────────
+     Prevent overflow on small screens */
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .text-pretty {
+    text-wrap: pretty;
+  }
+
+  .text-nowrap-mobile {
+    white-space: nowrap;
+  }
+
+  /* ─── Safe text truncation ────────────────────────────────────────────────────
+     Ellipsis for overflow text */
+  .text-truncate-fluid {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+
+  .text-truncate-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .text-truncate-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* ─── Responsive text alignment ───────────────────────────────────────────────
+     Center on mobile, left on larger screens */
+  .text-center-mobile {
+    text-align: center;
+  }
+}
+
+/* Responsive media query overrides for text-center-mobile and text-nowrap-mobile */
+@media (min-width: 640px) {
+  .text-center-mobile {
+    text-align: left;
+  }
+}
+
+@media (max-width: 375px) {
+  .text-nowrap-mobile {
+    white-space: normal;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   RESPONSIVE BREAKPOINT TYPOGRAPHY OVERRIDES
+   Fine-tune typography at specific breakpoints when clamp() needs assistance
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* iPhone SE and smaller (375px and below) */
+@media (max-width: 375px) {
+  /* Tighten line heights for compact screens */
+  .text-fluid-hero {
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+  }
+
+  .text-fluid-display {
+    line-height: 1.1;
+  }
+
+  .text-fluid-title {
+    line-height: 1.15;
+  }
+
+  /* Ensure no text overflow */
+  .text-fluid-hero,
+  .text-fluid-display,
+  .text-fluid-title {
+    overflow-wrap: break-word;
+    word-break: break-word;
+    hyphens: auto;
+    -webkit-hyphens: auto;
+  }
+}
+
+/* iPhone 14 and similar (390px) */
+@media (min-width: 376px) and (max-width: 430px) {
+  /* Slightly more breathing room */
+  .text-fluid-hero {
+    line-height: 1.08;
+  }
+}
+
+/* iPad and larger (768px+) */
+@media (min-width: 768px) {
+  /* More generous line heights on larger screens */
+  .text-fluid-hero {
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+  }
+
+  .text-fluid-body,
+  .text-fluid-body-lg {
+    line-height: 1.7;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   TALK MODE FLUID TYPOGRAPHY
+   Large, readable text for face-to-face translation screens
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+.talk-mode-fluid {
+  font-size: clamp(1.125rem, 4vw + 0.25rem, 1.75rem);
+  line-height: 1.4;
+  letter-spacing: 0;
+}
+
+.talk-mode-original {
+  font-size: clamp(1rem, 3vw + 0.25rem, 1.5rem);
+  line-height: 1.35;
+  opacity: 0.7;
+}
+
+.talk-mode-translation {
+  font-size: clamp(1.25rem, 5vw + 0.25rem, 2rem);
+  line-height: 1.3;
+  font-weight: 500;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   SCROLLBAR HIDE UTILITY - For horizontal tabs, carousels
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   DEVICE-SPECIFIC RESPONSIVE UTILITIES
+   iPhone SE (375px) → iPhone 14 (390px) → iPhone 14 Pro Max (430px) → iPad (768px+)
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* Extra small screens (iPhone SE and smaller) - tighter padding */
+@media (max-width: 374px) {
+  .container-responsive {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .card-responsive {
+    padding: 0.75rem;
+  }
+
+  .text-responsive-sm {
+    font-size: 0.75rem;
+  }
+}
+
+/* Standard phone (375px - 389px) */
+@media (min-width: 375px) and (max-width: 389px) {
+  .container-responsive {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+/* Large phone (390px - 429px) */
+@media (min-width: 390px) and (max-width: 429px) {
+  .container-responsive {
+    padding-left: 1.125rem;
+    padding-right: 1.125rem;
+  }
+}
+
+/* Extra large phone (430px - 767px) */
+@media (min-width: 430px) and (max-width: 767px) {
+  .container-responsive {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+}
+
+/* Tablet and larger (768px+) */
+@media (min-width: 768px) {
+  .container-responsive {
+    padding-left: 2rem;
+    padding-right: 2rem;
+    max-width: 640px;
+    margin-left: auto;
+    margin-right: auto;
+  }
 }

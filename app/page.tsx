@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, Suspense } from "react";
+import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   LANGUAGES,
@@ -227,7 +228,7 @@ function VoxTypeTab() {
     <div className="space-y-3 sm:space-y-4">
       {/* Header - Hidden on small mobile to save space */}
       <div className="text-center pb-1 sm:pb-2 hidden sm:block">
-        <p className="text-white/50 text-xs sm:text-sm">
+        <p className="text-white/70 text-xs sm:text-sm">
           Type → Translate →{" "}
           <span className="text-voxxo-400 font-medium">Verify meaning</span> →
           Share
@@ -259,6 +260,13 @@ function VoxTypeTab() {
               : "Escribe lo que quieres decir..."
           }
           rows={2}
+          inputMode="text"
+          autoComplete="off"
+          autoCorrect="on"
+          autoCapitalize="sentences"
+          spellCheck={true}
+          enterKeyHint="send"
+          aria-label="Type your message to translate"
           className="glass-input w-full px-3 py-2.5 sm:px-4 sm:py-3 rounded-xl text-white placeholder-white/30 text-base sm:text-lg"
         />
       </div>
@@ -274,7 +282,7 @@ function VoxTypeTab() {
       {isTranslating && (
         <div className="flex items-center justify-center gap-2 py-3 sm:py-4">
           <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-voxxo-500 border-t-transparent rounded-full animate-spin" />
-          <span className="text-white/50 text-xs sm:text-sm">
+          <span className="text-white/70 text-xs sm:text-sm">
             Translating...
           </span>
         </div>
@@ -305,6 +313,9 @@ function VoxTypeTab() {
                   size="lg"
                   fullWidth
                   icon={<span>{shared ? "✓" : "📤"}</span>}
+                  aria-label={
+                    shared ? "Translation shared" : "Share translation"
+                  }
                 >
                   {shared ? "Shared!" : "Share"}
                 </GlowButton>
@@ -312,6 +323,11 @@ function VoxTypeTab() {
                   onClick={copyTranslation}
                   variant={copied ? "success" : "secondary"}
                   size="lg"
+                  aria-label={
+                    copied
+                      ? "Translation copied to clipboard"
+                      : "Copy translation to clipboard"
+                  }
                 >
                   {copied ? "✓" : "📋"}
                 </GlowButton>
@@ -323,6 +339,11 @@ function VoxTypeTab() {
                 size="lg"
                 fullWidth
                 icon={<span>{copied ? "✓" : "📋"}</span>}
+                aria-label={
+                  copied
+                    ? "Translation copied to clipboard"
+                    : "Copy translation to clipboard"
+                }
               >
                 {copied ? "Copied!" : "Copy Translation"}
               </GlowButton>
@@ -362,7 +383,7 @@ function VoxTypeTab() {
                   : "none"
             }
           >
-            <p className="text-[10px] sm:text-xs text-white/40 mb-0.5 sm:mb-1">
+            <p className="text-[10px] sm:text-xs text-white/70 mb-0.5 sm:mb-1">
               They will understand:
             </p>
             <p
@@ -394,6 +415,7 @@ function VoxTypeTab() {
           size="md"
           fullWidth
           icon={<span>🗑️</span>}
+          aria-label="Clear all text and translations"
         >
           Clear
         </GlowButton>
@@ -409,7 +431,7 @@ function VoxTypeTab() {
           <p className="text-voxxo-400 text-xs sm:text-sm font-medium flex items-center gap-2">
             <span className="text-base sm:text-lg">💬</span> How it works
           </p>
-          <ol className="text-white/50 text-[10px] sm:text-xs mt-1.5 sm:mt-2 space-y-0.5 sm:space-y-1 list-decimal list-inside">
+          <ol className="text-white/70 text-[10px] sm:text-xs mt-1.5 sm:mt-2 space-y-0.5 sm:space-y-1 list-decimal list-inside">
             <li>Type your message</li>
             <li>Check verification matches your intent</li>
             <li>Tap Share or Copy</li>
@@ -867,7 +889,7 @@ function VoxNoteTab() {
           </div>
         )}
 
-        <p className="text-white/40 text-xs sm:text-sm mt-2">
+        <p className="text-white/70 text-xs sm:text-sm mt-2">
           {!browserSupported
             ? "Use Chrome or Edge"
             : isProcessing
@@ -926,7 +948,7 @@ function VoxNoteTab() {
               onClick={speakTranslation}
               disabled={isSpeaking}
               aria-label={isSpeaking ? "Speaking..." : "Play translation"}
-              className={`text-xs transition-all duration-200 p-1.5 rounded-lg ${
+              className={`text-xs transition-all duration-200 p-2 min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center ${
                 isSpeaking
                   ? "text-voxxo-400 bg-voxxo-500/10"
                   : "text-voxxo-500 hover:text-voxxo-400 hover:bg-voxxo-500/10"
@@ -951,6 +973,9 @@ function VoxNoteTab() {
                   size="lg"
                   fullWidth
                   icon={<span>{shared ? "✓" : "📤"}</span>}
+                  aria-label={
+                    shared ? "Translation shared" : "Share translation"
+                  }
                 >
                   {shared ? "Shared!" : "Share"}
                 </GlowButton>
@@ -958,6 +983,11 @@ function VoxNoteTab() {
                   onClick={() => copyToClipboard(translatedText, "translated")}
                   variant={copied === "translated" ? "success" : "secondary"}
                   size="lg"
+                  aria-label={
+                    copied === "translated"
+                      ? "Translation copied to clipboard"
+                      : "Copy translation to clipboard"
+                  }
                 >
                   {copied === "translated" ? "✓" : "📋"}
                 </GlowButton>
@@ -969,6 +999,11 @@ function VoxNoteTab() {
                 size="lg"
                 fullWidth
                 icon={<span>{copied === "translated" ? "✓" : "📋"}</span>}
+                aria-label={
+                  copied === "translated"
+                    ? "Translation copied to clipboard"
+                    : "Copy translation to clipboard"
+                }
               >
                 {copied === "translated" ? "Copied!" : "Copy"}
               </GlowButton>
@@ -985,6 +1020,7 @@ function VoxNoteTab() {
           size="md"
           fullWidth
           icon={<span>🗑️</span>}
+          aria-label="Clear all text and translations"
         >
           Clear
         </GlowButton>
@@ -1000,7 +1036,7 @@ function VoxNoteTab() {
           <p className="text-voxxo-400 text-xs sm:text-sm font-medium flex items-center gap-1.5 sm:gap-2">
             <span>💡</span> Tip
           </p>
-          <p className="text-white/50 text-[10px] sm:text-xs mt-1 sm:mt-2">
+          <p className="text-white/70 text-[10px] sm:text-xs mt-1 sm:mt-2">
             Play a WhatsApp voice message on speaker, then tap record to
             translate!
           </p>
@@ -1164,7 +1200,7 @@ function HomeContent() {
                 <h2 className="text-xl font-bold text-white mt-3">
                   Join {joinType === "talk" ? "Conversation" : "Video Call"}
                 </h2>
-                <p className="text-white/50 text-sm mt-1">
+                <p className="text-white/70 text-sm mt-1">
                   Code:{" "}
                   <span className="font-mono text-voxxo-400 font-semibold">
                     {joinId}
@@ -1182,7 +1218,14 @@ function HomeContent() {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Enter your name"
-                    className="glass-input w-full px-4 py-3 rounded-xl text-white placeholder-white/30"
+                    inputMode="text"
+                    autoComplete="name"
+                    autoCorrect="off"
+                    autoCapitalize="words"
+                    spellCheck={false}
+                    enterKeyHint="next"
+                    aria-label="Your name"
+                    className="glass-input w-full px-4 py-3 rounded-xl text-white placeholder-white/30 text-base"
                   />
                 </div>
 
@@ -1199,6 +1242,11 @@ function HomeContent() {
                   size="xl"
                   fullWidth
                   icon={<span>{joinType === "talk" ? "💬" : "📹"}</span>}
+                  aria-label={
+                    joinType === "talk"
+                      ? "Join conversation"
+                      : "Join video call"
+                  }
                 >
                   Join
                 </GlowButton>
@@ -1262,7 +1310,7 @@ function HomeContent() {
             />
           </div>
 
-          <div className="p-3 sm:p-5 max-h-[calc(100dvh-220px)] sm:max-h-none overflow-y-auto">
+          <div className="p-3 sm:p-5 max-h-[calc(100dvh-200px)] xs:max-h-[calc(100dvh-220px)] sm:max-h-none overflow-y-auto">
             {/* VoxType Tab - Type & Verify Translation */}
             {activeTab === "voxtype" ? (
               <VoxTypeTab />
@@ -1271,37 +1319,39 @@ function HomeContent() {
             ) : activeTab === "wingman" ? (
               <div className="space-y-4 text-center">
                 {/* Premium Headphone Icon */}
-                <div className="relative w-20 h-20 mx-auto">
+                <div className="relative w-16 h-16 sm:w-20 sm:h-20 mx-auto">
                   <div className="absolute inset-0 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 shadow-2xl shadow-violet-500/30" />
                   <div
                     className="absolute inset-0 rounded-full animate-ping bg-violet-500/20"
                     style={{ animationDuration: "2s" }}
                   />
                   <div className="relative w-full h-full rounded-full flex items-center justify-center">
-                    <span className="text-4xl">🎧</span>
+                    <span className="text-3xl sm:text-4xl">🎧</span>
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-white">Wingman Mode</h3>
-                  <p className="text-white/50 text-sm mt-1">
+                  <h3 className="text-lg sm:text-xl font-bold text-white">
+                    Wingman Mode
+                  </h3>
+                  <p className="text-white/70 text-xs sm:text-sm mt-1">
                     AI whispers what to say in your AirPods
                   </p>
                 </div>
                 <GlassCard variant="subtle" padding="sm" className="text-left">
-                  <ul className="text-sm text-white/70 space-y-2">
-                    <li className="flex items-start gap-2">
+                  <ul className="text-xs sm:text-sm text-white/70 space-y-1.5 sm:space-y-2">
+                    <li className="flex items-start gap-1.5 sm:gap-2">
                       <span className="text-violet-400">💘</span>
                       Date Mode — First dates, crushes, spark
                     </li>
-                    <li className="flex items-start gap-2">
+                    <li className="flex items-start gap-1.5 sm:gap-2">
                       <span className="text-violet-400">🎯</span>
                       Interview Mode — Jobs, pitches, negotiations
                     </li>
-                    <li className="flex items-start gap-2">
+                    <li className="flex items-start gap-1.5 sm:gap-2">
                       <span className="text-violet-400">⚡</span>
                       Sales Mode — Close deals, handle objections
                     </li>
-                    <li className="flex items-start gap-2">
+                    <li className="flex items-start gap-1.5 sm:gap-2">
                       <span className="text-violet-400">🌊</span>
                       Hard Talk — Conflict, honesty, repair
                     </li>
@@ -1309,46 +1359,47 @@ function HomeContent() {
                 </GlassCard>
                 <button
                   onClick={() => router.push("/wingman")}
-                  className="w-full py-4 bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-400 hover:to-indigo-500 rounded-2xl text-white font-semibold text-lg transition-all duration-200 shadow-2xl shadow-violet-500/25 hover:-translate-y-0.5"
+                  className="w-full py-3 sm:py-4 min-h-[48px] sm:min-h-[56px] bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-400 hover:to-indigo-500 rounded-xl sm:rounded-2xl text-white font-semibold text-base sm:text-lg transition-all duration-200 shadow-2xl shadow-violet-500/25 hover:-translate-y-0.5"
+                  aria-label="Activate Wingman mode - AI whispers what to say in your AirPods"
                 >
                   🎧 Activate Wingman
                 </button>
-                <p className="text-xs text-white/40">
+                <p className="text-xs text-white/70">
                   Connect AirPods for best experience
                 </p>
               </div>
             ) : activeTab === "proximity" ? (
               <div className="space-y-4 text-center">
                 {/* Premium Radar Icon */}
-                <div className="relative w-20 h-20 mx-auto">
+                <div className="relative w-16 h-16 sm:w-20 sm:h-20 mx-auto">
                   <div className="absolute inset-0 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 shadow-2xl shadow-purple-500/30" />
                   <div
                     className="absolute inset-0 rounded-full animate-ping bg-purple-500/20"
                     style={{ animationDuration: "2s" }}
                   />
                   <div className="relative w-full h-full rounded-full flex items-center justify-center">
-                    <span className="text-4xl">📡</span>
+                    <span className="text-3xl sm:text-4xl">📡</span>
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-white">
+                  <h3 className="text-lg sm:text-xl font-bold text-white">
                     Proximity Connect
                   </h3>
-                  <p className="text-white/50 text-sm mt-1">
+                  <p className="text-white/70 text-xs sm:text-sm mt-1">
                     AirDrop for translated conversations
                   </p>
                 </div>
                 <GlassCard variant="subtle" padding="sm" className="text-left">
-                  <ul className="text-sm text-white/70 space-y-2">
-                    <li className="flex items-start gap-2">
+                  <ul className="text-xs sm:text-sm text-white/70 space-y-1.5 sm:space-y-2">
+                    <li className="flex items-start gap-1.5 sm:gap-2">
                       <span className="text-purple-400">📍</span>
                       Find nearby Voxxo users
                     </li>
-                    <li className="flex items-start gap-2">
+                    <li className="flex items-start gap-1.5 sm:gap-2">
                       <span className="text-purple-400">📡</span>
                       Connect instantly with one tap
                     </li>
-                    <li className="flex items-start gap-2">
+                    <li className="flex items-start gap-1.5 sm:gap-2">
                       <span className="text-purple-400">🌍</span>
                       Auto-translate between languages
                     </li>
@@ -1356,11 +1407,12 @@ function HomeContent() {
                 </GlassCard>
                 <button
                   onClick={() => router.push("/proximity")}
-                  className="w-full py-4 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-400 hover:to-pink-400 rounded-2xl text-white font-semibold text-lg transition-all duration-200 shadow-2xl shadow-purple-500/25 hover:-translate-y-0.5"
+                  className="w-full py-3 sm:py-4 min-h-[48px] sm:min-h-[56px] bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-400 hover:to-pink-400 rounded-xl sm:rounded-2xl text-white font-semibold text-base sm:text-lg transition-all duration-200 shadow-2xl shadow-purple-500/25 hover:-translate-y-0.5"
+                  aria-label="Start proximity discovery - Find nearby Voxxo users"
                 >
                   📡 Start Proximity Discovery
                 </button>
-                <p className="text-xs text-white/40">
+                <p className="text-xs text-white/70">
                   Location shared only while app is open
                 </p>
               </div>
@@ -1375,10 +1427,11 @@ function HomeContent() {
                       size="lg"
                       fullWidth
                       icon={<span>🗣️</span>}
+                      aria-label="Start true face-to-face mode with one device"
                     >
                       True Face-to-Face (One Device)
                     </GlowButton>
-                    <p className="text-xs text-white/40 text-center mt-2">
+                    <p className="text-xs text-white/70 text-center mt-2">
                       Place phone between two people - each speaks their
                       language
                     </p>
@@ -1418,7 +1471,14 @@ function HomeContent() {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Enter your name"
-                    className="glass-input w-full px-4 py-3 rounded-xl text-white placeholder-white/30 text-lg"
+                    inputMode="text"
+                    autoComplete="name"
+                    autoCorrect="off"
+                    autoCapitalize="words"
+                    spellCheck={false}
+                    enterKeyHint="next"
+                    aria-label="Your name"
+                    className="glass-input w-full px-4 py-3 rounded-xl text-white placeholder-white/30 text-base"
                   />
                 </div>
 
@@ -1453,6 +1513,11 @@ function HomeContent() {
                     size="xl"
                     fullWidth
                     icon={<span>{activeTab === "video" ? "📹" : "💬"}</span>}
+                    aria-label={
+                      activeTab === "video"
+                        ? "Start a new video call with translation"
+                        : "Start a new conversation with translation"
+                    }
                   >
                     {activeTab === "video"
                       ? "Start Video Call"
@@ -1468,6 +1533,13 @@ function HomeContent() {
                       }
                       placeholder="Enter code"
                       maxLength={6}
+                      inputMode="text"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="characters"
+                      spellCheck={false}
+                      enterKeyHint="go"
+                      aria-label="Enter join code"
                       className="glass-input w-full px-4 py-3 rounded-xl text-white text-center text-2xl tracking-[0.3em] placeholder-white/30 uppercase font-mono"
                     />
                     <GlowButton
@@ -1478,6 +1550,11 @@ function HomeContent() {
                       size="xl"
                       fullWidth
                       icon={<span>{activeTab === "video" ? "📹" : "💬"}</span>}
+                      aria-label={
+                        activeTab === "video"
+                          ? "Join video call with code"
+                          : "Join conversation with code"
+                      }
                     >
                       {activeTab === "video"
                         ? "Join Call"
@@ -1491,8 +1568,8 @@ function HomeContent() {
         </GlassCard>
 
         {/* Footer - Premium Minimal */}
-        <div className="text-center mt-4 sm:mt-6 space-y-2 pb-2">
-          <p className="text-white/30 text-[10px] sm:text-xs">
+        <div className="text-center mt-4 sm:mt-6 space-y-2 pb-2 safe-area-bottom">
+          <p className="text-white/70 text-[10px] sm:text-xs">
             Chrome recommended •{" "}
             <a
               href="/status"
@@ -1506,7 +1583,7 @@ function HomeContent() {
               href="https://machinemindconsulting.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-[10px] sm:text-xs text-white/40 hover:text-voxxo-400 transition"
+              className="inline-flex items-center gap-1.5 text-[10px] sm:text-xs text-white/70 hover:text-voxxo-400 transition"
             >
               <span>Powered by</span>
               <span className="font-semibold text-voxxo-500">MachineMind</span>
@@ -1529,7 +1606,7 @@ export default function Home() {
               <div className="absolute inset-0 rounded-full border-4 border-voxxo-500 border-t-transparent animate-spin" />
               <div className="absolute inset-2 rounded-full bg-voxxo-500/10 animate-pulse" />
             </div>
-            <p className="text-white/50 text-sm">Loading Voxxo...</p>
+            <p className="text-white/70 text-sm">Loading Voxxo...</p>
           </div>
         </div>
       }
