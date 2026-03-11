@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-3-5-haiku-20241022", // Haiku: 3-4x faster, 80% cheaper
+        model: "claude-3-haiku-20240307", // Haiku: fast, cost-effective for real-time
         max_tokens: 250, // Tight — 3 suggestions need ~150 tokens
         system: systemPrompt,
         messages: [{ role: "user", content: userPrompt }],
@@ -124,11 +124,31 @@ export async function POST(req: NextRequest) {
 
     if (!upstream.ok) {
       const body = await upstream.text();
-      console.error("[Cyrano] Claude API error:", upstream.status, body);
+      // Log full error for debugging (will show in Vercel logs)
+      console.error("[Cyrano] Claude API error:", {
+        status: upstream.status,
+        statusText: upstream.statusText,
+        body: body.slice(0, 500), // First 500 chars to avoid log truncation
+        apiKeyPresent: !!apiKey,
+        apiKeyPrefix: apiKey ? apiKey.slice(0, 12) + "..." : "none",
+      });
+
       if (upstream.status === 529) {
         return NextResponse.json(
           { error: "AI is overloaded. Retrying..." },
           { status: 503 },
+        );
+      }
+      if (upstream.status === 401) {
+        return NextResponse.json(
+          { error: "Invalid API key configuration." },
+          { status: 500 },
+        );
+      }
+      if (upstream.status === 400) {
+        return NextResponse.json(
+          { error: "Invalid request to AI." },
+          { status: 400 },
         );
       }
       return NextResponse.json({ error: "Upstream error." }, { status: 502 });
