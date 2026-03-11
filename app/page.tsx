@@ -1027,7 +1027,7 @@ function HomeContent() {
   const [language, setLanguage] = useState("en");
   const [joinCode, setJoinCode] = useState("");
   const [activeTab, setActiveTab] = useState<
-    "video" | "talk" | "voxnote" | "voxtype" | "proximity"
+    "video" | "talk" | "voxnote" | "voxtype" | "proximity" | "wingman"
   >("voxtype");
   const [mode, setMode] = useState<"start" | "join">("start");
   const [isJoining, setIsJoining] = useState(false);
@@ -1214,6 +1214,7 @@ function HomeContent() {
   const tabs = [
     { id: "voxtype", label: "Type", icon: <span>⌨️</span> },
     { id: "voxnote", label: "Voice", icon: <span>🎤</span>, color: "emerald" },
+    { id: "wingman", label: "Ear", icon: <span>🎧</span>, color: "violet" },
     { id: "talk", label: "Face", icon: <span>💬</span> },
     { id: "video", label: "Call", icon: <span>📹</span> },
     { id: "proximity", label: "", icon: <span>📡</span>, color: "purple" },
@@ -1267,6 +1268,55 @@ function HomeContent() {
               <VoxTypeTab />
             ) : activeTab === "voxnote" ? (
               <VoxNoteTab />
+            ) : activeTab === "wingman" ? (
+              <div className="space-y-4 text-center">
+                {/* Premium Headphone Icon */}
+                <div className="relative w-20 h-20 mx-auto">
+                  <div className="absolute inset-0 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 shadow-2xl shadow-violet-500/30" />
+                  <div
+                    className="absolute inset-0 rounded-full animate-ping bg-violet-500/20"
+                    style={{ animationDuration: "2s" }}
+                  />
+                  <div className="relative w-full h-full rounded-full flex items-center justify-center">
+                    <span className="text-4xl">🎧</span>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white">Wingman Mode</h3>
+                  <p className="text-white/50 text-sm mt-1">
+                    AI whispers what to say in your AirPods
+                  </p>
+                </div>
+                <GlassCard variant="subtle" padding="sm" className="text-left">
+                  <ul className="text-sm text-white/70 space-y-2">
+                    <li className="flex items-start gap-2">
+                      <span className="text-violet-400">💘</span>
+                      Date Mode — First dates, crushes, spark
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-violet-400">🎯</span>
+                      Interview Mode — Jobs, pitches, negotiations
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-violet-400">⚡</span>
+                      Sales Mode — Close deals, handle objections
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-violet-400">🌊</span>
+                      Hard Talk — Conflict, honesty, repair
+                    </li>
+                  </ul>
+                </GlassCard>
+                <button
+                  onClick={() => router.push("/wingman")}
+                  className="w-full py-4 bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-400 hover:to-indigo-500 rounded-2xl text-white font-semibold text-lg transition-all duration-200 shadow-2xl shadow-violet-500/25 hover:-translate-y-0.5"
+                >
+                  🎧 Activate Wingman
+                </button>
+                <p className="text-xs text-white/40">
+                  Connect AirPods for best experience
+                </p>
+              </div>
             ) : activeTab === "proximity" ? (
               <div className="space-y-4 text-center">
                 {/* Premium Radar Icon */}

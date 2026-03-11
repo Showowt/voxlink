@@ -32,19 +32,41 @@ export interface GeoPosition {
 
 // Generate a unique session ID for this browser session
 export function generateSessionId(): string {
-  const existing = sessionStorage.getItem("voxlink_proximity_session");
-  if (existing) return existing;
+  // SSR guard
+  if (typeof window === "undefined" || typeof sessionStorage === "undefined") {
+    const array = new Uint8Array(16);
+    crypto.getRandomValues(array);
+    return Array.from(array, (b) => b.toString(16).padStart(2, "0")).join("");
+  }
 
-  const array = new Uint8Array(16);
-  crypto.getRandomValues(array);
-  const id = Array.from(array, (b) => b.toString(16).padStart(2, "0")).join("");
-  sessionStorage.setItem("voxlink_proximity_session", id);
-  return id;
+  try {
+    const existing = sessionStorage.getItem("voxlink_proximity_session");
+    if (existing) return existing;
+
+    const array = new Uint8Array(16);
+    crypto.getRandomValues(array);
+    const id = Array.from(array, (b) => b.toString(16).padStart(2, "0")).join(
+      "",
+    );
+    sessionStorage.setItem("voxlink_proximity_session", id);
+    return id;
+  } catch {
+    // Private browsing may block sessionStorage
+    const array = new Uint8Array(16);
+    crypto.getRandomValues(array);
+    return Array.from(array, (b) => b.toString(16).padStart(2, "0")).join("");
+  }
 }
 
 // Get current geolocation
 export async function getCurrentPosition(): Promise<GeoPosition> {
   return new Promise((resolve, reject) => {
+    // SSR guard
+    if (typeof window === "undefined" || typeof navigator === "undefined") {
+      reject(new Error("Geolocation not available (SSR)"));
+      return;
+    }
+
     if (!navigator.geolocation) {
       reject(new Error("Geolocation not supported"));
       return;
@@ -87,6 +109,12 @@ export function watchPosition(
   callback: (position: GeoPosition) => void,
   errorCallback: (error: Error) => void,
 ): number {
+  // SSR guard
+  if (typeof window === "undefined" || typeof navigator === "undefined") {
+    errorCallback(new Error("Geolocation not available"));
+    return -1;
+  }
+
   if (!navigator.geolocation) {
     errorCallback(new Error("Geolocation not supported"));
     return -1;
