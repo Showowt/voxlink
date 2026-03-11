@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
-import { randomBytes, timingSafeEqual } from "crypto";
+import { timingSafeEqual } from "crypto";
+import { createSignedToken } from "@/lib/auth-tokens";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // VERIFY CODE API - Voxxo Access Gate
 // Validates 4-digit access code and returns session token
-// Security: Rate limiting + timing-safe comparison
+// Security: Rate limiting + timing-safe comparison + HMAC-signed tokens
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Rate limiting configuration
@@ -144,8 +145,8 @@ export async function POST(request: Request) {
       rateLimit.attempts = 0;
       rateLimit.lockedUntil = 0;
 
-      // Generate secure session token
-      const token = randomBytes(32).toString("hex");
+      // Generate HMAC-signed session token (cryptographically verifiable)
+      const token = createSignedToken();
 
       return NextResponse.json({
         valid: true,

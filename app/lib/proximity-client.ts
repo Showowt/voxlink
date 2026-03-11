@@ -117,7 +117,13 @@ export async function registerPresence(
   language: string,
   lat: number,
   lng: number,
-): Promise<{ success: boolean; userId?: string; error?: string }> {
+  accuracy?: number,
+): Promise<{
+  success: boolean;
+  userId?: string;
+  error?: string;
+  code?: string;
+}> {
   try {
     const response = await fetch("/api/proximity/register", {
       method: "POST",
@@ -127,13 +133,14 @@ export async function registerPresence(
         language,
         lat,
         lng,
+        accuracy, // GPS accuracy in meters for anti-spoofing
         status: "available",
       }),
     });
 
     const data = await response.json();
     return data;
-  } catch (error) {
+  } catch {
     return { success: false, error: "Failed to register presence" };
   }
 }

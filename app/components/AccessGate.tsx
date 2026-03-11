@@ -20,11 +20,47 @@ export default function AccessGate({ children }: AccessGateProps) {
   const [isShaking, setIsShaking] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Check if already authorized (has valid token)
+  // Verify token cryptographically on mount
   useEffect(() => {
-    const token = localStorage.getItem(STORAGE_KEY);
-    // Token must be 64 chars (hex string from 32 bytes)
-    setIsAuthorized(token !== null && token.length === 64);
+    const verifyToken = async () => {
+      const token = localStorage.getItem(STORAGE_KEY);
+
+      // No token = not authorized
+      if (!token) {
+        setIsAuthorized(false);
+        return;
+      }
+
+      // Verify token with server (cryptographic check)
+      try {
+        const res = await fetch("/api/verify-token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.valid) {
+            setIsAuthorized(true);
+            return;
+          }
+        }
+
+        // Token invalid or expired - clear it
+        localStorage.removeItem(STORAGE_KEY);
+        setIsAuthorized(false);
+      } catch {
+        // Network error - allow if token looks valid (format check as fallback)
+        // This prevents lockout during brief connectivity issues
+        // Token format: timestamp:nonce:signature (colon-separated)
+        const hasValidFormat =
+          token.includes(":") && token.split(":").length === 3;
+        setIsAuthorized(hasValidFormat);
+      }
+    };
+
+    verifyToken();
   }, []);
 
   // Handle digit input

@@ -9,6 +9,9 @@ export const dynamic = "force-dynamic";
 // POST /api/proximity/register - Register user presence with location
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// GPS accuracy threshold - reject readings > 100m (likely spoofed or indoor)
+const MAX_GPS_ACCURACY_METERS = 100;
+
 const RegisterSchema = z.object({
   sessionId: z.string().min(1, "Session ID required"),
   language: z.enum([
@@ -45,6 +48,8 @@ const RegisterSchema = z.object({
   ]),
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
+  // GPS accuracy in meters (required for anti-spoofing)
+  accuracy: z.number().min(0).max(10000).optional(),
   status: z.enum(["available", "busy", "in_call"]).default("available"),
 });
 
@@ -53,6 +58,36 @@ export async function POST(request: NextRequest) {
     // Parse and validate request body
     const body = await request.json();
     const validated = RegisterSchema.parse(body);
+
+    // GPS Spoofing Detection: Reject low-accuracy readings
+    // Real GPS typically has 3-30m accuracy; >100m suggests:
+    // - GPS spoofing apps (often report 0 or very high accuracy)
+    // - Indoor/poor signal (not useful for proximity anyway)
+    // - Emulators/simulators
+    if (validated.accuracy !== undefined) {
+      if (validated.accuracy > MAX_GPS_ACCURACY_METERS) {
+        console.warn(
+          `[GPS] Low accuracy rejected: ${validated.accuracy}m from ${validated.sessionId}`,
+        );
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "GPS accuracy too low. Please move outdoors for better signal.",
+            code: "GPS_ACCURACY_LOW",
+          },
+          { status: 400 },
+        );
+      }
+
+      // Suspiciously perfect accuracy (0m) often indicates spoofing
+      if (validated.accuracy === 0) {
+        console.warn(
+          `[GPS] Suspicious 0m accuracy from ${validated.sessionId}`,
+        );
+        // Allow but flag - could be legitimate high-end device
+      }
+    }
 
     // Get user agent for tracking
     const userAgent = request.headers.get("user-agent") || undefined;

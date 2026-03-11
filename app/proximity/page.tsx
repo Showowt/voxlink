@@ -132,15 +132,22 @@ function ProximityContent() {
       const pos = await getCurrentPosition();
       setPosition(pos);
 
-      // Register presence
+      // Register presence with GPS accuracy for anti-spoofing validation
       const result = await registerPresence(
         sessionId,
         language,
         pos.lat,
         pos.lng,
+        pos.accuracy,
       );
 
       if (!result.success) {
+        // Handle GPS accuracy error specifically
+        if (result.code === "GPS_ACCURACY_LOW") {
+          throw new Error(
+            "GPS signal too weak. Please move outdoors for better signal.",
+          );
+        }
         throw new Error(result.error || "Failed to register");
       }
 
@@ -150,8 +157,14 @@ function ProximityContent() {
       watchIdRef.current = watchPosition(
         async (newPos) => {
           setPosition(newPos);
-          // Update presence with new position
-          await registerPresence(sessionId, language, newPos.lat, newPos.lng);
+          // Update presence with new position + accuracy
+          await registerPresence(
+            sessionId,
+            language,
+            newPos.lat,
+            newPos.lng,
+            newPos.accuracy,
+          );
         },
         (err) => {
           console.error("Position watch error:", err);

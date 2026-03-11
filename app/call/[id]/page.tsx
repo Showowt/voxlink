@@ -32,6 +32,7 @@ import {
   type Suggestion,
   type UseCyranoReturn,
 } from "../../lib/useCyrano";
+import { useTranscription } from "@/hooks/useTranscription";
 
 // Text-to-Speech helper
 const speakText = (text: string, lang: string) => {
@@ -501,16 +502,61 @@ function VideoCallContent() {
   const cyrano = useCyrano("date");
   const cyranoEnabledOnJoinRef = useRef(false);
 
+  // Refs (need to be defined before useTranscription hook)
+  const peerRef = useRef<PeerConnection | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+
+  // WebRTC sendMessage wrapper for useTranscription hook
+  const sendWebRTCMessage = useCallback((message: string): boolean => {
+    if (!peerRef.current) return false;
+    try {
+      // Parse and send as object (PeerConnection expects objects)
+      const parsed = JSON.parse(message);
+      peerRef.current.send(parsed);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  // Transcription hook - handles STT + translation + broadcasting
+  // Supports Web Speech API (Chrome/Edge) + Whisper fallback (Safari/Firefox)
+  const transcription = useTranscription({
+    myLanguage: userLang,
+    theirLanguage: partnerLang || expectedPartnerLang,
+    localStream: lobbyStream || localStreamRef.current,
+    sendMessage: sendWebRTCMessage,
+    isActive: status === "connected" && hasPartner && !inLobby,
+  });
+
+  // Sync transcription hook output to UI state
+  useEffect(() => {
+    if (transcription.localCaption || transcription.localFinal) {
+      setMyLiveText(transcription.localCaption || transcription.localFinal);
+    }
+    if (transcription.localTranslated) {
+      setMyLiveTranslation(transcription.localTranslated);
+    }
+    setIsListening(transcription.isListening);
+    if (transcription.error) {
+      console.warn("[Transcription]", transcription.error);
+    }
+  }, [
+    transcription.localCaption,
+    transcription.localFinal,
+    transcription.localTranslated,
+    transcription.isListening,
+    transcription.error,
+  ]);
+
   // Quality monitoring state
   const [quality, setQuality] = useState<ConnectionQuality | null>(null);
   const [callDuration, setCallDuration] = useState(0);
   const callStartTimeRef = useRef<number | null>(null);
 
-  // Refs
-  const peerRef = useRef<PeerConnection | null>(null);
+  // Refs (peerRef, localStreamRef defined above for useTranscription)
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
-  const localStreamRef = useRef<MediaStream | null>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const isListeningRef = useRef(false);
   const mountedRef = useRef(true);
@@ -780,9 +826,26 @@ function VideoCallContent() {
 
   // ═══════════════════════════════════════════════════════════════════════════
   // DATA MESSAGE HANDLING (captions from partner)
+  // Supports both legacy "caption" type and new "translation"/"transcription" types
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // Type guard for CaptionData
+  // Type for new translation messages from useTranscription hook
+  interface TranslationMessage {
+    type: "translation";
+    text: string;
+    original: string;
+    from: string;
+    to: string;
+  }
+
+  // Type for new transcription messages from useTranscription hook
+  interface TranscriptionMessage {
+    type: "transcription";
+    text: string;
+    lang: string;
+  }
+
+  // Type guard for CaptionData (legacy format)
   const isCaptionData = (data: unknown): data is CaptionData => {
     return (
       typeof data === "object" &&
@@ -794,18 +857,113 @@ function VideoCallContent() {
     );
   };
 
+  // Type guard for new translation messages
+  const isTranslationMessage = (data: unknown): data is TranslationMessage => {
+    return (
+      typeof data === "object" &&
+      data !== null &&
+      "type" in data &&
+      (data as Record<string, unknown>).type === "translation" &&
+      "text" in data
+    );
+  };
+
+  // Type guard for new transcription messages
+  const isTranscriptionMessage = (
+    data: unknown,
+  ): data is TranscriptionMessage => {
+    return (
+      typeof data === "object" &&
+      data !== null &&
+      "type" in data &&
+      (data as Record<string, unknown>).type === "transcription" &&
+      "text" in data
+    );
+  };
+
   const handleDataMessage = useCallback(
-    async (data: CaptionData | Record<string, unknown>) => {
-      if (!isCaptionData(data)) {
-        // Ignore non-caption messages (ping/pong, hello, etc.)
-        return;
+    async (
+      data:
+        | CaptionData
+        | TranslationMessage
+        | TranscriptionMessage
+        | Record<string, unknown>,
+    ) => {
+      // Parse JSON string if needed (from useTranscription sendMessage)
+      let parsed = data;
+      if (typeof data === "string") {
+        try {
+          parsed = JSON.parse(data);
+        } catch {
+          return;
+        }
       }
-      const captionData = data;
 
       // Clear existing timeout
       if (theirCaptionTimeoutRef.current) {
         clearTimeout(theirCaptionTimeoutRef.current);
       }
+
+      // Handle NEW translation message format (from useTranscription hook)
+      if (isTranslationMessage(parsed)) {
+        const { text, original, from } = parsed;
+
+        // Track partner's language
+        if (from) setPartnerLang(from);
+
+        // Show original text and pre-translated text
+        setTheirLiveText(original || text);
+        setTheirLiveTranslation(text);
+
+        // Speak the translation
+        speakText(text, userLang);
+
+        // Add to transcript
+        addToTranscript(
+          "partner",
+          partnerName || "Partner",
+          original || text,
+          text,
+          from || "en",
+        );
+
+        // Feed to Cyrano
+        if (cyrano.isActive && original) {
+          cyrano.addTheirLine(original);
+        }
+
+        // Auto-clear after 5 seconds
+        theirCaptionTimeoutRef.current = setTimeout(() => {
+          setTheirLiveText("");
+          setTheirLiveTranslation("");
+        }, 5000);
+        return;
+      }
+
+      // Handle NEW transcription message format (raw speech, for Cyrano)
+      if (isTranscriptionMessage(parsed)) {
+        const { text, lang } = parsed;
+
+        // Track partner's language
+        if (lang) setPartnerLang(lang);
+
+        // Show interim text (will be replaced by translation message)
+        setTheirLiveText(text);
+
+        // Auto-clear after 5 seconds
+        theirCaptionTimeoutRef.current = setTimeout(() => {
+          setTheirLiveText("");
+          setTheirLiveTranslation("");
+        }, 5000);
+        return;
+      }
+
+      // Handle LEGACY caption format
+      if (!isCaptionData(parsed)) {
+        // Ignore non-caption messages (ping/pong, hello, etc.)
+        return;
+      }
+      const captionData = parsed;
 
       // Track partner's language for UI display
       if (captionData.lang) {
@@ -836,7 +994,8 @@ function VideoCallContent() {
               }),
             });
             const result = await res.json();
-            const translation = result.translation || captionData.text;
+            const translation =
+              result.translation || result.translated || captionData.text;
             setTheirLiveTranslation(translation);
             if (captionData.isFinal) {
               speakText(translation, userLang);

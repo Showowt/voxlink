@@ -10,15 +10,25 @@ import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
-// Zod schema for input validation
-const TranslateRequestSchema = z.object({
-  text: z
-    .string()
-    .min(1, "Text is required")
-    .max(5000, "Text too long (max 5000 chars)"),
-  sourceLang: z.string().min(2, "Source language required").max(10),
-  targetLang: z.string().min(2, "Target language required").max(10),
-});
+// Zod schema for input validation - supports both param styles
+// Old style: sourceLang/targetLang (legacy)
+// New style: from/to (useTranscription hook)
+const TranslateRequestSchema = z
+  .object({
+    text: z
+      .string()
+      .min(1, "Text is required")
+      .max(5000, "Text too long (max 5000 chars)"),
+    // Support both param styles
+    sourceLang: z.string().min(2).max(10).optional(),
+    targetLang: z.string().min(2).max(10).optional(),
+    from: z.string().min(2).max(10).optional(),
+    to: z.string().min(2).max(10).optional(),
+  })
+  .refine(
+    (data) => (data.sourceLang && data.targetLang) || (data.from && data.to),
+    { message: "Either sourceLang/targetLang or from/to required" },
+  );
 
 // CORS - restricted to production domains + extension
 const ALLOWED_ORIGINS = [
@@ -397,7 +407,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { text, sourceLang, targetLang } = parsed.data;
+    // Support both param styles: sourceLang/targetLang (legacy) or from/to (new)
+    const {
+      text,
+      sourceLang,
+      targetLang,
+      from: fromParam,
+      to: toParam,
+    } = parsed.data;
+    const sourceLangFinal = sourceLang || fromParam || "en";
+    const targetLangFinal = targetLang || toParam || "es";
     const cleanText = text.trim();
     if (!cleanText) {
       return NextResponse.json({ translation: "" }, { headers: corsHeaders });
@@ -459,8 +478,8 @@ export async function POST(req: NextRequest) {
       return aliases[code] || code;
     };
 
-    const from = normalizeLanguage(sourceLang);
-    const to = normalizeLanguage(targetLang);
+    const from = normalizeLanguage(sourceLangFinal);
+    const to = normalizeLanguage(targetLangFinal);
 
     // Skip translation if normalized languages are the same
     if (from === to) {
@@ -585,6 +604,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         translation: finalTranslation,
+        translated: finalTranslation, // Alias for useTranscription hook
+        original: cleanText,
+        from,
+        to,
         source: translation ? source : "passthrough",
         latency,
       },
