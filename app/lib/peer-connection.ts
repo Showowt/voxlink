@@ -590,17 +590,13 @@ export class PeerConnection {
       // Start keep-alive
       this.startKeepAlive();
 
-      // BIDIRECTIONAL VIDEO CALL INITIATION
-      // Both sides attempt to establish video for maximum reliability
-      if (this.localStream) {
-        // Guest initiates immediately
-        if (!this.isHost) {
-          setTimeout(() => this.initiateVideoCallWithRetry(), 500);
-        } else {
-          // Host initiates with slight delay to avoid race condition
-          // This acts as backup if guest's call fails
-          setTimeout(() => this.initiateVideoCallWithRetry(), 1500);
-        }
+      // UNIDIRECTIONAL VIDEO CALL INITIATION
+      // CRITICAL FIX: Only ONE side initiates to prevent race condition
+      // Host listens for incoming calls via peer.on("call") → call.answer()
+      // Guest initiates the video call
+      if (this.localStream && !this.isHost) {
+        // Only guest initiates video call - host answers via setupPeerListeners
+        setTimeout(() => this.initiateVideoCallWithRetry(), 500);
       }
 
       this.setStatus("connecting", "Establishing video...");

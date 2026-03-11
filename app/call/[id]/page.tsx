@@ -83,11 +83,45 @@ const CYRANO_MODES: {
   label: string;
   emoji: string;
   color: string;
+  description: string;
+  shortDesc: string;
 }[] = [
-  { id: "date", label: "Date", emoji: "🔥", color: "#f97316" },
-  { id: "interview", label: "Interview", emoji: "💼", color: "#3b82f6" },
-  { id: "hardtalk", label: "Hard Talk", emoji: "⚖️", color: "#8b5cf6" },
-  { id: "sales", label: "Sales", emoji: "🎯", color: "#10b981" },
+  {
+    id: "date",
+    label: "Date",
+    emoji: "🔥",
+    color: "#f97316",
+    description:
+      "Romantic conversations. Get playful, warm, or safe suggestions to build connection.",
+    shortDesc: "Build romantic connection",
+  },
+  {
+    id: "interview",
+    label: "Interview",
+    emoji: "💼",
+    color: "#3b82f6",
+    description:
+      "Job interviews. Memorable answers that make you stand out to interviewers.",
+    shortDesc: "Ace your interviews",
+  },
+  {
+    id: "hardtalk",
+    label: "Hard Talk",
+    emoji: "⚖️",
+    color: "#8b5cf6",
+    description:
+      "Difficult conversations. De-escalate conflicts with clarity and empathy.",
+    shortDesc: "Navigate tough talks",
+  },
+  {
+    id: "sales",
+    label: "Sales",
+    emoji: "🎯",
+    color: "#10b981",
+    description:
+      "Sales calls. Handle objections and move conversations forward.",
+    shortDesc: "Close more deals",
+  },
 ];
 
 const TONE_COLORS: Record<string, string> = {
@@ -120,9 +154,11 @@ function CyranoPanel({
     addTheirLine,
     dismissSuggestions,
     clearTranscript,
+    regenerateSuggestions,
   } = cyrano;
 
   const [manualInput, setManualInput] = useState("");
+  const [showOnboarding, setShowOnboarding] = useState(true);
   const activeMode = CYRANO_MODES.find((m) => m.id === currentMode)!;
 
   const submitManual = () => {
@@ -133,7 +169,7 @@ function CyranoPanel({
 
   return (
     <div
-      className="flex flex-col rounded-2xl overflow-hidden h-full"
+      className="flex flex-col rounded-2xl overflow-hidden h-full max-h-[70vh] md:max-h-full"
       style={{
         background: "rgba(6, 6, 10, 0.95)",
         backdropFilter: "blur(24px)",
@@ -173,24 +209,62 @@ function CyranoPanel({
         </div>
         <button
           onClick={onClose}
-          className="p-1.5 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/[0.06] transition-all"
+          className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg text-white/30 hover:text-white/60 hover:bg-white/[0.06] transition-all"
         >
           ✕
         </button>
       </div>
 
-      {/* Setup (not active) */}
+      {/* Setup (not active) - ONBOARDING */}
       {!isActive && (
-        <div className="p-4 flex flex-col gap-4 flex-1">
-          <p className="text-white/30 text-xs text-center tracking-wide">
-            AI whispers what to say in real time
+        <div className="p-4 flex flex-col gap-4 flex-1 overflow-y-auto">
+          {/* First-time onboarding banner */}
+          {showOnboarding && (
+            <div
+              className="p-3 rounded-xl relative"
+              style={{
+                background: "rgba(245,158,11,0.1)",
+                border: "1px solid rgba(245,158,11,0.2)",
+              }}
+            >
+              <button
+                onClick={() => setShowOnboarding(false)}
+                className="absolute top-2 right-2 text-amber-400/50 hover:text-amber-400 text-xs"
+              >
+                ✕
+              </button>
+              <p className="text-amber-200 text-xs leading-relaxed pr-4">
+                <strong>How Cyrano works:</strong> After your partner speaks,
+                you&apos;ll get 3 suggestions:
+              </p>
+              <div className="flex gap-2 mt-2 text-[10px]">
+                <span className="px-2 py-1 rounded bg-amber-500/20 text-amber-300">
+                  ⚡ Bold
+                </span>
+                <span className="px-2 py-1 rounded bg-pink-500/20 text-pink-300">
+                  💛 Warm
+                </span>
+                <span className="px-2 py-1 rounded bg-slate-500/20 text-slate-300">
+                  🛡️ Safe
+                </span>
+              </div>
+              <p className="text-amber-200/60 text-[10px] mt-2">
+                Tap any suggestion to copy it, then say it naturally.
+              </p>
+            </div>
+          )}
+
+          <p className="text-white/40 text-xs text-center tracking-wide">
+            Choose a mode for your conversation
           </p>
-          <div className="grid grid-cols-2 gap-2">
+
+          {/* Mode cards with descriptions */}
+          <div className="grid grid-cols-1 gap-2">
             {CYRANO_MODES.map((mode) => (
               <button
                 key={mode.id}
                 onClick={() => setMode(mode.id)}
-                className="flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all duration-200"
+                className="flex items-center gap-3 p-3 rounded-xl border transition-all duration-200 text-left min-h-[56px]"
                 style={{
                   borderColor:
                     currentMode === mode.id
@@ -206,31 +280,48 @@ function CyranoPanel({
                       : "none",
                 }}
               >
-                <span className="text-lg">{mode.emoji}</span>
-                <span
-                  className="text-xs font-semibold"
-                  style={{
-                    color:
-                      currentMode === mode.id
-                        ? mode.color
-                        : "rgba(255,255,255,0.4)",
-                  }}
-                >
-                  {mode.label}
-                </span>
+                <span className="text-2xl shrink-0">{mode.emoji}</span>
+                <div className="flex-1 min-w-0">
+                  <span
+                    className="text-sm font-semibold block"
+                    style={{
+                      color:
+                        currentMode === mode.id
+                          ? mode.color
+                          : "rgba(255,255,255,0.6)",
+                    }}
+                  >
+                    {mode.label}
+                  </span>
+                  <span className="text-[11px] text-white/30 block truncate">
+                    {mode.shortDesc}
+                  </span>
+                </div>
+                {currentMode === mode.id && (
+                  <div
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ background: mode.color }}
+                  />
+                )}
               </button>
             ))}
           </div>
+
+          {/* Selected mode description */}
+          <p className="text-white/25 text-[11px] text-center leading-relaxed px-2">
+            {activeMode.description}
+          </p>
+
           <button
             onClick={activate}
-            className="w-full py-3 rounded-xl font-bold text-sm tracking-wide transition-all hover:scale-[1.02] active:scale-[0.98]"
+            className="w-full py-3.5 rounded-xl font-bold text-sm tracking-wide transition-all hover:scale-[1.02] active:scale-[0.98] min-h-[48px]"
             style={{
               background: `linear-gradient(135deg, ${activeMode.color} 0%, ${activeMode.color}cc 100%)`,
               color: "#000",
               boxShadow: `0 4px 24px ${activeMode.color}40`,
             }}
           >
-            Activate {activeMode.emoji}
+            Activate {activeMode.label} {activeMode.emoji}
           </button>
         </div>
       )}
@@ -338,13 +429,36 @@ function CyranoPanel({
                 />
               ))}
 
-            {suggestions.length > 0 && (
-              <button
-                onClick={dismissSuggestions}
-                className="text-white/15 text-[10px] text-center py-1 hover:text-white/30 transition-colors"
-              >
-                dismiss
-              </button>
+            {/* Suggestion actions */}
+            {suggestions.length > 0 && !isThinking && (
+              <div className="flex items-center justify-center gap-4 pt-1">
+                <button
+                  onClick={() => regenerateSuggestions()}
+                  className="flex items-center gap-1.5 text-amber-400/60 text-[11px] hover:text-amber-400 transition-colors min-h-[36px] px-2"
+                  title="Get new suggestions"
+                >
+                  <svg
+                    className="w-3 h-3"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                  regenerate
+                </button>
+                <button
+                  onClick={dismissSuggestions}
+                  className="text-white/20 text-[11px] hover:text-white/40 transition-colors min-h-[36px] px-2"
+                >
+                  dismiss
+                </button>
+              </div>
             )}
 
             {error && (
@@ -356,29 +470,29 @@ function CyranoPanel({
 
           {/* Footer */}
           <div
-            className="flex items-center justify-between px-4 py-2.5 shrink-0"
+            className="flex items-center justify-between px-4 py-3 shrink-0"
             style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}
           >
             <div className="flex items-center gap-2">
               <div
-                className={`w-1.5 h-1.5 rounded-full ${isListening ? "bg-green-400 animate-pulse" : "bg-zinc-600"}`}
+                className={`w-2 h-2 rounded-full ${isListening ? "bg-green-400 animate-pulse" : "bg-zinc-600"}`}
               />
-              <span className="text-white/25 text-xs">
+              <span className="text-white/30 text-xs">
                 {isListening ? "Listening" : "Mic off"}
               </span>
             </div>
-            <div className="flex gap-3">
+            <div className="flex gap-2">
               {transcript.length > 0 && (
                 <button
                   onClick={clearTranscript}
-                  className="text-white/20 text-xs hover:text-white/40 transition-colors"
+                  className="text-white/25 text-xs hover:text-white/50 transition-colors min-h-[44px] px-3"
                 >
                   clear
                 </button>
               )}
               <button
                 onClick={deactivate}
-                className="text-red-400/50 text-xs hover:text-red-400 transition-colors"
+                className="text-red-400/60 text-xs font-medium hover:text-red-400 transition-colors min-h-[44px] px-3"
               >
                 stop
               </button>
@@ -499,7 +613,7 @@ function VideoCallContent() {
   // Cyrano Mode state
   const [cyranoOpen, setCyranoOpen] = useState(false);
   const [cyranoPhrase, setCyranoPhrase] = useState("");
-  const cyrano = useCyrano("date");
+  const cyrano = useCyrano({ initialMode: "date", userLanguage: userLang });
   const cyranoEnabledOnJoinRef = useRef(false);
 
   // Refs (need to be defined before useTranscription hook)
@@ -1549,12 +1663,34 @@ function VideoCallContent() {
           )}
 
           {hasPartner && (
-            <button
-              onClick={() => setShowHistory(!showHistory)}
-              className={`bg-black/50 backdrop-blur px-2 py-1.5 md:px-3 md:py-2 text-xs md:text-sm min-h-[44px] ${showHistory ? "text-[#00C896]" : "text-white"}`}
-            >
-              📜 {transcript.length > 0 && `(${transcript.length})`}
-            </button>
+            <>
+              {/* Font Size Toggle */}
+              <button
+                onClick={() =>
+                  setFontSize((prev) =>
+                    prev === "small"
+                      ? "medium"
+                      : prev === "medium"
+                        ? "large"
+                        : "small",
+                  )
+                }
+                className="bg-black/50 backdrop-blur px-2 py-1.5 md:px-3 md:py-2 text-xs md:text-sm min-h-[44px] text-white hover:text-[#00C896] transition-colors"
+                title={`Caption size: ${fontSize}`}
+              >
+                {fontSize === "small"
+                  ? "A"
+                  : fontSize === "medium"
+                    ? "A+"
+                    : "A++"}
+              </button>
+              <button
+                onClick={() => setShowHistory(!showHistory)}
+                className={`bg-black/50 backdrop-blur px-2 py-1.5 md:px-3 md:py-2 text-xs md:text-sm min-h-[44px] ${showHistory ? "text-[#00C896]" : "text-white"}`}
+              >
+                📜 {transcript.length > 0 && `(${transcript.length})`}
+              </button>
+            </>
           )}
         </div>
 
@@ -1573,7 +1709,7 @@ function VideoCallContent() {
                       {getFlag(partnerLang || "es")}
                     </span>
                   </div>
-                  <p className="text-white/70 text-xs md:text-sm leading-relaxed mb-1">
+                  <p className="text-white/90 text-xs md:text-sm leading-relaxed mb-1">
                     {theirLiveText}
                   </p>
                   {theirLiveTranslation && (
@@ -1607,9 +1743,9 @@ function VideoCallContent() {
                       {getFlag(userLang)}
                     </span>
                   </div>
-                  <p className="text-white/70 text-xs md:text-sm leading-relaxed mb-1">
+                  <p className="text-white/90 text-xs md:text-sm leading-relaxed mb-1">
                     {myLiveText}
-                    <span className="inline-block w-0.5 h-3 md:h-4 bg-white/70 ml-1 animate-blink" />
+                    <span className="inline-block w-0.5 h-3 md:h-4 bg-white/90 ml-1 animate-blink" />
                   </p>
                   {myLiveTranslation && (
                     <p
@@ -1679,9 +1815,9 @@ function VideoCallContent() {
           </div>
         )}
 
-        {/* Cyrano Panel */}
+        {/* Cyrano Panel - Mobile: slides up from bottom, Desktop: right sidebar */}
         {cyranoOpen && (
-          <div className="absolute top-0 right-0 bottom-20 w-[320px] p-3 z-20 overflow-y-auto cyrano-panel-in">
+          <div className="absolute inset-x-0 bottom-20 md:inset-x-auto md:top-0 md:right-0 md:bottom-20 md:w-[320px] p-3 z-20 cyrano-panel-in">
             <CyranoPanel
               cyrano={cyrano}
               onSuggestionPick={(text) => setCyranoPhrase(text)}

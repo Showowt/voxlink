@@ -34,7 +34,10 @@ import type {
 // ─── BCP-47 language tags for Web Speech API ──────────────────────────────────
 const SPEECH_LANG_MAP: Record<string, string> = {
   en: "en-US",
-  es: "es-ES",
+  es: "es-CO", // Colombian Spanish for target market (vs es-ES)
+  "es-CO": "es-CO",
+  "es-MX": "es-MX",
+  "es-ES": "es-ES",
   fr: "fr-FR",
   de: "de-DE",
   it: "it-IT",
@@ -46,6 +49,9 @@ const SPEECH_LANG_MAP: Record<string, string> = {
   ru: "ru-RU",
   hi: "hi-IN",
 };
+
+// Whisper chunk duration in ms - lower = faster transcription, higher = more accurate
+const WHISPER_CHUNK_MS = 1500;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type TranscriptionMode = "webspeech" | "whisper" | "unavailable";
@@ -350,7 +356,7 @@ export function useTranscription({
       // Restart recording if still active
       if (isRunRef.current && mrRef.current?.state !== "recording") {
         try {
-          mrRef.current?.start(4000);
+          mrRef.current?.start(WHISPER_CHUNK_MS);
         } catch {
           /* stream ended */
         }
@@ -365,8 +371,8 @@ export function useTranscription({
       setError("Recording error. Please reload.");
     };
 
-    // Record 4-second chunks — good balance of latency vs API calls
-    mr.start(4000);
+    // Record in small chunks for faster transcription (1.5s vs 4s)
+    mr.start(WHISPER_CHUNK_MS);
   }, [localStream, translateAndSend]);
 
   const stopWhisper = useCallback(() => {

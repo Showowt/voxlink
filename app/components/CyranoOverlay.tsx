@@ -222,7 +222,7 @@ export default function CyranoOverlay({
     dismissSuggestions,
     clearTranscript,
     regenerateSuggestions,
-  } = useCyrano("date");
+  } = useCyrano({ initialMode: "date" });
 
   const [showTranscript, setShowTranscript] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
