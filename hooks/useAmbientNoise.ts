@@ -98,6 +98,12 @@ export function useAmbientNoise({
   const start = useCallback(async () => {
     if (!enabled || isActive || typeof window === "undefined") return;
 
+    // Check if navigator.mediaDevices exists (not available in some browsers/contexts)
+    if (!navigator?.mediaDevices?.getUserMedia) {
+      console.warn("[AmbientNoise] mediaDevices not available");
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
@@ -105,7 +111,22 @@ export function useAmbientNoise({
       });
       streamRef.current = stream;
 
-      const ctx = new AudioContext();
+      // Safari/iOS compatibility: use webkitAudioContext fallback
+      const AudioContextClass =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext })
+          .webkitAudioContext;
+      if (!AudioContextClass) {
+        console.warn("[AmbientNoise] AudioContext not supported");
+        return;
+      }
+
+      const ctx = new AudioContextClass();
+
+      // iOS requires AudioContext to be resumed after user gesture
+      if (ctx.state === "suspended") {
+        await ctx.resume();
+      }
       const analyzer = ctx.createAnalyser();
       analyzer.fftSize = 256; // 128 data points
       analyzer.smoothingTimeConstant = 0.6; // smooth out spikes

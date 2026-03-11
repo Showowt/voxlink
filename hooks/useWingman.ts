@@ -99,6 +99,25 @@ BOLD: Pattern interrupt, reframe objection. WARM: Empathy + value. SAFE: Classic
 Rules: Reference their exact words. Never manipulative. Short enough to remember while speaking.`,
 };
 
+// ─── Fetch with timeout for mobile networks ──────────────────────────────────
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number = 10000,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 // ─── BCP-47 speech lang map ───────────────────────────────────────────────────
 const SPEECH_LANG_MAP: Record<string, string> = {
   en: "en-US",
@@ -165,17 +184,21 @@ export function useWingman({
       let displayText = theirText;
       if (my !== their) {
         try {
-          const r = await fetch("/api/translate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: theirText, from: their, to: my }),
-          });
+          const r = await fetchWithTimeout(
+            "/api/translate",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ text: theirText, from: their, to: my }),
+            },
+            8000, // 8s timeout for translation
+          );
           if (r.ok) {
             const d = await r.json();
             displayText = d.translated ?? theirText;
           }
         } catch {
-          /* use original */
+          /* use original on timeout or error */
         }
       }
 
@@ -198,14 +221,18 @@ Generate exactly 3 suggestions. Return ONLY valid JSON:
 ]}`;
 
       try {
-        const res = await fetch("/api/cyrano", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            systemPrompt: MODE_PROMPTS[cyrano],
-            userPrompt,
-          }),
-        });
+        const res = await fetchWithTimeout(
+          "/api/cyrano",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              systemPrompt: MODE_PROMPTS[cyrano],
+              userPrompt,
+            }),
+          },
+          15000, // 15s timeout for AI generation
+        );
         if (!res.ok) throw new Error(`API ${res.status}`);
         const data = await res.json();
         const parsed = JSON.parse(data.content);
@@ -260,6 +287,9 @@ Generate exactly 3 suggestions. Return ONLY valid JSON:
 
   // ── Web Speech STT ───────────────────────────────────────────────────────
   const startSTT = useCallback(() => {
+    // SSR guard - window doesn't exist on server
+    if (typeof window === "undefined") return;
+
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
 
