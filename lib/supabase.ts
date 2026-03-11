@@ -39,20 +39,74 @@ export function isSupabaseConfigured(): boolean {
   return _supabaseConfigured;
 }
 
+// No-op query builder for when Supabase isn't configured
+const createNoOpQueryBuilder = () => {
+  const noOpResult = Promise.resolve({ data: null, error: null });
+  const noOpBuilder: Record<string, unknown> = {};
+
+  // All Supabase query methods return the builder for chaining
+  const chainableMethods = [
+    "insert",
+    "select",
+    "update",
+    "delete",
+    "upsert",
+    "eq",
+    "neq",
+    "gt",
+    "gte",
+    "lt",
+    "lte",
+    "like",
+    "ilike",
+    "is",
+    "in",
+    "contains",
+    "containedBy",
+    "range",
+    "overlaps",
+    "textSearch",
+    "match",
+    "not",
+    "or",
+    "filter",
+    "order",
+    "limit",
+    "single",
+    "maybeSingle",
+    "csv",
+    "explain",
+    "rollback",
+    "returns",
+  ];
+
+  for (const method of chainableMethods) {
+    noOpBuilder[method] = () => noOpBuilder;
+  }
+
+  // These methods return promises
+  noOpBuilder.then = (
+    resolve: (value: { data: null; error: null }) => void,
+  ) => {
+    resolve({ data: null, error: null });
+    return noOpResult;
+  };
+
+  return noOpBuilder;
+};
+
 // Export as getter for lazy initialization (prevents build-time errors)
 // Returns a proxy that no-ops if Supabase isn't configured
 export const supabase = new Proxy({} as SupabaseClient, {
   get(_, prop: keyof SupabaseClient) {
     const client = getSupabaseClient();
     if (!client) {
-      // Return no-op functions for missing Supabase
-      return () => ({
-        insert: () => Promise.resolve({ data: null, error: null }),
-        select: () => Promise.resolve({ data: [], error: null }),
-        update: () => Promise.resolve({ data: null, error: null }),
-        delete: () => Promise.resolve({ data: null, error: null }),
-        upsert: () => Promise.resolve({ data: null, error: null }),
-      });
+      // Return no-op for 'from' that returns chainable query builder
+      if (prop === "from") {
+        return () => createNoOpQueryBuilder();
+      }
+      // Return no-op for other methods
+      return () => Promise.resolve({ data: null, error: null });
     }
     return client[prop];
   },
