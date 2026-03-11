@@ -49,21 +49,21 @@ export function LanguageSelector({
         aria-label={`Select language, currently ${selectedLang.name}`}
         aria-expanded={isOpen}
         aria-haspopup="listbox"
-        className={`flex items-center justify-center gap-1.5 sm:gap-2 p-2 sm:p-3 rounded-lg sm:rounded-xl bg-[#1a1a2e] border border-gray-700 text-white transition w-full ${
+        className={`flex items-center justify-center gap-1.5 sm:gap-2 p-2 sm:p-3 rounded-xl backdrop-blur-md bg-white/[0.06] border border-white/[0.10] text-white transition-all duration-200 w-full ${
           disabled
             ? "opacity-50 cursor-not-allowed"
-            : "hover:border-gray-600 cursor-pointer"
+            : "hover:bg-white/[0.10] hover:border-white/[0.15] cursor-pointer"
         }`}
       >
         <span className="text-lg sm:text-xl" aria-hidden="true">
           {selectedLang.flag}
         </span>
-        <span className="font-medium text-sm sm:text-base">
+        <span className="font-medium text-sm sm:text-base text-white/90">
           {compact ? selectedLang.code.toUpperCase() : selectedLang.name}
         </span>
         {!disabled && (
           <svg
-            className={`w-4 h-4 transition-transform ${isOpen ? "rotate-180" : ""}`}
+            className={`w-4 h-4 text-white/60 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -81,9 +81,13 @@ export function LanguageSelector({
 
       {isOpen && (
         <div
-          className="absolute z-50 top-full left-0 right-0 mt-1 bg-[#1a1a2e] border border-gray-700 rounded-xl shadow-xl max-h-64 overflow-y-auto"
+          className="absolute z-50 top-full left-0 right-0 mt-1 backdrop-blur-xl bg-void-elevated/95 border border-white/[0.12] rounded-xl shadow-2xl max-h-64 overflow-y-auto"
           role="listbox"
           aria-label="Available languages"
+          style={{
+            boxShadow:
+              "0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.06)",
+          }}
         >
           {availableLanguages.map((lang) => (
             <button
@@ -95,10 +99,10 @@ export function LanguageSelector({
                 onChange(lang.code);
                 setIsOpen(false);
               }}
-              className={`w-full flex items-center gap-2 px-3 py-2.5 text-left transition ${
+              className={`w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors duration-150 ${
                 lang.code === value
-                  ? "bg-cyan-500/20 text-cyan-400"
-                  : "text-white hover:bg-white/5"
+                  ? "bg-voxxo-500/20 text-voxxo-400"
+                  : "text-white/80 hover:bg-white/[0.06] hover:text-white"
               }`}
             >
               <span className="text-lg" aria-hidden="true">
@@ -106,7 +110,7 @@ export function LanguageSelector({
               </span>
               <span className="flex-1 text-sm">{lang.name}</span>
               {lang.nativeName !== lang.name && (
-                <span className="text-xs text-gray-500">{lang.nativeName}</span>
+                <span className="text-xs text-white/40">{lang.nativeName}</span>
               )}
             </button>
           ))}
@@ -155,10 +159,10 @@ export function DualLanguageSelector({
         onClick={onSwap}
         disabled={disabled}
         aria-label="Swap source and target languages"
-        className={`p-2 sm:p-3 rounded-lg sm:rounded-xl bg-[#1a1a2e] border border-gray-700 text-cyan-400 transition ${
+        className={`p-2 sm:p-3 rounded-xl backdrop-blur-md bg-white/[0.06] border border-white/[0.10] text-voxxo-400 transition-all duration-200 ${
           disabled
             ? "opacity-50 cursor-not-allowed"
-            : "hover:bg-cyan-500/10 hover:border-cyan-500/50"
+            : "hover:bg-voxxo-500/10 hover:border-voxxo-500/30 hover:text-voxxo-300 hover:scale-105"
         }`}
       >
         <svg
@@ -215,10 +219,10 @@ export function LanguageGrid({
           aria-checked={lang.code === value}
           aria-label={lang.name}
           onClick={() => onChange(lang.code)}
-          className={`p-2 sm:p-3 rounded-xl border-2 transition flex flex-col items-center justify-center gap-1 ${
+          className={`p-2 sm:p-3 rounded-xl border transition-all duration-200 flex flex-col items-center justify-center gap-1 backdrop-blur-sm ${
             lang.code === value
-              ? "border-cyan-500 bg-cyan-500/10 text-cyan-400"
-              : "border-gray-700 bg-[#1a1a2e] text-gray-400 hover:border-gray-600"
+              ? "border-voxxo-500 bg-voxxo-500/15 text-voxxo-400 shadow-lg shadow-voxxo-500/10"
+              : "border-white/[0.10] bg-white/[0.04] text-white/60 hover:border-white/[0.15] hover:bg-white/[0.08] hover:text-white/80"
           }`}
         >
           <span className="text-xl sm:text-2xl" aria-hidden="true">

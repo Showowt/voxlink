@@ -12,6 +12,12 @@ import {
   DualLanguageSelector,
   LanguageGrid,
 } from "./components/LanguageSelector";
+// Premium UI Components
+import { AnimatedBackground } from "./components/ui/AnimatedBackground";
+import { GlassCard } from "./components/ui/GlassCard";
+import { GlowButton } from "./components/ui/GlowButton";
+import { VoxxoLogo } from "./components/ui/VoxxoLogo";
+import { PillTabs, SimplePillTabs } from "./components/ui/PillTabs";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // VOXTYPE COMPONENT - Type & Verify Translation (Back-Translation)
@@ -221,9 +227,10 @@ function VoxTypeTab() {
     <div className="space-y-3 sm:space-y-4">
       {/* Header - Hidden on small mobile to save space */}
       <div className="text-center pb-1 sm:pb-2 hidden sm:block">
-        <p className="text-gray-400 text-xs sm:text-sm">
+        <p className="text-white/50 text-xs sm:text-sm">
           Type → Translate →{" "}
-          <span className="text-[#00DBA8]">Verify meaning</span> → Share
+          <span className="text-voxxo-400 font-medium">Verify meaning</span> →
+          Share
         </p>
       </div>
 
@@ -237,9 +244,9 @@ function VoxTypeTab() {
         compact={true}
       />
 
-      {/* Input Field - Compact */}
+      {/* Input Field - Premium Glass Style */}
       <div className="space-y-1.5 sm:space-y-2">
-        <label className="text-xs sm:text-sm text-gray-400 flex items-center gap-1.5 sm:gap-2">
+        <label className="text-xs sm:text-sm text-white/60 flex items-center gap-1.5 sm:gap-2">
           <span>{getFlag(sourceLang)}</span>
           Type your message
         </label>
@@ -252,22 +259,22 @@ function VoxTypeTab() {
               : "Escribe lo que quieres decir..."
           }
           rows={2}
-          className="w-full px-3 py-2.5 sm:px-4 sm:py-3 bg-[#1a1a2e] border border-gray-700 rounded-lg sm:rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-[#00DBA8] transition resize-none text-base sm:text-lg"
+          className="glass-input w-full px-3 py-2.5 sm:px-4 sm:py-3 rounded-xl text-white placeholder-white/30 text-base sm:text-lg"
         />
       </div>
 
       {/* Error */}
       {error && (
-        <div className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs sm:text-sm text-center">
-          {error}
-        </div>
+        <GlassCard variant="subtle" padding="sm" glow="error">
+          <p className="text-red-400 text-xs sm:text-sm text-center">{error}</p>
+        </GlassCard>
       )}
 
       {/* Loading */}
       {isTranslating && (
         <div className="flex items-center justify-center gap-2 py-3 sm:py-4">
-          <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-[#00DBA8] border-t-transparent rounded-full animate-spin" />
-          <span className="text-gray-400 text-xs sm:text-sm">
+          <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-voxxo-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-white/50 text-xs sm:text-sm">
             Translating...
           </span>
         </div>
@@ -277,54 +284,48 @@ function VoxTypeTab() {
       {translatedText && !isTranslating && (
         <div className="space-y-1.5 sm:space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-xs sm:text-sm text-gray-400 flex items-center gap-1.5 sm:gap-2">
+            <label className="text-xs sm:text-sm text-white/60 flex items-center gap-1.5 sm:gap-2">
               <span>{getFlag(targetLang)}</span>
               Translation
             </label>
           </div>
-          <div className="p-3 sm:p-4 rounded-lg sm:rounded-xl bg-gradient-to-br from-[#00DBA8]/10 to-blue-500/10 border border-[#00DBA8]/30 text-cyan-100 text-sm sm:text-base">
-            {translatedText}
-          </div>
+          <GlassCard variant="default" padding="sm" glow="voxxo">
+            <p className="text-voxxo-100 text-sm sm:text-base">
+              {translatedText}
+            </p>
+          </GlassCard>
 
-          {/* Share/Copy Buttons - Compact */}
+          {/* Share/Copy Buttons - Premium Style */}
           <div className="flex gap-2">
             {canShare ? (
               <>
-                {/* Share Button - Primary on mobile */}
-                <button
+                <GlowButton
                   onClick={shareTranslation}
-                  className={`flex-1 py-3 sm:py-4 rounded-lg sm:rounded-xl font-semibold text-base sm:text-lg transition shadow-lg ${
-                    shared
-                      ? "bg-green-500 text-white shadow-green-500/25"
-                      : "bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-green-500/25"
-                  }`}
+                  variant={shared ? "success" : "success"}
+                  size="lg"
+                  fullWidth
+                  icon={<span>{shared ? "✓" : "📤"}</span>}
                 >
-                  {shared ? "✓ Shared!" : "📤 Share"}
-                </button>
-                {/* Copy Button - Secondary */}
-                <button
+                  {shared ? "Shared!" : "Share"}
+                </GlowButton>
+                <GlowButton
                   onClick={copyTranslation}
-                  className={`py-3 sm:py-4 px-4 sm:px-5 rounded-lg sm:rounded-xl font-semibold text-base sm:text-lg transition ${
-                    copied
-                      ? "bg-green-500 text-white"
-                      : "bg-[#1a1a2e] border border-gray-700 text-gray-300 hover:text-white hover:border-gray-600"
-                  }`}
+                  variant={copied ? "success" : "secondary"}
+                  size="lg"
                 >
                   {copied ? "✓" : "📋"}
-                </button>
+                </GlowButton>
               </>
             ) : (
-              /* Copy Button - Primary on desktop */
-              <button
+              <GlowButton
                 onClick={copyTranslation}
-                className={`w-full py-3 sm:py-4 rounded-lg sm:rounded-xl font-semibold text-base sm:text-lg transition shadow-lg ${
-                  copied
-                    ? "bg-green-500 text-white shadow-green-500/25"
-                    : "bg-gradient-to-r from-[#00DBA8] to-[#0088FF] hover:from-[#00C896] hover:to-[#0066DD] text-white shadow-[#00DBA8]/25"
-                }`}
+                variant={copied ? "success" : "primary"}
+                size="lg"
+                fullWidth
+                icon={<span>{copied ? "✓" : "📋"}</span>}
               >
-                {copied ? "✓ Copied!" : "📋 Copy Translation"}
-              </button>
+                {copied ? "Copied!" : "Copy Translation"}
+              </GlowButton>
             )}
           </div>
         </div>
@@ -334,67 +335,86 @@ function VoxTypeTab() {
       {backTranslation && !isTranslating && (
         <div className="space-y-1.5 sm:space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-xs sm:text-sm text-gray-400 flex items-center gap-1.5">
+            <label className="text-xs sm:text-sm text-white/60 flex items-center gap-1.5">
               <span>🔄</span>
               <span className="hidden sm:inline">Verification</span>
               <span className="sm:hidden">Verify</span>
             </label>
             {meaningMatch === "match" && (
-              <span className="text-xs text-green-400 flex items-center gap-1">
+              <span className="text-xs text-emerald-400 flex items-center gap-1 font-medium">
                 ✓ OK
               </span>
             )}
             {meaningMatch === "warning" && (
-              <span className="text-xs text-yellow-400 flex items-center gap-1">
+              <span className="text-xs text-amber-400 flex items-center gap-1 font-medium">
                 ⚠️ Check
               </span>
             )}
           </div>
-          <div
-            className={`p-2.5 sm:p-3 rounded-lg sm:rounded-xl border text-sm sm:text-base ${
+          <GlassCard
+            variant="subtle"
+            padding="sm"
+            glow={
               meaningMatch === "match"
-                ? "bg-green-500/10 border-green-500/30 text-green-100"
+                ? "voxxo"
                 : meaningMatch === "warning"
-                  ? "bg-yellow-500/10 border-yellow-500/30 text-yellow-100"
-                  : "bg-[#1a1a2e] border-gray-700 text-gray-300"
-            }`}
+                  ? "gold"
+                  : "none"
+            }
           >
-            <p className="text-[10px] sm:text-xs text-gray-500 mb-0.5 sm:mb-1">
+            <p className="text-[10px] sm:text-xs text-white/40 mb-0.5 sm:mb-1">
               They will understand:
             </p>
-            <p>{backTranslation}</p>
-          </div>
+            <p
+              className={`text-sm sm:text-base ${
+                meaningMatch === "match"
+                  ? "text-emerald-200"
+                  : meaningMatch === "warning"
+                    ? "text-amber-200"
+                    : "text-white/70"
+              }`}
+            >
+              {backTranslation}
+            </p>
+          </GlassCard>
 
           {meaningMatch === "warning" && (
-            <p className="text-[10px] sm:text-xs text-yellow-400 text-center">
+            <p className="text-[10px] sm:text-xs text-amber-400 text-center">
               💡 Rephrase with simpler words
             </p>
           )}
         </div>
       )}
 
-      {/* Clear Button - Compact */}
+      {/* Clear Button - Ghost Style */}
       {inputText && (
-        <button
+        <GlowButton
           onClick={clearAll}
-          className="w-full py-2.5 sm:py-3 rounded-lg sm:rounded-xl bg-[#1a1a2e] border border-gray-700 text-gray-400 hover:text-white hover:border-gray-600 transition text-sm sm:text-base"
+          variant="ghost"
+          size="md"
+          fullWidth
+          icon={<span>🗑️</span>}
         >
-          🗑️ Clear
-        </button>
+          Clear
+        </GlowButton>
       )}
 
-      {/* WhatsApp Workflow - Hidden on mobile when there's content, always shown when empty */}
+      {/* WhatsApp Workflow - Premium Info Card */}
       {!translatedText && (
-        <div className="p-3 sm:p-4 rounded-lg sm:rounded-xl bg-green-500/10 border border-green-500/30">
-          <p className="text-green-400 text-xs sm:text-sm font-medium flex items-center gap-2">
+        <GlassCard
+          variant="subtle"
+          padding="sm"
+          className="border-voxxo-500/20"
+        >
+          <p className="text-voxxo-400 text-xs sm:text-sm font-medium flex items-center gap-2">
             <span className="text-base sm:text-lg">💬</span> How it works
           </p>
-          <ol className="text-gray-400 text-[10px] sm:text-xs mt-1.5 sm:mt-2 space-y-0.5 sm:space-y-1 list-decimal list-inside">
+          <ol className="text-white/50 text-[10px] sm:text-xs mt-1.5 sm:mt-2 space-y-0.5 sm:space-y-1 list-decimal list-inside">
             <li>Type your message</li>
             <li>Check verification matches your intent</li>
             <li>Tap Share or Copy</li>
           </ol>
-        </div>
+        </GlassCard>
       )}
     </div>
   );
@@ -767,16 +787,20 @@ function VoxNoteTab() {
     <div className="space-y-2 sm:space-y-3">
       {/* Browser Compatibility Warning */}
       {!browserSupported && (
-        <div className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-orange-500/10 border border-orange-500/30 text-orange-400 text-xs sm:text-sm text-center">
-          ⚠️ Use Chrome or Edge browser
-        </div>
+        <GlassCard variant="subtle" padding="sm" glow="gold">
+          <p className="text-amber-400 text-xs sm:text-sm text-center">
+            ⚠️ Use Chrome or Edge browser
+          </p>
+        </GlassCard>
       )}
 
       {/* Offline Warning */}
       {!isOnline && (
-        <div className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-xs sm:text-sm text-center">
-          ⚠️ You're offline
-        </div>
+        <GlassCard variant="subtle" padding="sm" glow="gold">
+          <p className="text-amber-400 text-xs sm:text-sm text-center">
+            ⚠️ You&apos;re offline
+          </p>
+        </GlassCard>
       )}
 
       {/* Language Selector - Multi-language support */}
@@ -790,29 +814,38 @@ function VoxNoteTab() {
         compact={true}
       />
 
-      {/* Recording Button - Smaller on mobile */}
+      {/* Recording Button - Premium Design */}
       <div className="flex flex-col items-center py-3 sm:py-4">
         <button
           onClick={toggleRecording}
           disabled={isProcessing || !isOnline || !browserSupported}
-          className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center transition-all shadow-lg ${
+          aria-label={isRecording ? "Stop recording" : "Start recording"}
+          className={`relative w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center transition-all duration-300 ${
             isProcessing || !browserSupported
-              ? "bg-gray-600 cursor-not-allowed"
+              ? "bg-white/10 cursor-not-allowed"
               : isRecording
-                ? "bg-red-500 hover:bg-red-600 shadow-red-500/50"
-                : "bg-gradient-to-br from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 shadow-green-500/30 hover:shadow-green-500/50"
+                ? "bg-gradient-to-br from-red-500 to-red-600 shadow-2xl shadow-red-500/40"
+                : "bg-gradient-to-br from-voxxo-400 to-voxxo-600 shadow-2xl shadow-voxxo-500/40 hover:shadow-voxxo-500/60 hover:scale-105"
           }`}
           style={
             isRecording ? { animation: "pulse 1.5s ease-in-out infinite" } : {}
           }
         >
+          {/* Outer ring glow */}
+          {!isProcessing && !isRecording && (
+            <span
+              className="absolute inset-0 rounded-full ring-2 ring-voxxo-400/30 animate-ping"
+              style={{ animationDuration: "2s" }}
+            />
+          )}
+
           {isProcessing ? (
             <div className="w-8 h-8 sm:w-10 sm:h-10 border-4 border-white border-t-transparent rounded-full animate-spin" />
           ) : isRecording ? (
-            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white rounded-md" />
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white rounded-lg shadow-lg" />
           ) : (
             <svg
-              className="w-10 h-10 sm:w-12 sm:h-12 text-white"
+              className="w-10 h-10 sm:w-12 sm:h-12 text-void-DEFAULT"
               fill="currentColor"
               viewBox="0 0 24 24"
             >
@@ -828,13 +861,13 @@ function VoxNoteTab() {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 sm:h-3 sm:w-3 bg-red-500"></span>
             </span>
-            <span className="text-red-400 font-mono text-base sm:text-lg">
+            <span className="text-red-400 font-mono text-base sm:text-lg font-medium">
               {formatTime(recordingTime)}
             </span>
           </div>
         )}
 
-        <p className="text-gray-500 text-xs sm:text-sm mt-2">
+        <p className="text-white/40 text-xs sm:text-sm mt-2">
           {!browserSupported
             ? "Use Chrome or Edge"
             : isProcessing
@@ -847,122 +880,131 @@ function VoxNoteTab() {
 
       {/* Error */}
       {error && (
-        <div className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs sm:text-sm text-center">
-          {error}
-        </div>
+        <GlassCard variant="subtle" padding="sm" glow="error">
+          <p className="text-red-400 text-xs sm:text-sm text-center">{error}</p>
+        </GlassCard>
       )}
 
-      {/* Original Text - Compact */}
+      {/* Original Text - Premium Glass Style */}
       {displayText && (
         <div className="space-y-1 sm:space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs sm:text-sm text-gray-400 flex items-center gap-1.5">
+            <span className="text-xs sm:text-sm text-white/60 flex items-center gap-1.5">
               <span>{getFlag(sourceLang)}</span>
               Original
               {isRecording && (
-                <span className="text-green-400 text-[10px] sm:text-xs">
+                <span className="text-voxxo-400 text-[10px] sm:text-xs font-medium">
                   (listening)
                 </span>
               )}
             </span>
           </div>
-          <div
-            className={`p-2.5 sm:p-3 rounded-lg sm:rounded-xl bg-[#1a1a2e] border text-white text-sm sm:text-base ${
-              isRecording ? "border-green-500/50" : "border-gray-700"
-            }`}
+          <GlassCard
+            variant={isRecording ? "interactive" : "subtle"}
+            padding="sm"
+            glow={isRecording ? "voxxo" : "none"}
           >
-            {displayText}
-            {isRecording && <span className="animate-pulse">|</span>}
-          </div>
+            <p className="text-white text-sm sm:text-base">
+              {displayText}
+              {isRecording && (
+                <span className="animate-pulse text-voxxo-400">|</span>
+              )}
+            </p>
+          </GlassCard>
         </div>
       )}
 
-      {/* Translated Text - Compact with Share button */}
+      {/* Translated Text - Premium Glass Style */}
       {translatedText && (
         <div className="space-y-1.5 sm:space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs sm:text-sm text-gray-400 flex items-center gap-1.5">
+            <span className="text-xs sm:text-sm text-white/60 flex items-center gap-1.5">
               <span>{getFlag(targetLang)}</span>
               Translation
             </span>
             <button
               onClick={speakTranslation}
               disabled={isSpeaking}
-              className={`text-xs transition ${
+              aria-label={isSpeaking ? "Speaking..." : "Play translation"}
+              className={`text-xs transition-all duration-200 p-1.5 rounded-lg ${
                 isSpeaking
-                  ? "text-green-400"
-                  : "text-[#00DBA8] hover:text-cyan-300"
+                  ? "text-voxxo-400 bg-voxxo-500/10"
+                  : "text-voxxo-500 hover:text-voxxo-400 hover:bg-voxxo-500/10"
               }`}
             >
               {isSpeaking ? "🔊..." : "🔊"}
             </button>
           </div>
-          <div className="p-2.5 sm:p-3 rounded-lg sm:rounded-xl bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/30 text-green-100 text-sm sm:text-base">
-            {translatedText}
-          </div>
+          <GlassCard variant="default" padding="sm" glow="voxxo">
+            <p className="text-voxxo-100 text-sm sm:text-base">
+              {translatedText}
+            </p>
+          </GlassCard>
 
-          {/* Share/Copy Buttons */}
+          {/* Share/Copy Buttons - Premium Style */}
           <div className="flex gap-2">
             {canShare ? (
               <>
-                <button
+                <GlowButton
                   onClick={shareTranslation}
-                  className={`flex-1 py-3 sm:py-4 rounded-lg sm:rounded-xl font-semibold text-base sm:text-lg transition shadow-lg ${
-                    shared
-                      ? "bg-green-500 text-white shadow-green-500/25"
-                      : "bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-green-500/25"
-                  }`}
+                  variant="success"
+                  size="lg"
+                  fullWidth
+                  icon={<span>{shared ? "✓" : "📤"}</span>}
                 >
-                  {shared ? "✓ Shared!" : "📤 Share"}
-                </button>
-                <button
+                  {shared ? "Shared!" : "Share"}
+                </GlowButton>
+                <GlowButton
                   onClick={() => copyToClipboard(translatedText, "translated")}
-                  className={`py-3 sm:py-4 px-4 rounded-lg sm:rounded-xl font-semibold transition ${
-                    copied === "translated"
-                      ? "bg-green-500 text-white"
-                      : "bg-[#1a1a2e] border border-gray-700 text-gray-300 hover:text-white"
-                  }`}
+                  variant={copied === "translated" ? "success" : "secondary"}
+                  size="lg"
                 >
                   {copied === "translated" ? "✓" : "📋"}
-                </button>
+                </GlowButton>
               </>
             ) : (
-              <button
+              <GlowButton
                 onClick={() => copyToClipboard(translatedText, "translated")}
-                className={`w-full py-3 sm:py-4 rounded-lg sm:rounded-xl font-semibold text-base sm:text-lg transition shadow-lg ${
-                  copied === "translated"
-                    ? "bg-green-500 text-white shadow-green-500/25"
-                    : "bg-gradient-to-r from-[#00DBA8] to-[#0088FF] hover:from-[#00C896] hover:to-[#0066DD] text-white shadow-[#00DBA8]/25"
-                }`}
+                variant={copied === "translated" ? "success" : "primary"}
+                size="lg"
+                fullWidth
+                icon={<span>{copied === "translated" ? "✓" : "📋"}</span>}
               >
-                {copied === "translated" ? "✓ Copied!" : "📋 Copy"}
-              </button>
+                {copied === "translated" ? "Copied!" : "Copy"}
+              </GlowButton>
             )}
           </div>
         </div>
       )}
 
-      {/* Clear Button - Compact */}
+      {/* Clear Button - Ghost Style */}
       {(originalText || translatedText) && !isRecording && (
-        <button
+        <GlowButton
           onClick={clearAll}
-          className="w-full py-2.5 sm:py-3 rounded-lg sm:rounded-xl bg-[#1a1a2e] border border-gray-700 text-gray-400 hover:text-white hover:border-gray-600 transition text-sm"
+          variant="ghost"
+          size="md"
+          fullWidth
+          icon={<span>🗑️</span>}
         >
-          🗑️ Clear
-        </button>
+          Clear
+        </GlowButton>
       )}
 
-      {/* WhatsApp Tip - Only show when no content */}
+      {/* WhatsApp Tip - Premium Info Card */}
       {!displayText && !translatedText && (
-        <div className="p-2.5 sm:p-4 rounded-lg sm:rounded-xl bg-green-500/10 border border-green-500/30">
-          <p className="text-green-400 text-xs sm:text-sm font-medium flex items-center gap-1.5 sm:gap-2">
+        <GlassCard
+          variant="subtle"
+          padding="sm"
+          className="border-voxxo-500/20"
+        >
+          <p className="text-voxxo-400 text-xs sm:text-sm font-medium flex items-center gap-1.5 sm:gap-2">
             <span>💡</span> Tip
           </p>
-          <p className="text-gray-400 text-[10px] sm:text-xs mt-1 sm:mt-2">
+          <p className="text-white/50 text-[10px] sm:text-xs mt-1 sm:mt-2">
             Play a WhatsApp voice message on speaker, then tap record to
             translate!
           </p>
-        </div>
+        </GlassCard>
       )}
     </div>
   );
@@ -1106,143 +1148,117 @@ function HomeContent() {
     );
   };
 
-  // Joining screen
+  // Joining screen - Premium Design
   if (isJoining && joinId) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#060810] via-[#0d1117] to-[#060810] flex items-center justify-center p-4">
-        <div className="w-full max-w-md">
-          <div className="bg-[#12121a] rounded-2xl border border-gray-800 p-6">
-            <div className="text-center mb-6">
-              <span className="text-4xl">
-                {joinType === "talk" ? "💬" : "📹"}
-              </span>
-              <h2 className="text-xl font-bold text-white mt-3">
-                Join {joinType === "talk" ? "Conversation" : "Video Call"}
-              </h2>
-              <p className="text-gray-400 text-sm mt-1">
-                Code: <span className="font-mono text-[#00DBA8]">{joinId}</span>
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-2">
-                  Your Name
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Enter your name"
-                  className="w-full px-4 py-3 bg-[#1a1a2e] border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-[#00DBA8] transition"
-                />
+      <AnimatedBackground variant="mesh">
+        <div className="min-h-screen flex items-center justify-center p-4">
+          <div className="w-full max-w-md">
+            <GlassCard variant="elevated" padding="lg" animate>
+              <div className="text-center mb-6">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-voxxo-400 to-accent-DEFAULT shadow-2xl shadow-voxxo-500/30 mb-3">
+                  <span className="text-3xl">
+                    {joinType === "talk" ? "💬" : "📹"}
+                  </span>
+                </div>
+                <h2 className="text-xl font-bold text-white mt-3">
+                  Join {joinType === "talk" ? "Conversation" : "Video Call"}
+                </h2>
+                <p className="text-white/50 text-sm mt-1">
+                  Code:{" "}
+                  <span className="font-mono text-voxxo-400 font-semibold">
+                    {joinId}
+                  </span>
+                </p>
               </div>
 
-              <div>
-                <label className="block text-sm text-gray-400 mb-2">
-                  You Speak
-                </label>
-                <LanguageGrid value={language} onChange={setLanguage} />
-              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm text-white/60 mb-2">
+                    Your Name
+                  </label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Enter your name"
+                    className="glass-input w-full px-4 py-3 rounded-xl text-white placeholder-white/30"
+                  />
+                </div>
 
-              <button
-                onClick={joinType === "talk" ? joinTalkMode : joinVideoCall}
-                className="w-full py-4 bg-gradient-to-r from-[#00DBA8] to-[#0088FF] hover:from-[#00C896] hover:to-[#0066DD] rounded-xl text-white font-semibold text-lg transition shadow-lg shadow-[#00DBA8]/25"
-              >
-                {joinType === "talk" ? "💬 Join" : "📹 Join"}
-              </button>
-            </div>
+                <div>
+                  <label className="block text-sm text-white/60 mb-2">
+                    You Speak
+                  </label>
+                  <LanguageGrid value={language} onChange={setLanguage} />
+                </div>
+
+                <GlowButton
+                  onClick={joinType === "talk" ? joinTalkMode : joinVideoCall}
+                  variant="primary"
+                  size="xl"
+                  fullWidth
+                  icon={<span>{joinType === "talk" ? "💬" : "📹"}</span>}
+                >
+                  Join
+                </GlowButton>
+              </div>
+            </GlassCard>
           </div>
         </div>
-      </div>
+      </AnimatedBackground>
     );
   }
 
+  // Tab configuration for PillTabs
+  const tabs = [
+    { id: "voxtype", label: "Type", icon: <span>⌨️</span> },
+    { id: "voxnote", label: "Voice", icon: <span>🎤</span>, color: "emerald" },
+    { id: "talk", label: "Face", icon: <span>💬</span> },
+    { id: "video", label: "Call", icon: <span>📹</span> },
+    { id: "proximity", label: "", icon: <span>📡</span>, color: "purple" },
+  ];
+
   return (
-    <div className="min-h-[100dvh] bg-gradient-to-br from-[#060810] via-[#0d1117] to-[#060810] flex flex-col py-3 px-3 sm:py-4 sm:px-4 sm:justify-center overflow-y-auto">
+    <AnimatedBackground
+      variant="mesh"
+      className="flex flex-col py-3 px-3 sm:py-4 sm:px-4 sm:justify-center overflow-y-auto"
+    >
       <div className="w-full max-w-md mx-auto flex-shrink-0">
-        {/* Logo - Compact on mobile */}
-        <div className="text-center mb-3 sm:mb-6">
-          <div className="inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-gradient-to-br from-[#00DBA8] to-[#0088FF] mb-2 sm:mb-3 shadow-lg shadow-[#00DBA8]/25">
-            <span className="text-2xl sm:text-3xl">🔗</span>
-          </div>
-          <div className="flex items-center justify-center gap-1 mb-0.5 sm:mb-1">
-            <span className="text-xs sm:text-sm font-medium text-[#00DBA8] tracking-wider">
-              MACHINEMIND
-            </span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white mb-0.5 sm:mb-1">
-            Voxxo
-          </h1>
-          <p className="text-gray-400 text-xs sm:text-sm">
-            Your Voice. Any Language. Instantly.
-          </p>
+        {/* Logo - Premium Animated */}
+        <div className="mb-4 sm:mb-6">
+          <VoxxoLogo size="md" animate showBrand />
         </div>
 
         {/* Browser Compatibility Warning */}
         {browserWarning && (
-          <div className="mb-3 sm:mb-4 p-3 rounded-xl bg-orange-500/10 border border-orange-500/30 text-center">
-            <p className="text-orange-400 text-xs sm:text-sm flex items-center justify-center gap-2">
+          <GlassCard
+            variant="subtle"
+            padding="sm"
+            glow="gold"
+            className="mb-3 sm:mb-4"
+          >
+            <p className="text-amber-400 text-xs sm:text-sm flex items-center justify-center gap-2">
               <span>⚠️</span>
               {browserWarning}
             </p>
-          </div>
+          </GlassCard>
         )}
 
-        {/* Card */}
-        <div className="bg-[#12121a] rounded-xl sm:rounded-2xl border border-gray-800 overflow-hidden shadow-xl">
-          {/* Mode Tabs - Compact on mobile */}
-          <div className="flex border-b border-gray-800">
-            <button
-              onClick={() => setActiveTab("voxtype")}
-              className={`flex-1 py-2.5 sm:py-3 text-center font-medium transition text-xs sm:text-sm ${
-                activeTab === "voxtype"
-                  ? "text-[#00DBA8] border-b-2 border-[#00DBA8] bg-[#00DBA8]/5"
-                  : "text-gray-400 hover:text-white"
-              }`}
-            >
-              ⌨️ Type
-            </button>
-            <button
-              onClick={() => setActiveTab("voxnote")}
-              className={`flex-1 py-2.5 sm:py-3 text-center font-medium transition text-xs sm:text-sm ${
-                activeTab === "voxnote"
-                  ? "text-green-400 border-b-2 border-green-400 bg-green-500/5"
-                  : "text-gray-400 hover:text-white"
-              }`}
-            >
-              🎤 Voice
-            </button>
-            <button
-              onClick={() => setActiveTab("talk")}
-              className={`flex-1 py-2.5 sm:py-3 text-center font-medium transition text-xs sm:text-sm ${
-                activeTab === "talk"
-                  ? "text-[#00DBA8] border-b-2 border-[#00DBA8] bg-[#00DBA8]/5"
-                  : "text-gray-400 hover:text-white"
-              }`}
-            >
-              💬 Face
-            </button>
-            <button
-              onClick={() => setActiveTab("video")}
-              className={`flex-1 py-2.5 sm:py-3 text-center font-medium transition text-xs sm:text-sm ${
-                activeTab === "video"
-                  ? "text-[#00DBA8] border-b-2 border-[#00DBA8] bg-[#00DBA8]/5"
-                  : "text-gray-400 hover:text-white"
-              }`}
-            >
-              📹 Call
-            </button>
-            <button
-              onClick={() => setActiveTab("proximity")}
-              className={`flex-1 py-2.5 sm:py-3 text-center font-medium transition text-xs sm:text-sm ${
-                activeTab === "proximity"
-                  ? "text-purple-400 border-b-2 border-purple-400 bg-purple-500/5"
-                  : "text-gray-400 hover:text-white"
-              }`}
-            >
-              📡
-            </button>
+        {/* Main Card - Premium Glass */}
+        <GlassCard
+          variant="elevated"
+          padding="none"
+          className="overflow-hidden"
+        >
+          {/* Mode Tabs - Premium PillTabs */}
+          <div className="p-2 sm:p-3 border-b border-white/[0.06]">
+            <PillTabs
+              tabs={tabs}
+              activeTab={activeTab}
+              onChange={(id) => setActiveTab(id as typeof activeTab)}
+              variant="compact"
+            />
           </div>
 
           <div className="p-3 sm:p-5 max-h-[calc(100dvh-220px)] sm:max-h-none overflow-y-auto">
@@ -1253,19 +1269,27 @@ function HomeContent() {
               <VoxNoteTab />
             ) : activeTab === "proximity" ? (
               <div className="space-y-4 text-center">
-                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center mx-auto">
-                  <span className="text-4xl">📡</span>
+                {/* Premium Radar Icon */}
+                <div className="relative w-20 h-20 mx-auto">
+                  <div className="absolute inset-0 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 shadow-2xl shadow-purple-500/30" />
+                  <div
+                    className="absolute inset-0 rounded-full animate-ping bg-purple-500/20"
+                    style={{ animationDuration: "2s" }}
+                  />
+                  <div className="relative w-full h-full rounded-full flex items-center justify-center">
+                    <span className="text-4xl">📡</span>
+                  </div>
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-white">
                     Proximity Connect
                   </h3>
-                  <p className="text-gray-400 text-sm mt-1">
+                  <p className="text-white/50 text-sm mt-1">
                     AirDrop for translated conversations
                   </p>
                 </div>
-                <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/30 text-left">
-                  <ul className="text-sm text-gray-300 space-y-2">
+                <GlassCard variant="subtle" padding="sm" className="text-left">
+                  <ul className="text-sm text-white/70 space-y-2">
                     <li className="flex items-start gap-2">
                       <span className="text-purple-400">📍</span>
                       Find nearby Voxxo users
@@ -1279,14 +1303,14 @@ function HomeContent() {
                       Auto-translate between languages
                     </li>
                   </ul>
-                </div>
+                </GlassCard>
                 <button
                   onClick={() => router.push("/proximity")}
-                  className="w-full py-4 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-xl text-white font-semibold text-lg transition shadow-lg shadow-purple-500/25"
+                  className="w-full py-4 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-400 hover:to-pink-400 rounded-2xl text-white font-semibold text-lg transition-all duration-200 shadow-2xl shadow-purple-500/25 hover:-translate-y-0.5"
                 >
                   📡 Start Proximity Discovery
                 </button>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-white/40">
                   Location shared only while app is open
                 </p>
               </div>
@@ -1295,41 +1319,48 @@ function HomeContent() {
                 {/* True Face-to-Face Mode Button */}
                 {activeTab === "talk" && (
                   <div className="mb-4">
-                    <button
+                    <GlowButton
                       onClick={() => router.push("/face-to-face")}
-                      className="w-full py-4 bg-gradient-to-r from-[#00DBA8] to-[#0088FF] hover:from-[#00C896] hover:to-[#0066DD] rounded-xl text-white font-semibold text-lg transition shadow-lg"
+                      variant="primary"
+                      size="lg"
+                      fullWidth
+                      icon={<span>🗣️</span>}
                     >
-                      🗣️ True Face-to-Face (One Device)
-                    </button>
-                    <p className="text-xs text-gray-500 text-center mt-2">
+                      True Face-to-Face (One Device)
+                    </GlowButton>
+                    <p className="text-xs text-white/40 text-center mt-2">
                       Place phone between two people - each speaks their
                       language
                     </p>
                   </div>
                 )}
 
-                {/* Description */}
-                <div className="mb-5 p-3 rounded-xl bg-gray-800/50 text-center">
+                {/* Description - Premium Glass */}
+                <GlassCard
+                  variant="subtle"
+                  padding="sm"
+                  className="mb-5 text-center"
+                >
                   {activeTab === "video" ? (
-                    <p className="text-gray-300 text-sm">
-                      <span className="text-[#00DBA8] font-medium">
+                    <p className="text-white/70 text-sm">
+                      <span className="text-voxxo-400 font-medium">
                         Video Call:
                       </span>{" "}
                       Remote calls with live translation
                     </p>
                   ) : (
-                    <p className="text-gray-300 text-sm">
-                      <span className="text-[#00DBA8] font-medium">
+                    <p className="text-white/70 text-sm">
+                      <span className="text-voxxo-400 font-medium">
                         Remote Talk:
                       </span>{" "}
                       Each person uses their own phone
                     </p>
                   )}
-                </div>
+                </GlassCard>
 
-                {/* Name */}
+                {/* Name - Premium Glass Input */}
                 <div className="mb-4">
-                  <label className="block text-sm text-gray-400 mb-2">
+                  <label className="block text-sm text-white/60 mb-2">
                     Your Name
                   </label>
                   <input
@@ -1337,54 +1368,46 @@ function HomeContent() {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Enter your name"
-                    className="w-full px-4 py-3 bg-[#1a1a2e] border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-[#00DBA8] transition text-lg"
+                    className="glass-input w-full px-4 py-3 rounded-xl text-white placeholder-white/30 text-lg"
                   />
                 </div>
 
                 {/* Language - Multi-language grid */}
                 <div className="mb-5">
-                  <label className="block text-sm text-gray-400 mb-2">
+                  <label className="block text-sm text-white/60 mb-2">
                     You Speak
                   </label>
                   <LanguageGrid value={language} onChange={setLanguage} />
                 </div>
 
-                {/* Start/Join Toggle */}
-                <div className="flex gap-2 mb-4">
-                  <button
-                    onClick={() => setMode("start")}
-                    className={`flex-1 py-3 min-h-[44px] rounded-lg font-medium transition ${
-                      mode === "start"
-                        ? "bg-[#00DBA8] text-white"
-                        : "bg-[#1a1a2e] text-gray-400"
-                    }`}
-                  >
-                    Start New
-                  </button>
-                  <button
-                    onClick={() => setMode("join")}
-                    className={`flex-1 py-3 min-h-[44px] rounded-lg font-medium transition ${
-                      mode === "join"
-                        ? "bg-[#00DBA8] text-white"
-                        : "bg-[#1a1a2e] text-gray-400"
-                    }`}
-                  >
-                    Join
-                  </button>
+                {/* Start/Join Toggle - Premium Pills */}
+                <div className="mb-4">
+                  <SimplePillTabs
+                    options={[
+                      { id: "start", label: "Start New" },
+                      { id: "join", label: "Join" },
+                    ]}
+                    value={mode}
+                    onChange={(v) => setMode(v as "start" | "join")}
+                    className="w-full"
+                  />
                 </div>
 
                 {/* Action */}
                 {mode === "start" ? (
-                  <button
+                  <GlowButton
                     onClick={
                       activeTab === "video" ? startVideoCall : startTalkMode
                     }
-                    className="w-full py-4 bg-gradient-to-r from-[#00DBA8] to-[#0088FF] hover:from-[#00C896] hover:to-[#0066DD] rounded-xl text-white font-semibold text-lg transition shadow-lg shadow-[#00DBA8]/25"
+                    variant="primary"
+                    size="xl"
+                    fullWidth
+                    icon={<span>{activeTab === "video" ? "📹" : "💬"}</span>}
                   >
                     {activeTab === "video"
-                      ? "📹 Start Video Call"
-                      : "💬 Start Conversation"}
-                  </button>
+                      ? "Start Video Call"
+                      : "Start Conversation"}
+                  </GlowButton>
                 ) : (
                   <div className="space-y-3">
                     <input
@@ -1395,47 +1418,53 @@ function HomeContent() {
                       }
                       placeholder="Enter code"
                       maxLength={6}
-                      className="w-full px-4 py-3 bg-[#1a1a2e] border border-gray-700 rounded-xl text-white text-center text-2xl tracking-[0.3em] placeholder-gray-500 focus:outline-none focus:border-[#00DBA8] transition uppercase font-mono"
+                      className="glass-input w-full px-4 py-3 rounded-xl text-white text-center text-2xl tracking-[0.3em] placeholder-white/30 uppercase font-mono"
                     />
-                    <button
+                    <GlowButton
                       onClick={
                         activeTab === "video" ? joinVideoCall : joinTalkMode
                       }
-                      className="w-full py-4 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 rounded-xl text-white font-semibold text-lg transition shadow-lg shadow-blue-500/25"
+                      variant="secondary"
+                      size="xl"
+                      fullWidth
+                      icon={<span>{activeTab === "video" ? "📹" : "💬"}</span>}
                     >
                       {activeTab === "video"
-                        ? "📹 Join Call"
-                        : "💬 Join Conversation"}
-                    </button>
+                        ? "Join Call"
+                        : "Join Conversation"}
+                    </GlowButton>
                   </div>
                 )}
               </>
             )}
           </div>
-        </div>
+        </GlassCard>
 
-        {/* Footer - Compact on mobile */}
-        <div className="text-center mt-3 sm:mt-6 space-y-1 sm:space-y-2 pb-2">
-          <p className="text-gray-500 text-[10px] sm:text-xs">
+        {/* Footer - Premium Minimal */}
+        <div className="text-center mt-4 sm:mt-6 space-y-2 pb-2">
+          <p className="text-white/30 text-[10px] sm:text-xs">
             Chrome recommended •{" "}
-            <a href="/status" className="text-[#00DBA8] hover:underline">
+            <a
+              href="/status"
+              className="text-voxxo-500 hover:text-voxxo-400 transition"
+            >
               Status
             </a>
           </p>
-          <div className="pt-1 sm:pt-2 border-t border-gray-800">
+          <div className="pt-2 border-t border-white/[0.06]">
             <a
               href="https://machinemindconsulting.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs text-gray-400 hover:text-[#00DBA8] transition"
+              className="inline-flex items-center gap-1.5 text-[10px] sm:text-xs text-white/40 hover:text-voxxo-400 transition"
             >
               <span>Powered by</span>
-              <span className="font-semibold text-[#00DBA8]">MachineMind</span>
+              <span className="font-semibold text-voxxo-500">MachineMind</span>
             </a>
           </div>
         </div>
       </div>
-    </div>
+    </AnimatedBackground>
   );
 }
 
@@ -1443,10 +1472,14 @@ export default function Home() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#060810] flex items-center justify-center">
+        <div className="min-h-screen bg-void-DEFAULT flex items-center justify-center">
           <div className="text-center">
-            <div className="w-12 h-12 border-4 border-[#00DBA8] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-gray-400">Loading Voxxo...</p>
+            <div className="relative w-14 h-14 mx-auto mb-4">
+              <div className="absolute inset-0 rounded-full border-4 border-voxxo-500/30" />
+              <div className="absolute inset-0 rounded-full border-4 border-voxxo-500 border-t-transparent animate-spin" />
+              <div className="absolute inset-2 rounded-full bg-voxxo-500/10 animate-pulse" />
+            </div>
+            <p className="text-white/50 text-sm">Loading Voxxo...</p>
           </div>
         </div>
       }
