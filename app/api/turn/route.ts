@@ -1,59 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TURN CREDENTIALS API - Server-side ICE server configuration
 // Keeps TURN credentials secure (not exposed in client JS)
-// Rate limited to prevent credential enumeration attacks
+// Rate limited to prevent credential enumeration attacks (uses Upstash Redis)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Rate limiting configuration
 const RATE_LIMIT = 10; // requests per window
 const RATE_WINDOW = 60000; // 1 minute in ms
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-
-// Cleanup old entries periodically
-function cleanupRateLimits() {
-  const now = Date.now();
-  Array.from(rateLimitMap.entries()).forEach(([ip, entry]) => {
-    if (now > entry.resetAt) {
-      rateLimitMap.delete(ip);
-    }
-  });
-}
-
-function checkRateLimit(ip: string): {
-  allowed: boolean;
-  remaining: number;
-  resetAt: number;
-} {
-  const now = Date.now();
-  const entry = rateLimitMap.get(ip);
-
-  // Cleanup every ~100 requests
-  if (rateLimitMap.size > 100) {
-    cleanupRateLimits();
-  }
-
-  if (!entry || now > entry.resetAt) {
-    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_WINDOW });
-    return {
-      allowed: true,
-      remaining: RATE_LIMIT - 1,
-      resetAt: now + RATE_WINDOW,
-    };
-  }
-
-  if (entry.count >= RATE_LIMIT) {
-    return { allowed: false, remaining: 0, resetAt: entry.resetAt };
-  }
-
-  entry.count++;
-  return {
-    allowed: true,
-    remaining: RATE_LIMIT - entry.count,
-    resetAt: entry.resetAt,
-  };
-}
 
 export async function GET(request: NextRequest) {
   // Extract IP for rate limiting
@@ -62,22 +18,15 @@ export async function GET(request: NextRequest) {
     request.headers.get("x-real-ip") ||
     "unknown";
 
-  // Check rate limit
-  const rateLimit = checkRateLimit(ip);
+  // Check rate limit (uses Upstash Redis in production)
+  const rateLimit = await checkRateLimit(`turn:${ip}`, RATE_LIMIT, RATE_WINDOW);
 
   if (!rateLimit.allowed) {
     return NextResponse.json(
       { error: "Rate limit exceeded. Please try again later." },
       {
         status: 429,
-        headers: {
-          "X-RateLimit-Limit": RATE_LIMIT.toString(),
-          "X-RateLimit-Remaining": "0",
-          "X-RateLimit-Reset": Math.ceil(rateLimit.resetAt / 1000).toString(),
-          "Retry-After": Math.ceil(
-            (rateLimit.resetAt - Date.now()) / 1000,
-          ).toString(),
-        },
+        headers: rateLimitHeaders(rateLimit),
       },
     );
   }
@@ -143,9 +92,7 @@ export async function GET(request: NextRequest) {
     },
     {
       headers: {
-        "X-RateLimit-Limit": RATE_LIMIT.toString(),
-        "X-RateLimit-Remaining": rateLimit.remaining.toString(),
-        "X-RateLimit-Reset": Math.ceil(rateLimit.resetAt / 1000).toString(),
+        ...rateLimitHeaders(rateLimit),
         "Cache-Control": "private, max-age=3600",
       },
     },

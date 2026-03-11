@@ -404,6 +404,7 @@ function ProximityContent() {
         <button
           key={user.id}
           onClick={() => setSelectedUser(user)}
+          aria-label={`Connect with ${getLanguageName(user.language)} speaker, ${formatDistance(user.distance)} away, ${user.status}`}
           className={`absolute w-10 h-10 rounded-full flex items-center justify-center transform -translate-x-1/2 -translate-y-1/2 transition-all hover:scale-125 ${
             user.status === "available"
               ? "bg-[#00DBA8] shadow-lg shadow-[#00DBA8]/50"
@@ -414,7 +415,9 @@ function ProximityContent() {
             top: `calc(50% + ${y}px)`,
           }}
         >
-          <span className="text-lg">{getLanguageFlag(user.language)}</span>
+          <span className="text-lg" aria-hidden="true">
+            {getLanguageFlag(user.language)}
+          </span>
         </button>
       );
     });
@@ -426,12 +429,13 @@ function ProximityContent() {
       <div className="p-4 flex items-center justify-between">
         <button
           onClick={() => router.push("/")}
+          aria-label="Go back to home"
           className="p-3 text-gray-400 hover:text-white transition min-w-[44px] min-h-[44px] flex items-center justify-center"
         >
           ← Back
         </button>
         <h1 className="text-lg font-bold text-white">Proximity Connect</h1>
-        <div className="w-[44px]" />
+        <div className="w-[44px]" aria-hidden="true" />
       </div>
 
       {/* Main Content */}
@@ -462,13 +466,15 @@ function ProximityContent() {
                   <button
                     key={lang.code}
                     onClick={() => setLanguage(lang.code)}
+                    aria-label={`Select ${getLanguageName(lang.code)} as your language`}
+                    aria-pressed={language === lang.code}
                     className={`p-3 rounded-lg text-center transition ${
                       language === lang.code
                         ? "bg-[#00DBA8] text-white"
                         : "bg-[#1a1a2e] text-gray-400 hover:text-white"
                     }`}
                   >
-                    <span className="text-xl">
+                    <span className="text-xl" aria-hidden="true">
                       {getLanguageFlag(lang.code)}
                     </span>
                   </button>
@@ -488,6 +494,7 @@ function ProximityContent() {
 
             <button
               onClick={startProximity}
+              aria-label="Enable location access and start discovering nearby users"
               className="w-full max-w-xs py-4 bg-gradient-to-r from-[#00DBA8] to-[#0088FF] hover:from-[#00C896] hover:to-[#0066DD] rounded-xl text-white font-semibold text-lg transition shadow-lg shadow-[#00DBA8]/25"
             >
               📍 Enable Location & Start
@@ -560,12 +567,14 @@ function ProximityContent() {
 
             <button
               onClick={() => window.location.reload()}
+              aria-label="Reload page and try enabling location again"
               className="w-full py-4 bg-gradient-to-r from-[#00DBA8] to-[#0088FF] rounded-xl text-white font-semibold transition"
             >
               🔄 Reload & Try Again
             </button>
             <button
               onClick={() => router.push("/")}
+              aria-label="Go back to home page"
               className="w-full py-3 bg-[#1a1a2e] border border-gray-700 rounded-xl text-gray-400 hover:text-white transition"
             >
               Go Back
@@ -612,7 +621,7 @@ function ProximityContent() {
             </div>
 
             {/* User count */}
-            <div className="text-center">
+            <div className="text-center" role="status" aria-live="polite">
               <p className="text-white text-lg font-medium">
                 {nearbyUsers.length === 0 ? (
                   <span className="text-gray-400">Scanning for users...</span>
@@ -643,13 +652,14 @@ function ProximityContent() {
                       key={user.id}
                       onClick={() => setSelectedUser(user)}
                       disabled={user.status !== "available"}
+                      aria-label={`${getLanguageName(user.language)} speaker, ${formatDistance(user.distance)} away${user.status !== "available" ? ", currently unavailable" : ""}`}
                       className={`w-full p-3 flex items-center gap-3 transition ${
                         user.status === "available"
                           ? "hover:bg-[#1a1a2e]"
                           : "opacity-50 cursor-not-allowed"
                       }`}
                     >
-                      <span className="text-2xl">
+                      <span className="text-2xl" aria-hidden="true">
                         {getLanguageFlag(user.language)}
                       </span>
                       <div className="flex-1 text-left">

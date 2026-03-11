@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { checkRateLimit, rateLimitHeaders, trackEvent } from "@/lib/rate-limit";
+import { supabase } from "@/lib/supabase";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // VOXLINK ULTRA-FAST TRANSLATION API
@@ -55,8 +57,7 @@ const cache = new Map<string, { value: string; timestamp: number }>();
 const MAX_CACHE_SIZE = 2000;
 const CACHE_TTL = 3600000; // 1 hour
 
-// Rate limiting
-const rateLimits = new Map<string, { count: number; resetAt: number }>();
+// Rate limiting config (uses Upstash Redis - see lib/rate-limit.ts)
 const MAX_REQUESTS_PER_MINUTE = 120; // Increased for live translation
 
 function getCached(key: string): string | null {
@@ -80,17 +81,7 @@ function setCache(key: string, value: string) {
   }
 }
 
-function checkRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const record = rateLimits.get(ip);
-  if (!record || now > record.resetAt) {
-    rateLimits.set(ip, { count: 1, resetAt: now + 60000 });
-    return true;
-  }
-  if (record.count >= MAX_REQUESTS_PER_MINUTE) return false;
-  record.count++;
-  return true;
-}
+// Legacy rate limit function removed - now using lib/rate-limit.ts with Upstash Redis
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // INSTANT DICTIONARY - Zero latency for common phrases
@@ -354,12 +345,21 @@ export async function POST(req: NextRequest) {
   const origin = req.headers.get("origin");
   const corsHeaders = getCorsHeaders(origin);
 
-  // Rate limiting
-  const ip = req.headers.get("x-forwarded-for") || "unknown";
-  if (!checkRateLimit(ip)) {
+  // Rate limiting (uses Upstash Redis in production)
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0] || "unknown";
+  const rateLimit = await checkRateLimit(
+    `translate:${ip}`,
+    MAX_REQUESTS_PER_MINUTE,
+    60000,
+  );
+
+  if (!rateLimit.allowed) {
     return NextResponse.json(
-      { translation: "", error: "Rate limit" },
-      { status: 429, headers: corsHeaders },
+      { translation: "", error: "Rate limit exceeded" },
+      {
+        status: 429,
+        headers: { ...corsHeaders, ...rateLimitHeaders(rateLimit) },
+      },
     );
   }
 
@@ -521,19 +521,46 @@ export async function POST(req: NextRequest) {
 
     // 6. Final result
     const finalTranslation = translation || cleanText;
+    const latency = Date.now() - startTime;
 
     // Cache successful translations
     if (translation) {
       setCache(cacheKey, finalTranslation);
     }
 
+    // 7. Track translation analytics (async, non-blocking)
+    if (translation && source !== "cache" && source !== "dictionary") {
+      // Log to Supabase analytics table (fire-and-forget)
+      void (async () => {
+        try {
+          await supabase.from("translation_analytics").insert({
+            lang_pair: langPair,
+            phrase_length: cleanText.length,
+            source_provider: source,
+            latency_ms: latency,
+            back_translation_match: null,
+          });
+        } catch (err) {
+          console.error("[Analytics] Insert failed:", err);
+        }
+      })();
+
+      // Also track to Redis for real-time dashboards
+      void trackEvent("translation", {
+        lang_pair: langPair,
+        provider: source,
+        latency_ms: latency,
+        phrase_length: cleanText.length,
+      });
+    }
+
     return NextResponse.json(
       {
         translation: finalTranslation,
         source: translation ? source : "passthrough",
-        latency: Date.now() - startTime,
+        latency,
       },
-      { headers: corsHeaders },
+      { headers: { ...corsHeaders, ...rateLimitHeaders(rateLimit) } },
     );
   } catch (error) {
     console.error("Translation error:", error);

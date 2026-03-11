@@ -46,13 +46,18 @@ export function LanguageSelector({
         type="button"
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
+        aria-label={`Select language, currently ${selectedLang.name}`}
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
         className={`flex items-center justify-center gap-1.5 sm:gap-2 p-2 sm:p-3 rounded-lg sm:rounded-xl bg-[#1a1a2e] border border-gray-700 text-white transition w-full ${
           disabled
             ? "opacity-50 cursor-not-allowed"
             : "hover:border-gray-600 cursor-pointer"
         }`}
       >
-        <span className="text-lg sm:text-xl">{selectedLang.flag}</span>
+        <span className="text-lg sm:text-xl" aria-hidden="true">
+          {selectedLang.flag}
+        </span>
         <span className="font-medium text-sm sm:text-base">
           {compact ? selectedLang.code.toUpperCase() : selectedLang.name}
         </span>
@@ -62,6 +67,7 @@ export function LanguageSelector({
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            aria-hidden="true"
           >
             <path
               strokeLinecap="round"
@@ -74,11 +80,17 @@ export function LanguageSelector({
       </button>
 
       {isOpen && (
-        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-[#1a1a2e] border border-gray-700 rounded-xl shadow-xl max-h-64 overflow-y-auto">
+        <div
+          className="absolute z-50 top-full left-0 right-0 mt-1 bg-[#1a1a2e] border border-gray-700 rounded-xl shadow-xl max-h-64 overflow-y-auto"
+          role="listbox"
+          aria-label="Available languages"
+        >
           {availableLanguages.map((lang) => (
             <button
               key={lang.code}
               type="button"
+              role="option"
+              aria-selected={lang.code === value}
               onClick={() => {
                 onChange(lang.code);
                 setIsOpen(false);
@@ -89,7 +101,9 @@ export function LanguageSelector({
                   : "text-white hover:bg-white/5"
               }`}
             >
-              <span className="text-lg">{lang.flag}</span>
+              <span className="text-lg" aria-hidden="true">
+                {lang.flag}
+              </span>
               <span className="flex-1 text-sm">{lang.name}</span>
               {lang.nativeName !== lang.name && (
                 <span className="text-xs text-gray-500">{lang.nativeName}</span>
@@ -140,6 +154,7 @@ export function DualLanguageSelector({
         type="button"
         onClick={onSwap}
         disabled={disabled}
+        aria-label="Swap source and target languages"
         className={`p-2 sm:p-3 rounded-lg sm:rounded-xl bg-[#1a1a2e] border border-gray-700 text-cyan-400 transition ${
           disabled
             ? "opacity-50 cursor-not-allowed"
@@ -151,6 +166,7 @@ export function DualLanguageSelector({
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <path
             strokeLinecap="round"
@@ -186,11 +202,18 @@ export function LanguageGrid({
   className = "",
 }: LanguageGridProps) {
   return (
-    <div className={`grid grid-cols-3 sm:grid-cols-4 gap-2 ${className}`}>
+    <div
+      className={`grid grid-cols-3 sm:grid-cols-4 gap-2 ${className}`}
+      role="radiogroup"
+      aria-label="Select your language"
+    >
       {LANGUAGES.map((lang) => (
         <button
           key={lang.code}
           type="button"
+          role="radio"
+          aria-checked={lang.code === value}
+          aria-label={lang.name}
           onClick={() => onChange(lang.code)}
           className={`p-2 sm:p-3 rounded-xl border-2 transition flex flex-col items-center justify-center gap-1 ${
             lang.code === value
@@ -198,7 +221,9 @@ export function LanguageGrid({
               : "border-gray-700 bg-[#1a1a2e] text-gray-400 hover:border-gray-600"
           }`}
         >
-          <span className="text-xl sm:text-2xl">{lang.flag}</span>
+          <span className="text-xl sm:text-2xl" aria-hidden="true">
+            {lang.flag}
+          </span>
           <span className="text-[10px] sm:text-xs font-medium">
             {lang.code.toUpperCase()}
           </span>
