@@ -3,23 +3,39 @@
 // Falls back to in-memory for local development
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { Redis } from "@upstash/redis";
+// Initialize Upstash Redis client (lazy, with error handling)
+let redis: unknown = null;
+let redisInitAttempted = false;
 
-// Initialize Upstash Redis client (lazy)
-let redis: Redis | null = null;
+function getRedis(): {
+  incr: Function;
+  pttl: Function;
+  expire: Function;
+  lpush: Function;
+  ltrim: Function;
+  pipeline: Function;
+} | null {
+  if (redisInitAttempted) return redis as ReturnType<typeof getRedis>;
+  redisInitAttempted = true;
 
-function getRedis(): Redis | null {
-  if (redis) return redis;
+  const url = process.env.UPSTASH_REDIS_REST_URL?.trim();
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
 
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-
-  if (url && token) {
-    redis = new Redis({ url, token });
-    return redis;
+  // Validate env vars exist and are not empty/whitespace
+  if (!url || !token || url.length < 10 || token.length < 10) {
+    console.warn("[RateLimit] Redis not configured or invalid credentials");
+    return null;
   }
 
-  return null;
+  try {
+    // Dynamic import to prevent build-time crashes
+    const { Redis } = require("@upstash/redis");
+    redis = new Redis({ url, token });
+    return redis as ReturnType<typeof getRedis>;
+  } catch (error) {
+    console.error("[RateLimit] Failed to initialize Redis:", error);
+    return null;
+  }
 }
 
 // In-memory fallback for development (NOT production-safe)
