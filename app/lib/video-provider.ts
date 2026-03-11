@@ -58,7 +58,7 @@ export const getProviderConfig = () => VIDEO_CONFIG[CURRENT_PROVIDER];
 // 6. Update imports in /app/call/[id]/page.tsx:
 //    - import { DailyConnection } from '../../lib/daily-connection'
 //
-// Daily.co API Key (saved for future):
-// ed113ccdf2b8f6039941a027ce06d4c81a2df4d3f028e8cab75ea9b9e8c8998b
+// Daily.co API key should be stored in DAILY_API_KEY environment variable
+// NEVER commit API keys to source control
 //
 // ═══════════════════════════════════════════════════════════════════════════════
