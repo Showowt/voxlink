@@ -76,6 +76,19 @@ const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:global.stun.twilio.com:3478" },
 ];
 
+// PeerJS signaling servers with fallback
+interface PeerJSServer {
+  host: string;
+  port: number;
+  secure: boolean;
+  path: string;
+}
+
+const PEERJS_SERVERS: PeerJSServer[] = [
+  { host: "0.peerjs.com", port: 443, secure: true, path: "/" },
+  { host: "peerjs.92k.de", port: 443, secure: true, path: "/" },
+];
+
 // Fetch ICE servers from secure API (includes TURN credentials)
 async function getIceServers(): Promise<RTCIceServer[]> {
   try {
@@ -270,21 +283,57 @@ export class PeerConnection {
       // Fetch ICE servers (TURN credentials from server)
       const iceServers = await getIceServers();
 
-      // Create peer with explicit PeerJS cloud configuration
-      this.peer = new Peer(this.myPeerId, {
-        host: "0.peerjs.com",
-        port: 443,
-        secure: true,
-        path: "/",
-        config: {
-          iceServers,
-          iceCandidatePoolSize: 10,
-        },
-        debug: 2,
-      });
+      // Try signaling servers with fallback
+      let connected = false;
+      let lastError: Error | null = null;
 
-      await this.waitForPeerOpen();
-      console.log("[Voxxo Video] Connected as:", this.myPeerId);
+      for (let i = 0; i < PEERJS_SERVERS.length && !connected; i++) {
+        const server = PEERJS_SERVERS[i];
+        console.log(
+          `[Voxxo Video] Trying signaling server ${i + 1}/${PEERJS_SERVERS.length}: ${server.host}`,
+        );
+
+        try {
+          this.peer = new Peer(this.myPeerId, {
+            host: server.host,
+            port: server.port,
+            secure: server.secure,
+            path: server.path,
+            config: {
+              iceServers,
+              iceCandidatePoolSize: 10,
+            },
+            debug: 1, // Reduce debug verbosity
+          });
+
+          await this.waitForPeerOpen();
+          console.log(
+            `[Voxxo Video] Connected via ${server.host} as:`,
+            this.myPeerId,
+          );
+          connected = true;
+        } catch (err) {
+          console.warn(
+            `[Voxxo Video] Server ${server.host} failed:`,
+            err instanceof Error ? err.message : err,
+          );
+          lastError = err instanceof Error ? err : new Error(String(err));
+
+          // Clean up failed peer
+          if (this.peer) {
+            try {
+              this.peer.destroy();
+            } catch {
+              // Ignore cleanup errors
+            }
+            this.peer = null;
+          }
+        }
+      }
+
+      if (!connected) {
+        throw lastError || new Error("All signaling servers failed");
+      }
 
       this.setupPeerListeners();
 
@@ -621,10 +670,27 @@ export class PeerConnection {
   // VIDEO CALL WITH RETRY LOGIC AND ERROR HANDLING
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // Stream timeout - 8 seconds to receive remote stream
-  private static readonly STREAM_TIMEOUT = 8000;
+  // Stream timeout - adaptive based on network conditions
+  private static readonly DEFAULT_STREAM_TIMEOUT = 8000;
   private streamTimeoutId: NodeJS.Timeout | null = null;
   private streamReceived: boolean = false;
+
+  // Get adaptive stream timeout based on network quality
+  private getStreamTimeout(): number {
+    try {
+      const connection = (navigator as NavigatorWithConnection).connection;
+      const effectiveType = connection?.effectiveType || "4g";
+      const timeouts: Record<string, number> = {
+        "slow-2g": 25000,
+        "2g": 20000,
+        "3g": 15000,
+        "4g": 8000,
+      };
+      return timeouts[effectiveType] || PeerConnection.DEFAULT_STREAM_TIMEOUT;
+    } catch {
+      return PeerConnection.DEFAULT_STREAM_TIMEOUT;
+    }
+  }
 
   private initiateVideoCallWithRetry(): void {
     if (this.isDestroyed) return;
@@ -646,20 +712,23 @@ export class PeerConnection {
 
     this.initiateVideoCall();
 
-    // Set up stream timeout - if no stream received within 8 seconds, handle error
+    // Set up stream timeout - adaptive based on network conditions
+    const timeout = this.getStreamTimeout();
+    console.log(
+      `[Voxxo Video] Stream timeout set to ${timeout}ms based on network`,
+    );
+
     this.streamTimeoutId = setTimeout(() => {
       if (this.isDestroyed) return;
 
       // Check if we got a stream
       if (!this.streamReceived && !this.remoteStream) {
-        console.warn(
-          `[Voxxo Video] Stream timeout after ${PeerConnection.STREAM_TIMEOUT}ms`,
-        );
+        console.warn(`[Voxxo Video] Stream timeout after ${timeout}ms`);
         this.handleVideoCallError(
           "Stream timeout - partner may not have video enabled",
         );
       }
-    }, PeerConnection.STREAM_TIMEOUT);
+    }, timeout);
   }
 
   private clearVideoRetryTimeout(): void {
@@ -964,8 +1033,13 @@ export class PeerConnection {
   // KEEP-ALIVE
   // ═══════════════════════════════════════════════════════════════════════════
 
+  // Track consecutive failed pongs for recovery decision
+  private missedPongs: number = 0;
+  private static readonly MAX_MISSED_PONGS = 3; // 15 seconds (3 x 5s)
+
   private startKeepAlive(): void {
     this.stopKeepAlive();
+    this.missedPongs = 0;
 
     this.keepAliveInterval = setInterval(() => {
       if (!this.dataConnection?.open) {
@@ -976,7 +1050,22 @@ export class PeerConnection {
       // Check connection health
       const timeSinceLastPong = Date.now() - this.lastPongTime;
       if (timeSinceLastPong > 15000) {
-        console.warn("[Voxxo Video] No pong for 15s");
+        this.missedPongs++;
+        console.warn(
+          `[Voxxo Video] No pong for ${Math.round(timeSinceLastPong / 1000)}s (missed: ${this.missedPongs}/${PeerConnection.MAX_MISSED_PONGS})`,
+        );
+
+        // After 3 missed pongs (15 seconds), trigger recovery
+        if (this.missedPongs >= PeerConnection.MAX_MISSED_PONGS) {
+          console.warn(
+            "[Voxxo Video] Connection dead - triggering ICE restart",
+          );
+          this.missedPongs = 0;
+          this.triggerIceRestart();
+        }
+      } else {
+        // Reset missed pongs counter on successful pong
+        this.missedPongs = 0;
       }
 
       this.send({ type: "ping", time: Date.now() });

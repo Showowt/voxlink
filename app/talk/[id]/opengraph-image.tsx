@@ -6,7 +6,8 @@ export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
 export default function Image({ params }: { params: { id: string } }) {
-  const roomCode = params.id?.toUpperCase() || "ROOM";
+  // Don't expose room code in social preview for security
+  const _roomCode = params.id; // Unused - kept for reference
 
   return new ImageResponse(
     <div
@@ -95,20 +96,24 @@ export default function Image({ params }: { params: { id: string } }) {
         Unete a mi Conversacion
       </div>
 
-      {/* Room Code */}
+      {/* Secure Room Indicator - Don't expose actual room code */}
       <div
         style={{
-          fontSize: 48,
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          fontSize: 32,
           color: "#00DBA8",
           marginBottom: 20,
-          padding: "12px 48px",
+          padding: "12px 36px",
           borderRadius: 12,
-          border: "3px solid #00DBA8",
-          fontWeight: 700,
-          fontFamily: "monospace",
+          border: "2px solid rgba(0, 219, 168, 0.4)",
+          background: "rgba(0, 219, 168, 0.1)",
+          fontWeight: 600,
         }}
       >
-        {roomCode}
+        <span style={{ fontSize: 28 }}>🔒</span>
+        <span>Private Chat Room</span>
       </div>
 
       {/* Description - Bilingual */}

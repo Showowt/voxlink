@@ -24,6 +24,7 @@ import {
 
 export type ErrorType =
   | "connection_failed"
+  | "ice_blocked"
   | "permission_denied"
   | "browser_unsupported"
   | "room_full"
@@ -97,6 +98,96 @@ export function ConnectionFailedScreen({
           </li>
         </ul>
       </div>
+
+      {/* Actions */}
+      <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
+        {onRetry && (
+          <button
+            onClick={onRetry}
+            className="flex-1 py-3 px-6 rounded-xl font-medium bg-[#00DBA8] text-white hover:bg-[#00C896] transition-all"
+          >
+            Try Again
+          </button>
+        )}
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="flex-1 py-3 px-6 rounded-xl font-medium bg-zinc-800 text-white hover:bg-zinc-700 transition-all"
+          >
+            Go Back
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ICE/FIREWALL BLOCKED SCREEN
+// For NAT traversal and firewall issues
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export function IceBlockedScreen({ onRetry, onBack }: BaseErrorProps) {
+  return (
+    <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-6">
+      {/* Icon */}
+      <div className="w-20 h-20 rounded-full bg-yellow-500/20 flex items-center justify-center text-yellow-500 mb-6">
+        <svg
+          className="w-10 h-10"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+          />
+        </svg>
+      </div>
+
+      {/* Title */}
+      <h1 className="text-white text-2xl font-bold mb-3 text-center">
+        Connection Blocked
+      </h1>
+
+      {/* Message */}
+      <p className="text-zinc-400 text-center max-w-md mb-6">
+        Your network may be blocking video calls. This often happens on
+        corporate WiFi, school networks, or with certain VPNs.
+      </p>
+
+      {/* Network-specific tips */}
+      <div className="bg-zinc-900 rounded-xl p-4 max-w-md w-full mb-8">
+        <h3 className="text-white font-medium mb-3">Solutions to try:</h3>
+        <ul className="space-y-2 text-zinc-300">
+          <li className="flex items-start gap-2">
+            <span className="text-yellow-400 mt-0.5">📱</span>
+            <span>Switch to mobile data (turn off WiFi)</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-yellow-400 mt-0.5">🔒</span>
+            <span>Disconnect from VPN if active</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-yellow-400 mt-0.5">🏢</span>
+            <span>
+              On corporate network? Ask IT to allow WebRTC/TURN traffic
+            </span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-yellow-400 mt-0.5">🏠</span>
+            <span>Try a different WiFi network or hotspot</span>
+          </li>
+        </ul>
+      </div>
+
+      {/* Technical note */}
+      <p className="text-zinc-500 text-sm text-center max-w-md mb-6">
+        Technical: ICE/TURN connection failed. Your network may block UDP
+        traffic on ports 443/3478.
+      </p>
 
       {/* Actions */}
       <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
@@ -545,11 +636,22 @@ export function detectErrorType(error: Error | string): ErrorType {
     return "browser_unsupported";
   }
 
+  // ICE/Firewall specific errors - show dedicated help
   if (
-    message.includes("connection") ||
-    message.includes("failed") ||
-    message.includes("ice")
+    message.includes("ice failed") ||
+    message.includes("ice connection failed") ||
+    message.includes("turn") ||
+    message.includes("stun") ||
+    message.includes("nat") ||
+    message.includes("firewall") ||
+    message.includes("blocked") ||
+    (message.includes("ice") && message.includes("failed"))
   ) {
+    return "ice_blocked";
+  }
+
+  // Generic connection failures
+  if (message.includes("connection") || message.includes("failed")) {
     return "connection_failed";
   }
 
