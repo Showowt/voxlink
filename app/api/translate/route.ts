@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { checkRateLimit, rateLimitHeaders, trackEvent } from "@/lib/rate-limit";
-import { supabase } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // VOXLINK ULTRA-FAST TRANSLATION API
@@ -556,20 +556,22 @@ export async function POST(req: NextRequest) {
 
     // 7. Track translation analytics (async, non-blocking)
     if (translation && source !== "cache" && source !== "dictionary") {
-      // Log to Supabase analytics table (fire-and-forget)
-      void (async () => {
-        try {
-          await supabase.from("translation_analytics").insert({
-            lang_pair: langPair,
-            phrase_length: cleanText.length,
-            source_provider: source,
-            latency_ms: latency,
-            back_translation_match: null,
-          });
-        } catch (err) {
-          console.error("[Analytics] Insert failed:", err);
-        }
-      })();
+      // Log to Supabase analytics table (fire-and-forget) - only if configured
+      if (isSupabaseConfigured()) {
+        void (async () => {
+          try {
+            await supabase.from("translation_analytics").insert({
+              lang_pair: langPair,
+              phrase_length: cleanText.length,
+              source_provider: source,
+              latency_ms: latency,
+              back_translation_match: null,
+            });
+          } catch (err) {
+            console.error("[Analytics] Insert failed:", err);
+          }
+        })();
+      }
 
       // Also track to Redis for real-time dashboards
       void trackEvent("translation", {

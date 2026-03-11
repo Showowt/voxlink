@@ -6,17 +6,20 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 // Lazy-loaded singleton to prevent build-time errors
 let _supabase: SupabaseClient | null = null;
+let _supabaseConfigured = false;
 
-function getSupabaseClient(): SupabaseClient {
+function getSupabaseClient(): SupabaseClient | null {
   if (_supabase) return _supabase;
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error(
-      "Missing Supabase environment variables. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local",
+    // Don't throw - allow app to work without Supabase (analytics disabled)
+    console.warn(
+      "[Supabase] Not configured - analytics disabled. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to enable.",
     );
+    return null;
   }
 
   _supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -25,14 +28,33 @@ function getSupabaseClient(): SupabaseClient {
       autoRefreshToken: false,
     },
   });
+  _supabaseConfigured = true;
 
   return _supabase;
 }
 
+// Check if Supabase is configured
+export function isSupabaseConfigured(): boolean {
+  getSupabaseClient(); // Trigger initialization
+  return _supabaseConfigured;
+}
+
 // Export as getter for lazy initialization (prevents build-time errors)
+// Returns a proxy that no-ops if Supabase isn't configured
 export const supabase = new Proxy({} as SupabaseClient, {
   get(_, prop: keyof SupabaseClient) {
-    return getSupabaseClient()[prop];
+    const client = getSupabaseClient();
+    if (!client) {
+      // Return no-op functions for missing Supabase
+      return () => ({
+        insert: () => Promise.resolve({ data: null, error: null }),
+        select: () => Promise.resolve({ data: [], error: null }),
+        update: () => Promise.resolve({ data: null, error: null }),
+        delete: () => Promise.resolve({ data: null, error: null }),
+        upsert: () => Promise.resolve({ data: null, error: null }),
+      });
+    }
+    return client[prop];
   },
 });
 
