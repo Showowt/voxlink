@@ -98,7 +98,7 @@ async function getIceServers(): Promise<RTCIceServer[]> {
       return data.iceServers || DEFAULT_ICE_SERVERS;
     }
   } catch (err) {
-    console.warn("[Voxxo] Failed to fetch TURN credentials:", err);
+    console.warn("[Entrevoz] Failed to fetch TURN credentials:", err);
   }
   return DEFAULT_ICE_SERVERS;
 }
@@ -158,7 +158,7 @@ export class PeerConnection {
 
     // Online/offline detection
     this.onlineHandler = () => {
-      console.log("[Voxxo Video] Network: Back online");
+      console.log("[Entrevoz Video] Network: Back online");
       this.isOffline = false;
 
       // If we were connected, trigger ICE restart
@@ -168,7 +168,7 @@ export class PeerConnection {
     };
 
     this.offlineHandler = () => {
-      console.log("[Voxxo Video] Network: Went offline");
+      console.log("[Entrevoz Video] Network: Went offline");
       this.isOffline = true;
       if (this._status === "connected") {
         this.setStatus("reconnecting", "Network offline...");
@@ -187,13 +187,13 @@ export class PeerConnection {
       this.networkChangeHandler = () => {
         const newType = connection.type || connection.effectiveType || null;
         console.log(
-          `[Voxxo Video] Network type changed: ${this.lastNetworkType} → ${newType}`,
+          `[Entrevoz Video] Network type changed: ${this.lastNetworkType} → ${newType}`,
         );
 
         // If type changed and we're connected, trigger ICE restart
         if (newType !== this.lastNetworkType && this._status === "connected") {
           console.log(
-            "[Voxxo Video] Triggering ICE restart due to network change",
+            "[Entrevoz Video] Triggering ICE restart due to network change",
           );
           this.triggerIceRestart();
         }
@@ -232,11 +232,11 @@ export class PeerConnection {
       ).peerConnection;
 
       if (pc && pc.iceConnectionState !== "closed") {
-        console.log("[Voxxo Video] Restarting ICE...");
+        console.log("[Entrevoz Video] Restarting ICE...");
         pc.restartIce?.();
       }
     } catch (err) {
-      console.warn("[Voxxo Video] ICE restart failed:", err);
+      console.warn("[Entrevoz Video] ICE restart failed:", err);
     }
   }
 
@@ -268,13 +268,13 @@ export class PeerConnection {
     this.connectionAttempts = 0;
 
     // Generate peer IDs - deterministic for host, unique for guest
-    this.hostPeerId = `voxxo-video-${this.roomId}-host`;
+    this.hostPeerId = `entrevoz-video-${this.roomId}-host`;
 
     if (isHost) {
       this.myPeerId = this.hostPeerId;
     } else {
       const uniqueId = Math.random().toString(36).substring(2, 8);
-      this.myPeerId = `voxxo-video-${this.roomId}-guest-${uniqueId}`;
+      this.myPeerId = `entrevoz-video-${this.roomId}-guest-${uniqueId}`;
     }
 
     this.setStatus("initializing", "Connecting...");
@@ -290,7 +290,7 @@ export class PeerConnection {
       for (let i = 0; i < PEERJS_SERVERS.length && !connected; i++) {
         const server = PEERJS_SERVERS[i];
         console.log(
-          `[Voxxo Video] Trying signaling server ${i + 1}/${PEERJS_SERVERS.length}: ${server.host}`,
+          `[Entrevoz Video] Trying signaling server ${i + 1}/${PEERJS_SERVERS.length}: ${server.host}`,
         );
 
         try {
@@ -308,13 +308,13 @@ export class PeerConnection {
 
           await this.waitForPeerOpen();
           console.log(
-            `[Voxxo Video] Connected via ${server.host} as:`,
+            `[Entrevoz Video] Connected via ${server.host} as:`,
             this.myPeerId,
           );
           connected = true;
         } catch (err) {
           console.warn(
-            `[Voxxo Video] Server ${server.host} failed:`,
+            `[Entrevoz Video] Server ${server.host} failed:`,
             err instanceof Error ? err.message : err,
           );
           lastError = err instanceof Error ? err : new Error(String(err));
@@ -348,7 +348,7 @@ export class PeerConnection {
     } catch (err: unknown) {
       const errorMessage =
         err instanceof Error ? err.message : "Connection failed";
-      console.error("[Voxxo Video] Init error:", err);
+      console.error("[Entrevoz Video] Init error:", err);
       this.setStatus("failed", errorMessage);
       this.callbacks.onError?.(errorMessage);
       return false;
@@ -397,12 +397,12 @@ export class PeerConnection {
     // Handle incoming data connection (host receives this)
     this.peer.on("connection", (conn) => {
       if (this.isDestroyed) return;
-      console.log("[Voxxo Video] Incoming data connection:", conn.peer);
+      console.log("[Entrevoz Video] Incoming data connection:", conn.peer);
 
       // Check if host already has a connected partner
       if (this.isHost && this.dataConnection?.open) {
         console.log(
-          "[Voxxo Video] Room full - rejecting new connection:",
+          "[Entrevoz Video] Room full - rejecting new connection:",
           conn.peer,
         );
         // Send room_full message to the new joiner and close their connection
@@ -425,12 +425,12 @@ export class PeerConnection {
     // Handle incoming video call (host receives this)
     this.peer.on("call", (call) => {
       if (this.isDestroyed) return;
-      console.log("[Voxxo Video] Incoming call:", call.peer);
+      console.log("[Entrevoz Video] Incoming call:", call.peer);
 
       // Check if host already has a connected partner - reject call if room full
       if (this.isHost && this.mediaConnection?.open) {
         console.log(
-          "[Voxxo Video] Room full - rejecting video call:",
+          "[Entrevoz Video] Room full - rejecting video call:",
           call.peer,
         );
         try {
@@ -452,10 +452,10 @@ export class PeerConnection {
     });
 
     this.peer.on("error", (error: { type: string; message?: string }) => {
-      console.error("[Voxxo Video] Peer error:", error.type, error.message);
+      console.error("[Entrevoz Video] Peer error:", error.type, error.message);
 
       if (error.type === "peer-unavailable" && !this.isHost) {
-        console.log("[Voxxo Video] Host not found, will retry...");
+        console.log("[Entrevoz Video] Host not found, will retry...");
       } else if (error.type === "unavailable-id" && this.isHost) {
         this.setStatus("failed", "Room code in use - try a new code");
         this.callbacks.onError?.("Room code in use");
@@ -463,7 +463,7 @@ export class PeerConnection {
     });
 
     this.peer.on("disconnected", () => {
-      console.log("[Voxxo Video] Disconnected from signaling server");
+      console.log("[Entrevoz Video] Disconnected from signaling server");
       if (!this.isDestroyed && this.peer && !this.peer.destroyed) {
         setTimeout(() => this.peer?.reconnect(), 1000);
       }
@@ -512,7 +512,7 @@ export class PeerConnection {
 
       const delay = this.calculateBackoffDelay();
       console.log(
-        `[Voxxo Video] Connection attempt ${this.connectionAttempts}/${this.maxConnectionAttempts} (next in ${delay}ms)`,
+        `[Entrevoz Video] Connection attempt ${this.connectionAttempts}/${this.maxConnectionAttempts} (next in ${delay}ms)`,
       );
       this.connectToHost();
 
@@ -543,7 +543,7 @@ export class PeerConnection {
       return;
     }
 
-    console.log("[Voxxo Video] Connecting to host:", this.hostPeerId);
+    console.log("[Entrevoz Video] Connecting to host:", this.hostPeerId);
 
     // Create data connection first
     const conn = this.peer.connect(this.hostPeerId, {
@@ -577,7 +577,7 @@ export class PeerConnection {
 
     conn.on("open", () => {
       if (this.isDestroyed) return;
-      console.log("[Voxxo Video] Data channel open");
+      console.log("[Entrevoz Video] Data channel open");
 
       this.stopConnectionAttempts();
       this.connectionAttempts = 0;
@@ -608,12 +608,12 @@ export class PeerConnection {
     });
 
     conn.on("close", () => {
-      console.log("[Voxxo Video] Data channel closed");
+      console.log("[Entrevoz Video] Data channel closed");
       this.handlePartnerLeft();
     });
 
     conn.on("error", (err) => {
-      console.error("[Voxxo Video] Data channel error:", err);
+      console.error("[Entrevoz Video] Data channel error:", err);
     });
   }
 
@@ -624,7 +624,7 @@ export class PeerConnection {
 
     // Room full message - 3rd person trying to join
     if (msg.type === "room_full") {
-      console.log("[Voxxo Video] Room is full - cannot join");
+      console.log("[Entrevoz Video] Room is full - cannot join");
       this.stopConnectionAttempts();
       this.setStatus(
         "room_full",
@@ -650,7 +650,7 @@ export class PeerConnection {
     // Hello message
     if (msg.type === "hello") {
       const name = String(msg.name || "Partner");
-      console.log("[Voxxo Video] Partner joined:", name);
+      console.log("[Entrevoz Video] Partner joined:", name);
       this.callbacks.onPartnerJoined?.(name);
 
       // Send hello back
@@ -694,7 +694,7 @@ export class PeerConnection {
     // Already have a working video stream - no retry needed
     if (this.remoteStream) {
       console.log(
-        "[Voxxo Video] Already have remote stream, skipping video call",
+        "[Entrevoz Video] Already have remote stream, skipping video call",
       );
       return;
     }
@@ -711,7 +711,7 @@ export class PeerConnection {
     // Set up stream timeout - adaptive based on network conditions
     const timeout = this.getStreamTimeout();
     console.log(
-      `[Voxxo Video] Stream timeout set to ${timeout}ms based on network`,
+      `[Entrevoz Video] Stream timeout set to ${timeout}ms based on network`,
     );
 
     this.streamTimeoutId = setTimeout(() => {
@@ -719,7 +719,7 @@ export class PeerConnection {
 
       // Check if we got a stream
       if (!this.streamReceived && !this.remoteStream) {
-        console.warn(`[Voxxo Video] Stream timeout after ${timeout}ms`);
+        console.warn(`[Entrevoz Video] Stream timeout after ${timeout}ms`);
         this.handleVideoCallError(
           "Stream timeout - partner may not have video enabled",
         );
@@ -745,7 +745,7 @@ export class PeerConnection {
    * Handle video call errors with retry logic
    */
   private handleVideoCallError(reason: string): void {
-    console.error(`[Voxxo Video] Video call error: ${reason}`);
+    console.error(`[Entrevoz Video] Video call error: ${reason}`);
 
     // Clear timeouts
     this.clearStreamTimeout();
@@ -770,7 +770,7 @@ export class PeerConnection {
       // Calculate retry delay with exponential backoff: 2s, 4s, 8s
       const retryDelay = 2000 * Math.pow(2, this.videoRetryAttempts - 1);
       console.log(
-        `[Voxxo Video] Scheduling video retry in ${retryDelay}ms (attempt ${this.videoRetryAttempts + 1}/${PeerConnection.MAX_VIDEO_RETRIES})`,
+        `[Entrevoz Video] Scheduling video retry in ${retryDelay}ms (attempt ${this.videoRetryAttempts + 1}/${PeerConnection.MAX_VIDEO_RETRIES})`,
       );
 
       this.setStatus(
@@ -790,7 +790,7 @@ export class PeerConnection {
       }, retryDelay);
     } else if (!this.isDestroyed) {
       // Max retries exhausted
-      console.error("[Voxxo Video] Max video call retries exhausted");
+      console.error("[Entrevoz Video] Max video call retries exhausted");
       this.setStatus(
         "failed",
         "Video connection failed - please refresh and try again",
@@ -802,7 +802,7 @@ export class PeerConnection {
   private initiateVideoCall(): void {
     if (!this.peer || !this.localStream || this.isDestroyed) {
       console.warn(
-        "[Voxxo Video] Cannot initiate call - missing prerequisites",
+        "[Entrevoz Video] Cannot initiate call - missing prerequisites",
         {
           hasPeer: !!this.peer,
           hasLocalStream: !!this.localStream,
@@ -815,7 +815,7 @@ export class PeerConnection {
     // Don't create duplicate calls if we already have an open connection with stream
     if (this.mediaConnection?.open && this.remoteStream) {
       console.log(
-        "[Voxxo Video] Already have active media connection with stream",
+        "[Entrevoz Video] Already have active media connection with stream",
       );
       return;
     }
@@ -827,20 +827,20 @@ export class PeerConnection {
       : this.hostPeerId;
 
     if (!targetPeerId) {
-      console.error("[Voxxo Video] No target peer ID for video call");
+      console.error("[Entrevoz Video] No target peer ID for video call");
       this.handleVideoCallError("No target peer available");
       return;
     }
 
     console.log(
-      `[Voxxo Video] ${this.isHost ? "Host" : "Guest"} initiating video call to: ${targetPeerId} (attempt ${this.videoRetryAttempts + 1}/${PeerConnection.MAX_VIDEO_RETRIES})`,
+      `[Entrevoz Video] ${this.isHost ? "Host" : "Guest"} initiating video call to: ${targetPeerId} (attempt ${this.videoRetryAttempts + 1}/${PeerConnection.MAX_VIDEO_RETRIES})`,
     );
 
     try {
       const call = this.peer.call(targetPeerId, this.localStream);
 
       if (!call) {
-        console.error("[Voxxo Video] peer.call() returned null/undefined");
+        console.error("[Entrevoz Video] peer.call() returned null/undefined");
         this.handleVideoCallError("Failed to create call object");
         return;
       }
@@ -849,7 +849,7 @@ export class PeerConnection {
     } catch (err) {
       const errorMsg =
         err instanceof Error ? err.message : "Unknown error initiating call";
-      console.error("[Voxxo Video] Exception initiating video call:", err);
+      console.error("[Entrevoz Video] Exception initiating video call:", err);
       this.handleVideoCallError(errorMsg);
     }
   }
@@ -862,14 +862,14 @@ export class PeerConnection {
       this.remoteStream
     ) {
       console.log(
-        "[Voxxo Video] Ignoring duplicate media connection - already have stream",
+        "[Entrevoz Video] Ignoring duplicate media connection - already have stream",
       );
       return;
     }
 
     // Close old connection if different peer
     if (this.mediaConnection && this.mediaConnection.peer !== call.peer) {
-      console.log("[Voxxo Video] Closing old media connection for new peer");
+      console.log("[Entrevoz Video] Closing old media connection for new peer");
       try {
         this.mediaConnection.close();
       } catch {
@@ -878,7 +878,9 @@ export class PeerConnection {
     }
 
     this.mediaConnection = call;
-    console.log(`[Voxxo Video] Handling media connection from: ${call.peer}`);
+    console.log(
+      `[Entrevoz Video] Handling media connection from: ${call.peer}`,
+    );
 
     // Track if we received a stream through this connection
     let connectionStreamReceived = false;
@@ -888,11 +890,11 @@ export class PeerConnection {
 
       // Avoid duplicate stream events
       if (this.remoteStream?.id === stream.id) {
-        console.log("[Voxxo Video] Ignoring duplicate stream event");
+        console.log("[Entrevoz Video] Ignoring duplicate stream event");
         return;
       }
 
-      console.log("[Voxxo Video] Remote stream received!", {
+      console.log("[Entrevoz Video] Remote stream received!", {
         streamId: stream.id,
         videoTracks: stream.getVideoTracks().length,
         audioTracks: stream.getAudioTracks().length,
@@ -920,7 +922,7 @@ export class PeerConnection {
     });
 
     call.on("close", () => {
-      console.log("[Voxxo Video] Media connection closed", {
+      console.log("[Entrevoz Video] Media connection closed", {
         hadStream: connectionStreamReceived,
         isDestroyed: this.isDestroyed,
         currentStatus: this._status,
@@ -933,7 +935,7 @@ export class PeerConnection {
         this._status !== "failed"
       ) {
         console.warn(
-          "[Voxxo Video] Media connection closed before stream received",
+          "[Entrevoz Video] Media connection closed before stream received",
         );
         this.handleVideoCallError(
           "Connection closed before video stream received",
@@ -945,7 +947,7 @@ export class PeerConnection {
 
     call.on("error", (err) => {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      console.error("[Voxxo Video] Media connection error:", errorMsg);
+      console.error("[Entrevoz Video] Media connection error:", errorMsg);
 
       // Trigger retry on error (if we haven't received a stream yet)
       if (
@@ -963,17 +965,17 @@ export class PeerConnection {
     if (pc) {
       pc.oniceconnectionstatechange = () => {
         const state = pc.iceConnectionState as IceConnectionState;
-        console.log("[Voxxo Video] ICE state:", state);
+        console.log("[Entrevoz Video] ICE state:", state);
 
         // Notify UI of ICE state changes
         this.callbacks.onIceStateChange?.(state);
 
         if (state === "failed") {
-          console.log("[Voxxo Video] ICE failed, attempting restart...");
+          console.log("[Entrevoz Video] ICE failed, attempting restart...");
           try {
             pc.restartIce?.();
           } catch (err) {
-            console.error("[Voxxo Video] ICE restart failed:", err);
+            console.error("[Entrevoz Video] ICE restart failed:", err);
             // If ICE restart fails and no stream, trigger video retry
             if (
               !this.streamReceived &&
@@ -990,7 +992,7 @@ export class PeerConnection {
           setTimeout(() => {
             if (pc.iceConnectionState === "disconnected" && !this.isDestroyed) {
               console.log(
-                "[Voxxo Video] ICE still disconnected after 3s, restarting...",
+                "[Entrevoz Video] ICE still disconnected after 3s, restarting...",
               );
               try {
                 pc.restartIce?.();
@@ -1002,21 +1004,26 @@ export class PeerConnection {
         }
 
         if (state === "connected" || state === "completed") {
-          console.log("[Voxxo Video] ICE connection established successfully");
+          console.log(
+            "[Entrevoz Video] ICE connection established successfully",
+          );
         }
       };
 
       // Monitor ICE gathering state for debugging
       pc.onicegatheringstatechange = () => {
-        console.log("[Voxxo Video] ICE gathering state:", pc.iceGatheringState);
+        console.log(
+          "[Entrevoz Video] ICE gathering state:",
+          pc.iceGatheringState,
+        );
       };
 
       // Monitor connection state (WebRTC 1.0)
       pc.onconnectionstatechange = () => {
-        console.log("[Voxxo Video] Connection state:", pc.connectionState);
+        console.log("[Entrevoz Video] Connection state:", pc.connectionState);
 
         if (pc.connectionState === "failed" && !this.isDestroyed) {
-          console.error("[Voxxo Video] RTCPeerConnection failed");
+          console.error("[Entrevoz Video] RTCPeerConnection failed");
           if (!this.streamReceived && this._status !== "failed") {
             this.handleVideoCallError("Peer connection failed");
           }
@@ -1048,13 +1055,13 @@ export class PeerConnection {
       if (timeSinceLastPong > 15000) {
         this.missedPongs++;
         console.warn(
-          `[Voxxo Video] No pong for ${Math.round(timeSinceLastPong / 1000)}s (missed: ${this.missedPongs}/${PeerConnection.MAX_MISSED_PONGS})`,
+          `[Entrevoz Video] No pong for ${Math.round(timeSinceLastPong / 1000)}s (missed: ${this.missedPongs}/${PeerConnection.MAX_MISSED_PONGS})`,
         );
 
         // After 3 missed pongs (15 seconds), trigger recovery
         if (this.missedPongs >= PeerConnection.MAX_MISSED_PONGS) {
           console.warn(
-            "[Voxxo Video] Connection dead - triggering ICE restart",
+            "[Entrevoz Video] Connection dead - triggering ICE restart",
           );
           this.missedPongs = 0;
           this.triggerIceRestart();
@@ -1189,7 +1196,7 @@ export class PeerConnection {
         timestamp: now,
       });
     } catch (err) {
-      console.warn("[Voxxo] Stats collection error:", err);
+      console.warn("[Entrevoz] Stats collection error:", err);
     }
   }
 
@@ -1206,13 +1213,13 @@ export class PeerConnection {
       this.dataConnection.send(data);
       return true;
     } catch (err) {
-      console.error("[Voxxo Video] Send error:", err);
+      console.error("[Entrevoz Video] Send error:", err);
       return false;
     }
   }
 
   disconnect(): void {
-    console.log("[Voxxo Video] Disconnecting...");
+    console.log("[Entrevoz Video] Disconnecting...");
     this.isDestroyed = true;
 
     this.stopKeepAlive();
@@ -1254,7 +1261,7 @@ export class PeerConnection {
   private setStatus(status: ConnectionStatus, message?: string): void {
     if (this.isDestroyed) return;
     this._status = status;
-    console.log("[Voxxo Video] Status:", status, message || "");
+    console.log("[Entrevoz Video] Status:", status, message || "");
     this.callbacks.onStatusChange?.(status, message);
   }
 }
@@ -1297,7 +1304,7 @@ export async function getCamera(
       const hasVideo = stream.getVideoTracks().length > 0;
       const hasAudio = stream.getAudioTracks().length > 0;
       console.log(
-        `[Voxxo] Media acquired - Video: ${hasVideo}, Audio: ${hasAudio}`,
+        `[Entrevoz] Media acquired - Video: ${hasVideo}, Audio: ${hasAudio}`,
       );
       return stream;
     } catch (err: unknown) {

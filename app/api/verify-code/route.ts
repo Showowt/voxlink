@@ -3,7 +3,7 @@ import { timingSafeEqual } from "crypto";
 import { createSignedToken } from "@/lib/auth-tokens";
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// VERIFY CODE API - Voxxo Access Gate
+// VERIFY CODE API - Entrevoz Access Gate
 // Validates 4-digit access code and returns session token
 // Security: Rate limiting + timing-safe comparison + HMAC-signed tokens
 // ═══════════════════════════════════════════════════════════════════════════════

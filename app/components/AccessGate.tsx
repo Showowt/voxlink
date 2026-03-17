@@ -7,7 +7,7 @@ import { useState, useEffect } from "react";
 // Temporary security layer until full auth/subscription system is built
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export const STORAGE_KEY = "voxxo_access_token";
+export const STORAGE_KEY = "entrevoz_access_token";
 
 interface AccessGateProps {
   children: React.ReactNode;
@@ -191,7 +191,9 @@ export default function AccessGate({ children }: AccessGateProps) {
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 mb-4 shadow-lg shadow-cyan-500/25">
             <span className="text-4xl">🔐</span>
           </div>
-          <h1 className="text-2xl font-bold text-white mb-2">Voxxo Access</h1>
+          <h1 className="text-2xl font-bold text-white mb-2">
+            Entrevoz Access
+          </h1>
           <p className="text-gray-400 text-sm">
             Enter your 4-digit access code
           </p>

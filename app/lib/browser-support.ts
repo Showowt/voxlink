@@ -1,5 +1,5 @@
 /**
- * Voxxo Browser Support Detection
+ * Entrevoz Browser Support Detection
  *
  * Detects browser capabilities required for video calls, speech recognition,
  * and real-time communication features.
