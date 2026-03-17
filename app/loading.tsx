@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// VOXXO - PREMIUM ROOT LOADING STATE
+// ENTREVOZ - PREMIUM ROOT LOADING STATE
 // World-class loading animation with brand identity
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -34,7 +34,9 @@ export default function Loading() {
         </div>
 
         {/* Loading text */}
-        <p className="text-white/60 text-base font-medium">Loading Voxxo...</p>
+        <p className="text-white/60 text-base font-medium">
+          Loading Entrevoz...
+        </p>
 
         {/* Subtle tagline */}
         <p className="text-white/40 text-sm mt-1">

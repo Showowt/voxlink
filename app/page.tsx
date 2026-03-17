@@ -17,7 +17,7 @@ import {
 import { AnimatedBackground } from "./components/ui/AnimatedBackground";
 import { GlassCard } from "./components/ui/GlassCard";
 import { GlowButton } from "./components/ui/GlowButton";
-import { VoxxoLogo } from "./components/ui/VoxxoLogo";
+import { EntrevozLogo } from "./components/ui/EntrevozLogo";
 import { PillTabs, SimplePillTabs } from "./components/ui/PillTabs";
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1101,8 +1101,8 @@ function HomeContent() {
 
   // Load saved preferences
   useEffect(() => {
-    const savedName = localStorage.getItem("voxxo_name");
-    const savedLang = localStorage.getItem("voxxo_lang");
+    const savedName = localStorage.getItem("entrevoz_name");
+    const savedLang = localStorage.getItem("entrevoz_lang");
     if (savedName) setName(savedName);
     if (savedLang && LANGUAGES.find((l) => l.code === savedLang))
       setLanguage(savedLang);
@@ -1118,8 +1118,8 @@ function HomeContent() {
 
   // Save preferences
   useEffect(() => {
-    if (name) localStorage.setItem("voxxo_name", name);
-    if (language) localStorage.setItem("voxxo_lang", language);
+    if (name) localStorage.setItem("entrevoz_name", name);
+    if (language) localStorage.setItem("entrevoz_lang", language);
   }, [name, language]);
 
   // Generate cryptographically secure room code
@@ -1276,7 +1276,7 @@ function HomeContent() {
       <div className="w-full max-w-md mx-auto flex-shrink-0">
         {/* Logo - Premium Animated */}
         <div className="mb-4 sm:mb-6">
-          <VoxxoLogo size="md" animate showBrand />
+          <EntrevozLogo size="md" animate showBrand />
         </div>
 
         {/* Browser Compatibility Warning */}
@@ -1393,7 +1393,7 @@ function HomeContent() {
                   <ul className="text-xs sm:text-sm text-white/70 space-y-1.5 sm:space-y-2">
                     <li className="flex items-start gap-1.5 sm:gap-2">
                       <span className="text-purple-400">📍</span>
-                      Find nearby Voxxo users
+                      Find nearby Entrevoz users
                     </li>
                     <li className="flex items-start gap-1.5 sm:gap-2">
                       <span className="text-purple-400">📡</span>
@@ -1408,7 +1408,7 @@ function HomeContent() {
                 <button
                   onClick={() => router.push("/proximity")}
                   className="w-full py-3 sm:py-4 min-h-[48px] sm:min-h-[56px] bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-400 hover:to-pink-400 rounded-xl sm:rounded-2xl text-white font-semibold text-base sm:text-lg transition-all duration-200 shadow-2xl shadow-purple-500/25 hover:-translate-y-0.5"
-                  aria-label="Start proximity discovery - Find nearby Voxxo users"
+                  aria-label="Start Proximity Connect - Find nearby Entrevoz users"
                 >
                   📡 Start Proximity Discovery
                 </button>
@@ -1606,7 +1606,7 @@ export default function Home() {
               <div className="absolute inset-0 rounded-full border-4 border-voxxo-500 border-t-transparent animate-spin" />
               <div className="absolute inset-2 rounded-full bg-voxxo-500/10 animate-pulse" />
             </div>
-            <p className="text-white/70 text-sm">Loading Voxxo...</p>
+            <p className="text-white/70 text-sm">Loading Entrevoz...</p>
           </div>
         </div>
       }

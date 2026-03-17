@@ -3,8 +3,9 @@
 @tailwind utilities;
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   VOXXO PREMIUM DESIGN SYSTEM - GLOBAL STYLES
+   ENTREVOZ PREMIUM DESIGN SYSTEM - GLOBAL STYLES
    Apple-level aesthetic with glassmorphism and depth
+   Brand: Teal #00DBA8, Pink #FF3B7A, Dark #0D0D0D
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 * {
@@ -529,7 +530,7 @@ h6 {
 .stagger-children > *:nth-child(8) { animation-delay: 0.35s; }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   VOXXO-SPECIFIC UTILITIES
+   ENTREVOZ-SPECIFIC UTILITIES
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 /* Mirrored video for selfie view */
@@ -639,15 +640,23 @@ h6 {
 }
 
 /* Premium Gradient Text */
+.text-gradient-entrevoz {
+  background: linear-gradient(135deg, #00DBA8 0%, #FF3B7A 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Legacy alias */
 .text-gradient-voxxo {
-  background: linear-gradient(135deg, #00E5A0 0%, #00B87D 100%);
+  background: linear-gradient(135deg, #00DBA8 0%, #FF3B7A 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 .text-gradient-premium {
-  background: linear-gradient(135deg, #00E5A0 0%, #0088FF 50%, #7B61FF 100%);
+  background: linear-gradient(135deg, #00DBA8 0%, #FF3B7A 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -1104,19 +1113,21 @@ button:focus-visible {
   }
 }
 
-/* Skeleton with brand color glow sweep */
+/* Skeleton with brand color glow sweep - Entrevoz teal */
+.skeleton-shimmer-entrevoz,
 .skeleton-shimmer-voxxo {
   position: relative;
   overflow: hidden;
   background: linear-gradient(
     135deg,
-    rgba(0, 229, 160, 0.03) 0%,
-    rgba(0, 229, 160, 0.06) 50%,
-    rgba(0, 229, 160, 0.03) 100%
+    rgba(0, 219, 168, 0.03) 0%,
+    rgba(0, 219, 168, 0.06) 50%,
+    rgba(0, 219, 168, 0.03) 100%
   );
   border-radius: inherit;
 }
 
+.skeleton-shimmer-entrevoz::before,
 .skeleton-shimmer-voxxo::before {
   content: '';
   position: absolute;
@@ -1124,9 +1135,9 @@ button:focus-visible {
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(0, 229, 160, 0.05) 20%,
-    rgba(0, 229, 160, 0.10) 50%,
-    rgba(0, 229, 160, 0.05) 80%,
+    rgba(0, 219, 168, 0.05) 20%,
+    rgba(0, 219, 168, 0.10) 50%,
+    rgba(0, 219, 168, 0.05) 80%,
     transparent 100%
   );
   transform: translateX(-100%);

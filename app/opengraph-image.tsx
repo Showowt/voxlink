@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "Voxxo — Your Voice. Any Language. Instantly.";
+export const alt = "Entrevoz — Your Voice. Any Language. Instantly.";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -58,7 +58,7 @@ export default function Image() {
             }}
           />
         </div>
-        {/* Voxxo text */}
+        {/* Entrevoz text */}
         <div
           style={{
             fontSize: 72,
@@ -67,7 +67,7 @@ export default function Image() {
             letterSpacing: "-2px",
           }}
         >
-          Voxxo
+          Entrevoz
         </div>
       </div>
 

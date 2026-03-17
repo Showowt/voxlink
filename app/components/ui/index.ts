@@ -1,9 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// VOXXO UI COMPONENTS - Premium glassmorphism component library
+// ENTREVOZ UI COMPONENTS - Premium glassmorphism component library
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export { GlassCard } from "./GlassCard";
 export { GlowButton } from "./GlowButton";
-export { VoxxoLogo } from "./VoxxoLogo";
+export { EntrevozLogo, VoxxoLogo } from "./EntrevozLogo";
 export { AnimatedBackground } from "./AnimatedBackground";
 export { PillTabs, SimplePillTabs } from "./PillTabs";

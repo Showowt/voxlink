@@ -10,7 +10,7 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("Voxxo Error:", error);
+    console.error("Entrevoz Error:", error);
   }, [error]);
 
   return (

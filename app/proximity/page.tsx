@@ -71,7 +71,7 @@ function ProximityContent() {
 
   // Load saved language preference
   useEffect(() => {
-    const savedLang = localStorage.getItem("voxxo_lang");
+    const savedLang = localStorage.getItem("entrevoz_lang");
     if (savedLang && LANGUAGES.find((l) => l.code === savedLang)) {
       setLanguage(savedLang);
     }
@@ -464,7 +464,7 @@ function ProximityContent() {
                 Proximity Connect
               </h2>
               <p className="text-white/70 text-sm max-w-xs mx-auto">
-                Find nearby Voxxo users and start translated conversations
+                Find nearby Entrevoz users and start translated conversations
                 instantly
               </p>
             </div>
