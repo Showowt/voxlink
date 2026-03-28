@@ -152,10 +152,24 @@ function TalkContent() {
     }
   }, [transcript]);
 
-  // Haptic feedback
+  // Haptic feedback - with throttling and cleanup
+  const lastVibrateRef = useRef<number>(0);
   const vibrate = useCallback((pattern: number | number[] = 50) => {
     if (typeof navigator !== "undefined" && navigator.vibrate) {
+      // Throttle vibrations to max 1 per 200ms to prevent Android infinite vibration bug
+      const now = Date.now();
+      if (now - lastVibrateRef.current < 200) {
+        return;
+      }
+      lastVibrateRef.current = now;
       navigator.vibrate(pattern);
+    }
+  }, []);
+
+  // Cancel any ongoing vibration
+  const cancelVibration = useCallback(() => {
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      navigator.vibrate(0);
     }
   }, []);
 
@@ -388,6 +402,11 @@ function TalkContent() {
           // Ignore cleanup errors
         }
         recognitionRef.current = null;
+      }
+
+      // Cancel any ongoing vibration (fixes Android infinite vibration bug)
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        navigator.vibrate(0);
       }
     };
   }, [
