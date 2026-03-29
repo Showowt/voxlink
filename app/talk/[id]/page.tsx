@@ -99,11 +99,14 @@ function TalkContent() {
   const [isListening, setIsListening] = useState(false);
   const [isHandsFree, setIsHandsFree] = useState(false);
 
-  // Live caption state
+  // Live caption state - simplified: only show translation, not original
   const [myLiveText, setMyLiveText] = useState("");
   const [myLiveTranslation, setMyLiveTranslation] = useState("");
   const [partnerLiveText, setPartnerLiveText] = useState("");
   const [partnerLiveTranslation, setPartnerLiveTranslation] = useState("");
+
+  // Translation sequence tracking - prevents race conditions
+  const translationSeqRef = useRef(0);
 
   // Transcript history
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
@@ -331,11 +334,13 @@ function TalkContent() {
         // COMPLETE MESSAGE FROM PARTNER
         // ═══════════════════════════════════════════════════════════════════
         if (msg.type === "message") {
-          // Extract source language - support any language code
-          const rawSourceLang = String(
+          // Use partner's language from presence, fall back to message data
+          const msgSourceLang = String(
             data.sourceLang || data.lang || "",
           ).toLowerCase();
-          const partnerSourceLang = rawSourceLang || defaultTargetLang;
+          // Priority: 1) what we know from presence, 2) what message says, 3) fallback
+          const partnerSourceLang =
+            partnerLangRef.current || msgSourceLang || defaultTargetLang;
 
           const payload: MessagePayload = {
             id: String(
@@ -348,11 +353,12 @@ function TalkContent() {
           };
 
           console.log(
-            `[Message] Partner (${partnerSourceLang}) said: "${payload.original.slice(0, 30)}..." → translating to ${userLang}`,
+            `[Message] Partner (${partnerSourceLang}) → me (${userLang}): "${payload.original.slice(0, 30)}..."`,
           );
 
-          // Track partner's language
-          setPartnerLang(partnerSourceLang);
+          // IMMEDIATELY clear live preview - prevents confusion
+          setPartnerLiveText("");
+          setPartnerLiveTranslation("");
 
           // Translate FROM partner's language INTO our language
           const translatedForUs = await translate(
@@ -363,9 +369,7 @@ function TalkContent() {
 
           if (!mountedRef.current) return;
 
-          console.log(
-            `[Message] Translation result: "${translatedForUs.slice(0, 30)}..."`,
-          );
+          console.log(`[Message] Result: "${translatedForUs.slice(0, 30)}..."`);
 
           addToTranscript({
             id: payload.id,
@@ -376,10 +380,6 @@ function TalkContent() {
             timestamp: new Date(payload.timestamp),
             sourceLang: partnerSourceLang,
           });
-
-          // Clear partner live preview
-          setPartnerLiveText("");
-          setPartnerLiveTranslation("");
         }
 
         // ═══════════════════════════════════════════════════════════════════
@@ -387,35 +387,31 @@ function TalkContent() {
         // ═══════════════════════════════════════════════════════════════════
         if (msg.type === "live") {
           const incomingText = String(data.text || "");
-          // Extract source language - support any language code
-          const rawSourceLang = String(data.sourceLang || "").toLowerCase();
-          const incomingLang = rawSourceLang || defaultTargetLang;
+          // Use partner's language from presence (stable), not from message
+          const incomingLang = partnerLangRef.current || defaultTargetLang;
 
-          // Track partner's language
-          setPartnerLang(incomingLang);
+          // Track this translation sequence to prevent race conditions
+          translationSeqRef.current++;
+          const thisSeq = translationSeqRef.current;
+
           setPartnerLiveText(incomingText);
 
           // Translate into our language
           if (incomingText.trim()) {
-            console.log(
-              `[Live] Partner (${incomingLang}): "${incomingText.slice(0, 30)}..." → ${userLang}`,
-            );
             const translatedLive = await translate(
               incomingText,
               incomingLang,
               userLang,
             );
-            if (mountedRef.current) {
+            // Only update if this is still the latest translation
+            if (mountedRef.current && thisSeq === translationSeqRef.current) {
               setPartnerLiveTranslation(translatedLive);
-              console.log(
-                `[Live] Translation: "${translatedLive.slice(0, 30)}..."`,
-              );
             }
           } else {
             setPartnerLiveTranslation("");
           }
 
-          // Auto-clear after 5s
+          // Auto-clear after 3s (faster cleanup)
           if (liveTextTimeoutRef.current) {
             clearTimeout(liveTextTimeoutRef.current);
           }
@@ -424,7 +420,7 @@ function TalkContent() {
               setPartnerLiveText("");
               setPartnerLiveTranslation("");
             }
-          }, 5000);
+          }, 3000);
         }
 
         // ═══════════════════════════════════════════════════════════════════
@@ -1045,13 +1041,13 @@ function TalkContent() {
           {transcript.map((entry) => (
             <div
               key={entry.id}
-              className={`max-w-[85%] md:max-w-[75%] ${entry.speaker === "me" ? "ml-auto" : "mr-auto"}`}
+              className={`max-w-[90%] ${entry.speaker === "me" ? "ml-auto" : "mr-auto"}`}
             >
               <div
-                className={`relative p-4 ${
+                className={`relative px-4 py-3 ${
                   entry.speaker === "me"
-                    ? "bg-cyan-500/10 border border-cyan-500/30"
-                    : "bg-purple-500/10 border border-purple-500/30"
+                    ? "bg-cyan-500/15 border-l-4 border-cyan-500"
+                    : "bg-purple-500/15 border-l-4 border-purple-500"
                 }`}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -1061,16 +1057,17 @@ function TalkContent() {
                 }}
               >
                 {entry.emoji && (
-                  <div className="absolute -top-3 -right-2 text-2xl animate-bounce">
+                  <div className="absolute -top-2 -right-1 text-xl">
                     {entry.emoji}
                   </div>
                 )}
 
-                <div className="flex items-center gap-2 mb-2">
+                {/* Header: name + time + flag */}
+                <div className="flex items-center gap-2 mb-1.5">
                   <span
-                    className={`text-xs font-medium ${entry.speaker === "me" ? "text-cyan-400" : "text-purple-400"}`}
+                    className={`text-xs font-semibold ${entry.speaker === "me" ? "text-cyan-400" : "text-purple-400"}`}
                   >
-                    {entry.name}
+                    {entry.speaker === "me" ? "You" : entry.name}
                   </span>
                   <span className="text-gray-600 text-xs">
                     {entry.timestamp.toLocaleTimeString([], {
@@ -1078,60 +1075,53 @@ function TalkContent() {
                       minute: "2-digit",
                     })}
                   </span>
-                  <span className="text-xs">{getFlag(entry.sourceLang)}</span>
+                  <span className="text-sm">{getFlag(entry.sourceLang)}</span>
                 </div>
 
-                <div className="flex items-start justify-between gap-3">
-                  <p
-                    className={`text-white ${fontSizeClasses[fontSize]} leading-relaxed`}
-                  >
-                    {entry.original}
-                  </p>
+                {/* Main content: Show TRANSLATED text prominently (what reader needs) */}
+                <p
+                  className={`text-white ${fontSizeClasses[fontSize]} leading-relaxed mb-1`}
+                >
+                  {entry.speaker === "me" ? entry.original : entry.translated}
+                </p>
+
+                {/* Secondary: Original in smaller muted text */}
+                <p className="text-gray-500 text-sm">
+                  {entry.speaker === "me"
+                    ? `→ ${entry.translated}`
+                    : `(${entry.original})`}
+                </p>
+
+                {/* TTS buttons */}
+                <div className="flex gap-2 mt-2">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      speak(entry.original, entry.sourceLang);
+                      speak(
+                        entry.speaker === "me"
+                          ? entry.original
+                          : entry.translated,
+                        entry.speaker === "me" ? entry.sourceLang : userLang,
+                      );
                     }}
-                    className="text-gray-500 hover:text-white shrink-0"
+                    className="text-xs text-gray-400 hover:text-white"
                   >
-                    🔊
-                  </button>
-                </div>
-
-                <div className="mt-2 pt-2 border-t border-white/10 flex items-start justify-between gap-3">
-                  <p
-                    className={`${entry.speaker === "me" ? "text-cyan-300" : "text-purple-300"} ${fontSizeClasses[fontSize]}`}
-                  >
-                    → {entry.translated}
-                  </p>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      // Translated text is in the opposite language:
-                      // - My messages: translated to partner's language
-                      // - Partner messages: translated to my language
-                      const translatedLang =
-                        entry.speaker === "me" ? displayPartnerLang : userLang;
-                      speak(entry.translated, translatedLang);
-                    }}
-                    className="text-gray-500 hover:text-white shrink-0"
-                  >
-                    🔊
+                    🔊 Play
                   </button>
                 </div>
 
                 {/* Emoji picker */}
                 {showEmojiPicker === entry.id && (
                   <div
-                    className="absolute bottom-full left-0 right-0 mb-2 bg-black/90 backdrop-blur-xl p-3 border border-white/10 z-10"
+                    className="absolute bottom-full left-0 right-0 mb-2 bg-black/95 p-2 border border-white/20 z-10"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <div className="flex flex-wrap justify-center gap-2">
+                    <div className="flex flex-wrap justify-center gap-1">
                       {REACTION_EMOJIS.map((emoji) => (
                         <button
                           key={emoji}
                           onClick={() => addEmoji(entry.id, emoji)}
-                          className="text-2xl hover:scale-125 transition-transform p-1"
+                          className="text-xl hover:scale-110 transition-transform p-0.5"
                         >
                           {emoji}
                         </button>
@@ -1147,89 +1137,52 @@ function TalkContent() {
         </div>
 
         {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* LIVE CAPTIONS - Floating at bottom */}
+        {/* LIVE CAPTIONS - Clean, minimal, non-overlapping */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
 
-        <div className="absolute bottom-0 inset-x-0 p-4 space-y-3 pointer-events-none bg-gradient-to-t from-[#0a0a0f] via-[#0a0a0f]/80 to-transparent pt-12">
-          {/* Partner's live caption */}
-          {partnerLiveText && (
-            <div className="flex justify-start animate-fade-in pointer-events-auto">
-              <div className="max-w-[85%] md:max-w-[70%]">
-                <div className="bg-purple-500/20 backdrop-blur-xl border border-purple-500/30 border-dashed px-4 py-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-purple-400 text-xs font-medium">
-                      {partnerName || "Partner"}
-                    </span>
-                    <div className="flex gap-0.5">
-                      {[0, 1, 2].map((i) => (
-                        <div
-                          key={i}
-                          className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-pulse"
-                          style={{ animationDelay: `${i * 0.15}s` }}
-                        />
-                      ))}
-                    </div>
-                    <span className="text-purple-500 text-xs">speaking...</span>
+        {(partnerLiveTranslation || myLiveText) && (
+          <div className="border-t border-white/10 bg-black/60 backdrop-blur-sm px-4 py-3 flex-shrink-0">
+            {/* Partner speaking - show ONLY the translation (what I need to read) */}
+            {partnerLiveTranslation && (
+              <div className="flex items-start gap-3 mb-2">
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-purple-400 text-xs font-medium">
+                    {partnerName || "Partner"}:
+                  </span>
+                  <div className="flex gap-0.5">
+                    {[0, 1, 2].map((i) => (
+                      <div
+                        key={i}
+                        className="w-1 h-1 bg-purple-400 rounded-full animate-pulse"
+                        style={{ animationDelay: `${i * 0.1}s` }}
+                      />
+                    ))}
                   </div>
-                  <p
-                    className={`text-white ${fontSizeClasses[fontSize]} leading-relaxed`}
-                  >
-                    {partnerLiveText}
-                  </p>
-                  {partnerLiveTranslation && (
-                    <p
-                      className={`text-purple-300 ${fontSizeClasses[fontSize]} mt-2`}
-                    >
-                      → {partnerLiveTranslation}
-                    </p>
-                  )}
                 </div>
+                <p
+                  className={`text-purple-200 ${fontSizeClasses[fontSize]} leading-relaxed flex-1`}
+                >
+                  {partnerLiveTranslation}
+                </p>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* My live caption */}
-          {myLiveText && (
-            <div className="flex justify-end animate-fade-in pointer-events-auto">
-              <div className="max-w-[85%] md:max-w-[70%]">
-                <div className="bg-cyan-500/20 backdrop-blur-xl border border-cyan-500/30 border-dashed px-4 py-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-cyan-400 text-xs font-medium">
-                      You
-                    </span>
-                    <div className="flex gap-0.5">
-                      {[0, 1, 2].map((i) => (
-                        <div
-                          key={i}
-                          className="w-1 h-2 bg-cyan-400 rounded-full animate-pulse"
-                          style={{ animationDelay: `${i * 0.15}s` }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                  <p
-                    className={`text-white ${fontSizeClasses[fontSize]} leading-relaxed`}
-                  >
-                    {myLiveText}
-                    <span className="inline-block w-0.5 h-4 bg-white ml-1 animate-blink" />
-                  </p>
-                  {myLiveTranslation && (
-                    <p
-                      className={`text-cyan-300 ${fontSizeClasses[fontSize]} mt-2`}
-                    >
-                      → {myLiveTranslation}
-                    </p>
-                  )}
-                  <p className="text-gray-500 text-xs mt-2">
-                    {isHandsFree
-                      ? "Pause to send automatically"
-                      : "Speaking..."}
-                  </p>
-                </div>
+            {/* Me speaking - show what I'm saying */}
+            {myLiveText && (
+              <div className="flex items-start gap-3">
+                <span className="text-cyan-400 text-xs font-medium shrink-0">
+                  You:
+                </span>
+                <p
+                  className={`text-cyan-200 ${fontSizeClasses[fontSize]} leading-relaxed flex-1`}
+                >
+                  {myLiveText}
+                  <span className="inline-block w-0.5 h-4 bg-cyan-400 ml-1 animate-blink" />
+                </p>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Controls */}
