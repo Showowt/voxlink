@@ -1060,7 +1060,14 @@ function HomeContent() {
 
   // Form state
   const [name, setName] = useState("");
-  const [language, setLanguage] = useState("en");
+  // Detect browser language for better default
+  const [language, setLanguage] = useState(() => {
+    if (typeof window === "undefined") return "en";
+    const browserLang = navigator.language?.split("-")[0] || "en";
+    // Check if browser language is supported
+    const supported = LANGUAGES.find((l) => l.code === browserLang);
+    return supported ? browserLang : "en";
+  });
   const [joinCode, setJoinCode] = useState("");
   const [activeTab, setActiveTab] = useState<
     "video" | "talk" | "voxnote" | "voxtype" | "proximity" | "wingman"

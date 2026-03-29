@@ -200,20 +200,66 @@ function TalkContent() {
 
   const translate = useCallback(
     async (text: string, from: string, to: string): Promise<string> => {
-      if (!text.trim() || from === to) return text;
-      try {
-        const res = await fetch("/api/translate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, sourceLang: from, targetLang: to }),
-        });
-        if (!res.ok) throw new Error("Translation failed");
-        const data = await res.json();
-        return data.translation || text;
-      } catch (err) {
-        console.error("Translation error:", err);
+      if (!text.trim()) return text;
+
+      // Normalize language codes (handle cases like "en-US" -> "en")
+      const fromLang = from.split("-")[0].toLowerCase();
+      const toLang = to.split("-")[0].toLowerCase();
+
+      // Same language - no translation needed
+      if (fromLang === toLang) {
+        console.log(`[Translation] Same language (${fromLang}), skipping`);
         return text;
       }
+
+      // Retry logic for reliability
+      const maxRetries = 2;
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          if (attempt > 0) {
+            console.log(`[Translation] Retry attempt ${attempt}...`);
+            await new Promise((r) => setTimeout(r, 200 * attempt));
+          }
+
+          const res = await fetch("/api/translate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text,
+              sourceLang: fromLang,
+              targetLang: toLang,
+            }),
+          });
+
+          if (!res.ok) {
+            throw new Error(`API ${res.status}`);
+          }
+
+          const data = await res.json();
+          const result = data.translation || data.translated || text;
+
+          // Verify we got a real translation
+          if (result && result.toLowerCase() !== text.toLowerCase()) {
+            console.log(
+              `[Translation] ${fromLang}→${toLang}: "${text.slice(0, 15)}..." → "${result.slice(0, 15)}..."`,
+            );
+            return result;
+          }
+
+          // API returned same text - might have failed silently
+          if (attempt < maxRetries) {
+            console.warn(`[Translation] Got original back, retrying...`);
+            continue;
+          }
+          return result;
+        } catch (err) {
+          console.error(`[Translation] Attempt ${attempt + 1} failed:`, err);
+          if (attempt === maxRetries) {
+            return text;
+          }
+        }
+      }
+      return text;
     },
     [],
   );
@@ -278,30 +324,41 @@ function TalkContent() {
         // COMPLETE MESSAGE FROM PARTNER
         // ═══════════════════════════════════════════════════════════════════
         if (msg.type === "message") {
+          // Extract source language - support any language code
+          const rawSourceLang = String(
+            data.sourceLang || data.lang || "",
+          ).toLowerCase();
+          const partnerSourceLang = rawSourceLang || defaultTargetLang;
+
           const payload: MessagePayload = {
             id: String(
               data.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
             ),
             speaker: String(data.speaker || "Partner"),
             original: String(data.original || ""),
-            sourceLang:
-              (data.sourceLang as "en" | "es") ||
-              (data.lang as "en" | "es") ||
-              defaultTargetLang,
+            sourceLang: partnerSourceLang,
             timestamp: Number(data.timestamp) || Date.now(),
           };
 
+          console.log(
+            `[Message] Partner (${partnerSourceLang}) said: "${payload.original.slice(0, 30)}..." → translating to ${userLang}`,
+          );
+
           // Track partner's language
-          setPartnerLang(payload.sourceLang);
+          setPartnerLang(partnerSourceLang);
 
           // Translate FROM partner's language INTO our language
           const translatedForUs = await translate(
             payload.original,
-            payload.sourceLang,
+            partnerSourceLang,
             userLang,
           );
 
           if (!mountedRef.current) return;
+
+          console.log(
+            `[Message] Translation result: "${translatedForUs.slice(0, 30)}..."`,
+          );
 
           addToTranscript({
             id: payload.id,
@@ -310,7 +367,7 @@ function TalkContent() {
             original: payload.original,
             translated: translatedForUs,
             timestamp: new Date(payload.timestamp),
-            sourceLang: payload.sourceLang,
+            sourceLang: partnerSourceLang,
           });
 
           // Clear partner live preview
@@ -323,8 +380,9 @@ function TalkContent() {
         // ═══════════════════════════════════════════════════════════════════
         if (msg.type === "live") {
           const incomingText = String(data.text || "");
-          const incomingLang =
-            (data.sourceLang as "en" | "es") || defaultTargetLang;
+          // Extract source language - support any language code
+          const rawSourceLang = String(data.sourceLang || "").toLowerCase();
+          const incomingLang = rawSourceLang || defaultTargetLang;
 
           // Track partner's language
           setPartnerLang(incomingLang);
@@ -332,6 +390,9 @@ function TalkContent() {
 
           // Translate into our language
           if (incomingText.trim()) {
+            console.log(
+              `[Live] Partner (${incomingLang}): "${incomingText.slice(0, 30)}..." → ${userLang}`,
+            );
             const translatedLive = await translate(
               incomingText,
               incomingLang,
@@ -339,6 +400,9 @@ function TalkContent() {
             );
             if (mountedRef.current) {
               setPartnerLiveTranslation(translatedLive);
+              console.log(
+                `[Live] Translation: "${translatedLive.slice(0, 30)}..."`,
+              );
             }
           } else {
             setPartnerLiveTranslation("");
