@@ -121,6 +121,8 @@ function TalkContent() {
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const isListeningRef = useRef(false);
   const isHandsFreeRef = useRef(false);
+  // Partner language ref - keeps current value accessible in callbacks
+  const partnerLangRef = useRef<string | null>(null);
   const historyEndRef = useRef<HTMLDivElement>(null);
   const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const liveTextTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -144,6 +146,11 @@ function TalkContent() {
   useEffect(() => {
     isHandsFreeRef.current = isHandsFree;
   }, [isHandsFree]);
+
+  // Keep partner language ref in sync
+  useEffect(() => {
+    partnerLangRef.current = partnerLang;
+  }, [partnerLang]);
 
   // Auto-scroll transcript
   useEffect(() => {
@@ -531,6 +538,9 @@ function TalkContent() {
     recognition.onresult = async (event: SpeechRecognitionEvent) => {
       if (!mountedRef.current) return;
 
+      // Get current target language (partner's language or fallback)
+      const targetLang = partnerLangRef.current || defaultTargetLang;
+
       let interim = "";
       let newFinal = "";
 
@@ -556,11 +566,18 @@ function TalkContent() {
         liveTextDebounceRef.current = setTimeout(async () => {
           if (!mountedRef.current) return;
 
-          // Translate for our own preview
+          // Get fresh target language (may have updated)
+          const currentTargetLang = partnerLangRef.current || defaultTargetLang;
+
+          console.log(
+            `[MyLive] "${displayText.slice(0, 20)}..." (${userLang}) → preview in ${currentTargetLang}`,
+          );
+
+          // Translate for our own preview (shows what partner will see)
           const translated = await translate(
             displayText.trim(),
             userLang,
-            defaultTargetLang,
+            currentTargetLang,
           );
           if (!mountedRef.current) return;
 
@@ -582,10 +599,17 @@ function TalkContent() {
         finalizedText += newFinal;
         vibrate(30);
 
+        // Get fresh target language
+        const currentTargetLang = partnerLangRef.current || defaultTargetLang;
+
+        console.log(
+          `[MyFinal] "${finalizedText.slice(0, 20)}..." (${userLang}) → ${currentTargetLang}`,
+        );
+
         const translated = await translate(
           finalizedText.trim(),
           userLang,
-          defaultTargetLang,
+          currentTargetLang,
         );
         if (!mountedRef.current) return;
         setMyLiveTranslation(translated);
@@ -609,12 +633,21 @@ function TalkContent() {
             if (finalizedText.trim() && Date.now() - lastSpeechTime > 1500) {
               const messageId = `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
+              // Get fresh target language for transcript
+              const transcriptTargetLang =
+                partnerLangRef.current || defaultTargetLang;
+              const transcriptTranslated = await translate(
+                finalizedText.trim(),
+                userLang,
+                transcriptTargetLang,
+              );
+
               addToTranscript({
                 id: messageId,
                 speaker: "me",
                 name: userName,
                 original: finalizedText.trim(),
-                translated: translated,
+                translated: transcriptTranslated,
                 timestamp: new Date(),
                 sourceLang: userLang,
               });
@@ -640,10 +673,17 @@ function TalkContent() {
 
       // Manual mode: send each final segment immediately
       if (!isHandsFreeRef.current && newFinal.trim()) {
+        // Get fresh target language
+        const currentTargetLang = partnerLangRef.current || defaultTargetLang;
+
+        console.log(
+          `[MySend] "${newFinal.slice(0, 20)}..." (${userLang}) → ${currentTargetLang}`,
+        );
+
         const translated = await translate(
           newFinal.trim(),
           userLang,
-          defaultTargetLang,
+          currentTargetLang,
         );
         if (!mountedRef.current) return;
 
@@ -1059,10 +1099,12 @@ function TalkContent() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      speak(
-                        entry.translated,
-                        entry.sourceLang === "en" ? "es" : "en",
-                      );
+                      // Translated text is in the opposite language:
+                      // - My messages: translated to partner's language
+                      // - Partner messages: translated to my language
+                      const translatedLang =
+                        entry.speaker === "me" ? displayPartnerLang : userLang;
+                      speak(entry.translated, translatedLang);
                     }}
                     className="text-gray-500 hover:text-white shrink-0"
                   >
