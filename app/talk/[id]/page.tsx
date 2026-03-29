@@ -152,16 +152,37 @@ function TalkContent() {
     }
   }, [transcript]);
 
-  // Haptic feedback - with throttling and cleanup
+  // Haptic feedback - DISABLED on Android due to infinite vibration bug
+  // Android's Web Vibration API has issues with rapid calls causing runaway vibration
+  const isAndroidRef = useRef<boolean>(
+    typeof navigator !== "undefined" && /android/i.test(navigator.userAgent),
+  );
   const lastVibrateRef = useRef<number>(0);
+  const vibrateCountRef = useRef<number>(0);
+
   const vibrate = useCallback((pattern: number | number[] = 50) => {
+    // Completely disable vibration on Android - the Web Vibration API is too buggy
+    if (isAndroidRef.current) {
+      return;
+    }
+
     if (typeof navigator !== "undefined" && navigator.vibrate) {
-      // Throttle vibrations to max 1 per 200ms to prevent Android infinite vibration bug
+      // Throttle to max 1 vibration per 500ms
       const now = Date.now();
-      if (now - lastVibrateRef.current < 200) {
+      if (now - lastVibrateRef.current < 500) {
         return;
       }
+
+      // Circuit breaker: max 10 vibrations per minute
+      if (now - lastVibrateRef.current > 60000) {
+        vibrateCountRef.current = 0;
+      }
+      if (vibrateCountRef.current >= 10) {
+        return;
+      }
+
       lastVibrateRef.current = now;
+      vibrateCountRef.current++;
       navigator.vibrate(pattern);
     }
   }, []);
