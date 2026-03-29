@@ -450,9 +450,17 @@ function TalkContent() {
         }
       },
 
-      onPartnerConnected: (name) => {
+      onPartnerConnected: (name, lang) => {
         if (!mountedRef.current) return;
         setPartnerName(name);
+        // Set partner's language immediately on connect
+        if (lang) {
+          console.log(
+            `[Connection] Partner connected: ${name}, language: ${lang}`,
+          );
+          setPartnerLang(lang);
+          partnerLangRef.current = lang;
+        }
         vibrate([100, 50, 100]);
       },
 
@@ -466,7 +474,7 @@ function TalkContent() {
     });
 
     connectionRef.current = connection;
-    connection.initialize(roomId, isHost, userName);
+    connection.initialize(roomId, isHost, userName, userLang);
 
     return () => {
       mountedRef.current = false;

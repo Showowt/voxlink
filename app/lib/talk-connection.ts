@@ -31,7 +31,7 @@ export interface TalkMessage {
 export interface TalkConnectionCallbacks {
   onStatusChange?: (status: TalkConnectionStatus, message?: string) => void;
   onMessage?: (message: TalkMessage) => void;
-  onPartnerConnected?: (name: string) => void;
+  onPartnerConnected?: (name: string, lang?: string) => void;
   onPartnerDisconnected?: () => void;
 }
 
@@ -64,7 +64,9 @@ export class TalkConnection {
   private _peerId: string = "";
   private _hostPeerId: string = "";
   private _partnerName: string = "";
+  private _partnerLang: string = "";
   private _userName: string = "";
+  private _userLang: string = "";
   private roomId: string = "";
 
   private callbacks: TalkConnectionCallbacks = {};
@@ -101,9 +103,11 @@ export class TalkConnection {
     roomId: string,
     isHost: boolean,
     userName: string,
+    userLang: string = "en",
   ): Promise<boolean> {
     this._isHost = isHost;
     this._userName = userName;
+    this._userLang = userLang;
     this.roomId = roomId.toUpperCase(); // Normalize to uppercase
     this.isDestroyed = false;
 
@@ -396,6 +400,7 @@ export class TalkConnection {
       type: "presence",
       data: {
         name: this._userName,
+        lang: this._userLang,
         role: this._isHost ? "host" : "guest",
       },
     });
@@ -443,10 +448,12 @@ export class TalkConnection {
 
   private handlePresence(presenceData: Record<string, unknown>): void {
     const name = String(presenceData.name || "Partner");
-    console.log("[Entrevoz] Partner presence:", name);
+    const lang = String(presenceData.lang || "");
+    console.log("[Entrevoz] Partner presence:", name, "lang:", lang);
 
     this._partnerName = name;
-    this.callbacks.onPartnerConnected?.(name);
+    this._partnerLang = lang;
+    this.callbacks.onPartnerConnected?.(name, lang);
 
     // Send presence back if we haven't yet
     this.sendPresence();
