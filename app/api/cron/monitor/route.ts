@@ -27,7 +27,7 @@ const ALERT_WEBHOOK_URL = process.env.ALERT_WEBHOOK_URL; // Discord/Slack webhoo
 const ALERT_EMAIL = process.env.ALERT_EMAIL; // For future email alerts
 const SITE_URL = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
-  : "https://voxlink-v14.vercel.app";
+  : "https://www.entrevoz.co";
 
 // Track previous state to avoid duplicate alerts
 let lastStatus: string | null = null;

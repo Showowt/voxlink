@@ -115,7 +115,7 @@ export function getShareUrl(
     origin ||
     (typeof window !== "undefined"
       ? window.location.origin
-      : "https://voxlink-v14.vercel.app");
+      : "https://www.entrevoz.co");
 
   const normalizedCode = normalizeRoomCode(roomCode);
   return `${base}/${mode}/${normalizedCode}`;

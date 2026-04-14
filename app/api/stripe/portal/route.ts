@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
   }
 
   const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL || "https://voxlink-v14.vercel.app";
+    process.env.NEXT_PUBLIC_APP_URL || "https://www.entrevoz.co";
 
   const session = await stripeClient.billingPortal.sessions.create({
     customer: profile.stripe_customer_id,

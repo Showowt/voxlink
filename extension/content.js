@@ -5,7 +5,7 @@
   'use strict';
 
   // Config
-  const TRANSLATE_API = 'https://voxlink-v14.vercel.app/api/translate';
+  const TRANSLATE_API = 'https://www.entrevoz.co/api/translate';
   let sourceLang = localStorage.getItem('voxlink_source') || 'en';
   let targetLang = localStorage.getItem('voxlink_target') || 'es';
   let isTranslating = false;

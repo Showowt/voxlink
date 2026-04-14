@@ -52,7 +52,7 @@ Translate messages directly in WhatsApp Web. Type in your language, send in thei
 
 **Translation not working?**
 - Check your internet connection
-- The VoxLink API at `voxlink-v14.vercel.app` must be accessible
+- The EntreVoz API at `www.entrevoz.co` must be accessible
 
 **Send button not inserting text?**
 - WhatsApp Web occasionally updates their DOM structure

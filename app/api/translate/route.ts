@@ -32,8 +32,10 @@ const TranslateRequestSchema = z
 
 // CORS - restricted to production domains + extension
 const ALLOWED_ORIGINS = [
-  "https://voxbridge-kappa.vercel.app",
+  "https://www.entrevoz.co",
+  "https://entrevoz.co",
   "https://voxlink-v14.vercel.app",
+  "https://voxbridge-kappa.vercel.app",
   "chrome-extension://", // Browser extension
 ];
 
