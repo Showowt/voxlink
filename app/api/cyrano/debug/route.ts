@@ -39,7 +39,7 @@ export async function GET() {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20241022",
+        model: "claude-3-5-haiku-20241022",
         max_tokens: 10,
         messages: [{ role: "user", content: "Say OK" }],
       }),
