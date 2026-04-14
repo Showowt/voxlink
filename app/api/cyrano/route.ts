@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-3-haiku-20240307", // Haiku: fast, cost-effective for real-time
+        model: "claude-haiku-4-5-20241022", // Haiku 4.5: fast, cost-effective for real-time
         max_tokens: 250, // Tight — 3 suggestions need ~150 tokens
         system: systemPrompt,
         messages: [{ role: "user", content: userPrompt }],
