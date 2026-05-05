@@ -11,9 +11,6 @@ import {
 } from "../../lib/peer-connection";
 import { getSpeechCode, getFlag, getLanguage } from "../../lib/languages";
 import type {
-  SpeechRecognitionEvent,
-  SpeechRecognitionErrorEvent,
-  SpeechRecognitionInstance,
   CaptionData,
 } from "../../lib/speech-types";
 import PreCallLobby from "../../components/PreCallLobby";
@@ -602,6 +599,7 @@ function VideoCallContent() {
   const [isVideoOff, setIsVideoOff] = useState(false);
 
   // Translation state
+  const [translationEnabled, setTranslationEnabled] = useState(true); // User toggle for mic/translation
   const [isListening, setIsListening] = useState(false);
   const [myLiveText, setMyLiveText] = useState("");
   const [myLiveTranslation, setMyLiveTranslation] = useState("");
@@ -647,28 +645,46 @@ function VideoCallContent() {
     theirLanguage: partnerLang || expectedPartnerLang,
     localStream: lobbyStream || localStreamRef.current,
     sendMessage: sendWebRTCMessage,
-    isActive: status === "connected" && hasPartner && !inLobby,
+    isActive: status === "connected" && hasPartner && !inLobby && translationEnabled,
   });
 
   // Sync transcription hook output to UI state
   useEffect(() => {
-    if (transcription.localCaption || transcription.localFinal) {
-      setMyLiveText(transcription.localCaption || transcription.localFinal);
+    // Show interim text while speaking, final text when done
+    if (transcription.localCaption) {
+      setMyLiveText(transcription.localCaption);
+    } else if (transcription.localFinal) {
+      setMyLiveText(transcription.localFinal);
+      // Clear after delay so final text doesn't persist forever
+      const timeout = setTimeout(() => {
+        setMyLiveText("");
+        setMyLiveTranslation("");
+      }, 3000);
+      return () => clearTimeout(timeout);
+    } else {
+      setMyLiveText("");
     }
+  }, [transcription.localCaption, transcription.localFinal]);
+
+  useEffect(() => {
     if (transcription.localTranslated) {
       setMyLiveTranslation(transcription.localTranslated);
+      // Add to transcript when we have both final text and translation
+      if (transcription.localFinal) {
+        addToTranscript("me", userName, transcription.localFinal, transcription.localTranslated, userLang);
+      }
     }
+  }, [transcription.localTranslated]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
     setIsListening(transcription.isListening);
+  }, [transcription.isListening]);
+
+  useEffect(() => {
     if (transcription.error) {
       console.warn("[Transcription]", transcription.error);
     }
-  }, [
-    transcription.localCaption,
-    transcription.localFinal,
-    transcription.localTranslated,
-    transcription.isListening,
-    transcription.error,
-  ]);
+  }, [transcription.error]);
 
   // Quality monitoring state
   const [quality, setQuality] = useState<ConnectionQuality | null>(null);
@@ -678,20 +694,15 @@ function VideoCallContent() {
   // Refs (peerRef, localStreamRef defined above for useTranscription)
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
-  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const isListeningRef = useRef(false);
   const mountedRef = useRef(true);
-  const captionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const theirCaptionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const interimTranslateRef = useRef<NodeJS.Timeout | null>(null);
-  const lastTranslatedTextRef = useRef<string>("");
 
   useEffect(() => {
     isListeningRef.current = isListening;
   }, [isListening]);
 
-  // Ref for auto-start tracking (defined early, used after startListening is defined)
-  const hasAutoStartedRef = useRef(false);
+  // translationEnabled=true by default — auto-starts when connected
 
   // Enable controls when connected - either hasPartner OR we have remote video stream
   const isConnected = status === "connected" && (hasPartner || hasRemoteStream);
@@ -1163,206 +1174,22 @@ function VideoCallContent() {
   // SPEECH RECOGNITION & TRANSLATION
   // ═══════════════════════════════════════════════════════════════════════════
 
-  const translateText = async (
-    text: string,
-    toLang?: string,
-  ): Promise<string> => {
-    // Use detected partner language, or expected partner language from lobby
-    const targetLanguage = toLang || partnerLang || expectedPartnerLang;
-    if (userLang === targetLanguage) return text; // Same language, no translation needed
-    try {
-      const res = await fetch("/api/translate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text,
-          sourceLang: userLang,
-          targetLang: targetLanguage,
-        }),
-      });
-      if (!res.ok) {
-        console.error("Translation API error:", res.status);
-        return text;
-      }
-      const data = await res.json();
-      return data.translation || text;
-    } catch (err) {
-      console.error("Translation failed:", err);
-      return text;
-    }
-  };
+  // Translation is now handled by useTranscription hook
 
+  // startListening / stopListening now just toggle the translationEnabled state
+  // The useTranscription hook handles actual speech recognition
   const startListening = useCallback(() => {
-    if (
-      !("webkitSpeechRecognition" in window) &&
-      !("SpeechRecognition" in window)
-    ) {
-      setError("Speech recognition not supported in this browser");
-      return;
-    }
-
-    const SpeechRecognitionAPI =
-      window.webkitSpeechRecognition || window.SpeechRecognition;
-    if (!SpeechRecognitionAPI) {
-      setError("Speech recognition not supported");
-      return;
-    }
-    const recognition = new SpeechRecognitionAPI();
-
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = getSpeechCode(userLang);
-
-    recognition.onstart = () => {
-      setIsListening(true);
-      console.log("🎤 Listening started");
-    };
-
-    recognition.onresult = async (event: SpeechRecognitionEvent) => {
-      const results = event.results;
-      const latest = results[results.length - 1];
-      const text = latest[0].transcript.trim();
-      const isFinal = latest.isFinal;
-
-      // Update live text immediately
-      setMyLiveText(text);
-
-      // Send to partner immediately (they see live typing)
-      peerRef.current?.send({
-        type: "caption",
-        text,
-        isFinal,
-        lang: userLang,
-      });
-
-      if (isFinal) {
-        // Clear any pending interim translation
-        if (interimTranslateRef.current) {
-          clearTimeout(interimTranslateRef.current);
-        }
-
-        // Translate final result immediately
-        const translation = await translateText(text);
-        setMyLiveTranslation(translation);
-        lastTranslatedTextRef.current = text;
-
-        // Send final with translation
-        peerRef.current?.send({
-          type: "caption",
-          text,
-          translation,
-          isFinal: true,
-          lang: userLang,
-        });
-
-        // Add to transcript
-        addToTranscript("me", userName, text, translation, userLang);
-
-        // Clear after delay
-        if (captionTimeoutRef.current) clearTimeout(captionTimeoutRef.current);
-        captionTimeoutRef.current = setTimeout(() => {
-          setMyLiveText("");
-          setMyLiveTranslation("");
-          lastTranslatedTextRef.current = "";
-        }, 2000);
-      } else {
-        // SPEED OPTIMIZATION: Debounced translation for interim results
-        // Translate while speaking, not just at the end
-        if (interimTranslateRef.current) {
-          clearTimeout(interimTranslateRef.current);
-        }
-
-        // Only translate if text is different and long enough
-        if (text.length >= 3 && text !== lastTranslatedTextRef.current) {
-          interimTranslateRef.current = setTimeout(async () => {
-            // Double-check we're still on this text
-            if (text === lastTranslatedTextRef.current) return;
-
-            const translation = await translateText(text);
-            setMyLiveTranslation(translation);
-            lastTranslatedTextRef.current = text;
-
-            // Send interim translation to partner
-            peerRef.current?.send({
-              type: "caption",
-              text,
-              translation,
-              isFinal: false,
-              lang: userLang,
-            });
-          }, 300); // 300ms debounce - fast but not overwhelming
-        }
-      }
-    };
-
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      console.error("Speech error:", event.error);
-      if (event.error !== "no-speech") {
-        setIsListening(false);
-      }
-    };
-
-    recognition.onend = () => {
-      // Restart if still listening
-      if (isListeningRef.current && mountedRef.current) {
-        try {
-          recognition.start();
-        } catch {}
-      } else {
-        setIsListening(false);
-      }
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
-  }, [userLang, userName, partnerLang, expectedPartnerLang]);
+    setTranslationEnabled(true);
+  }, []);
 
   const stopListening = useCallback(() => {
-    isListeningRef.current = false;
-    setIsListening(false);
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch {}
-      recognitionRef.current = null;
-    }
+    setTranslationEnabled(false);
     setMyLiveText("");
     setMyLiveTranslation("");
   }, []);
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // AUTO-START SPEECH RECOGNITION
-  // When call connects AND partner joins, automatically start listening
-  // This enables bilateral real-time translation without manual activation
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  useEffect(() => {
-    // Auto-start conditions: connected + partner present + not already listening + not already auto-started
-    const shouldAutoStart =
-      status === "connected" &&
-      hasPartner &&
-      !isListening &&
-      !hasAutoStartedRef.current;
-
-    if (shouldAutoStart) {
-      console.log(
-        "🎤 Auto-starting speech recognition - call connected with partner",
-      );
-      hasAutoStartedRef.current = true;
-      // Small delay to ensure connection is fully stable
-      const timeout = setTimeout(() => {
-        if (mountedRef.current && !isListeningRef.current) {
-          startListening();
-        }
-      }, 500);
-      return () => clearTimeout(timeout);
-    }
-
-    // Reset auto-start flag if partner disconnects (allows re-auto-start if they rejoin)
-    if (!hasPartner) {
-      hasAutoStartedRef.current = false;
-    }
-  }, [status, hasPartner, isListening, startListening]);
+  // Auto-start is handled by useTranscription hook via isActive prop
+  // translationEnabled=true by default, so translation starts automatically when connected
 
   const addToTranscript = (
     speaker: "me" | "partner",
