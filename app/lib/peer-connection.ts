@@ -296,49 +296,68 @@ export class PeerConnection {
       const iceServers = await getIceServers();
 
       // Try signaling servers with fallback
+      // For host: retry same ID after delay if unavailable (stale session on PeerJS cloud)
       let connected = false;
       let lastError: Error | null = null;
+      const maxIdRetries = isHost ? 3 : 1; // Host retries up to 3 times for stale ID
 
-      for (let i = 0; i < PEERJS_SERVERS.length && !connected; i++) {
-        const server = PEERJS_SERVERS[i];
-        console.log(
-          `[Entrevoz Video] Trying signaling server ${i + 1}/${PEERJS_SERVERS.length}: ${server.host}`,
-        );
+      for (let idAttempt = 0; idAttempt < maxIdRetries && !connected; idAttempt++) {
+        if (idAttempt > 0) {
+          // Wait for PeerJS cloud to release the stale session
+          console.log(`[Entrevoz Video] Host ID taken, waiting 3s before retry ${idAttempt + 1}/${maxIdRetries}...`);
+          this.setStatus("initializing", "Reconnecting to server...");
+          await new Promise((r) => setTimeout(r, 3000));
+          if (this.isDestroyed) return false;
+        }
 
-        try {
-          this.peer = new Peer(this.myPeerId, {
-            host: server.host,
-            port: server.port,
-            secure: server.secure,
-            path: server.path,
-            config: {
-              iceServers,
-              iceCandidatePoolSize: 10,
-            },
-            debug: 1, // Reduce debug verbosity
-          });
-
-          await this.waitForPeerOpen();
+        for (let i = 0; i < PEERJS_SERVERS.length && !connected; i++) {
+          const server = PEERJS_SERVERS[i];
           console.log(
-            `[Entrevoz Video] Connected via ${server.host} as:`,
-            this.myPeerId,
+            `[Entrevoz Video] Trying signaling server ${i + 1}/${PEERJS_SERVERS.length}: ${server.host}`,
           );
-          connected = true;
-        } catch (err) {
-          console.warn(
-            `[Entrevoz Video] Server ${server.host} failed:`,
-            err instanceof Error ? err.message : err,
-          );
-          lastError = err instanceof Error ? err : new Error(String(err));
 
-          // Clean up failed peer
-          if (this.peer) {
-            try {
-              this.peer.destroy();
-            } catch {
-              // Ignore cleanup errors
+          try {
+            this.peer = new Peer(this.myPeerId, {
+              host: server.host,
+              port: server.port,
+              secure: server.secure,
+              path: server.path,
+              config: {
+                iceServers,
+                iceCandidatePoolSize: 10,
+              },
+              debug: 1,
+            });
+
+            await this.waitForPeerOpen();
+            console.log(
+              `[Entrevoz Video] Connected via ${server.host} as:`,
+              this.myPeerId,
+            );
+            connected = true;
+          } catch (err) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            const errType = (err as { type?: string })?.type;
+            console.warn(
+              `[Entrevoz Video] Server ${server.host} failed:`,
+              errMsg,
+            );
+            lastError = err instanceof Error ? err : new Error(String(err));
+
+            // Clean up failed peer
+            if (this.peer) {
+              try {
+                this.peer.destroy();
+              } catch {
+                // Ignore cleanup errors
+              }
+              this.peer = null;
             }
-            this.peer = null;
+
+            // If unavailable-id on host, break server loop to retry with delay
+            if (isHost && (errType === "unavailable-id" || errMsg.includes("already in use"))) {
+              break;
+            }
           }
         }
       }
@@ -468,9 +487,9 @@ export class PeerConnection {
 
       if (error.type === "peer-unavailable" && !this.isHost) {
         console.log("[Entrevoz Video] Host not found, will retry...");
-      } else if (error.type === "unavailable-id" && this.isHost) {
-        this.setStatus("failed", "Room code in use - try a new code");
-        this.callbacks.onError?.("Room code in use");
+      } else if (error.type === "unavailable-id") {
+        // This is handled by the retry logic in connect() — don't fail here
+        console.warn("[Entrevoz Video] Peer ID taken, retry logic will handle");
       }
     });
 

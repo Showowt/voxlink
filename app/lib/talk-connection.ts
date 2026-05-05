@@ -140,22 +140,66 @@ export class TalkConnection {
       // Fetch ICE servers (TURN credentials from server)
       const iceServers = await getIceServers();
 
-      // Create peer with explicit PeerJS cloud configuration
-      this.peer = new Peer(this._peerId, {
-        // Use PeerJS cloud with explicit config
-        host: "0.peerjs.com",
-        port: 443,
-        secure: true,
-        path: "/",
-        config: {
-          iceServers,
-          iceCandidatePoolSize: 10,
-        },
-        debug: 2, // More verbose logging for debugging
-      });
+      // PeerJS signaling servers with fallback
+      const servers = [
+        { host: "0.peerjs.com", port: 443, secure: true, path: "/" },
+        { host: "peerjs.92k.de", port: 443, secure: true, path: "/" },
+      ];
 
-      await this.waitForPeerOpen();
-      console.log("[Entrevoz] Connected to PeerJS server as:", this._peerId);
+      let connected = false;
+      let lastError: Error | null = null;
+      const maxIdRetries = isHost ? 3 : 1;
+
+      for (let idAttempt = 0; idAttempt < maxIdRetries && !connected; idAttempt++) {
+        if (idAttempt > 0) {
+          console.log(`[Entrevoz] Host ID taken, waiting 3s before retry ${idAttempt + 1}/${maxIdRetries}...`);
+          this.setStatus("initializing", "Reconnecting...");
+          await new Promise((r) => setTimeout(r, 3000));
+          if (this.isDestroyed) return false;
+        }
+
+        for (let i = 0; i < servers.length && !connected; i++) {
+          const server = servers[i];
+          console.log(`[Entrevoz] Trying ${server.host} as: ${this._peerId}`);
+
+          try {
+            this.peer = new Peer(this._peerId, {
+              host: server.host,
+              port: server.port,
+              secure: server.secure,
+              path: server.path,
+              config: {
+                iceServers,
+                iceCandidatePoolSize: 10,
+              },
+              debug: 1,
+            });
+
+            await this.waitForPeerOpen();
+            console.log(`[Entrevoz] Connected via ${server.host} as:`, this._peerId);
+            connected = true;
+          } catch (err) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            const errType = (err as { type?: string })?.type;
+            console.warn(`[Entrevoz] Server ${server.host} failed:`, errMsg);
+            lastError = err instanceof Error ? err : new Error(String(err));
+
+            if (this.peer) {
+              try { this.peer.destroy(); } catch { /* ignore */ }
+              this.peer = null;
+            }
+
+            // If unavailable-id on host, break server loop to retry with delay
+            if (isHost && (errType === "unavailable-id" || errMsg.includes("already in use"))) {
+              break;
+            }
+          }
+        }
+      }
+
+      if (!connected) {
+        throw lastError || new Error("All signaling servers failed");
+      }
 
       this.setupPeerListeners();
 
@@ -163,7 +207,6 @@ export class TalkConnection {
         this.setStatus("waiting", "Share the link - waiting for partner...");
       } else {
         this.setStatus("connecting", "Looking for host...");
-        // Start attempting to connect to host
         this.startConnectionAttempts();
       }
 
@@ -254,10 +297,8 @@ export class TalkConnection {
           console.log("[Entrevoz] Host not found, will retry...");
         }
       } else if (error.type === "unavailable-id") {
-        // Our ID is taken - for host this is a problem
-        if (this._isHost) {
-          this.setStatus("failed", "Room code in use - try a new code");
-        }
+        // Handled by retry logic in initialize() — don't fail here
+        console.warn("[Entrevoz] Peer ID taken, retry logic will handle");
       } else if (this._status !== "connected" && !this.isDestroyed) {
         this.attemptReconnect();
       }
