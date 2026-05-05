@@ -576,8 +576,9 @@ function VideoCallContent() {
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [reconnectCountdown, setReconnectCountdown] = useState(0);
 
-  // Lobby state - start in lobby mode
-  const [inLobby, setInLobby] = useState(true);
+  // Lobby state - guests auto-join (skip lobby), hosts see lobby
+  const autoJoin = searchParams.get("autoJoin") === "true" || !isHost;
+  const [inLobby, setInLobby] = useState(!autoJoin);
   const [lobbyStream, setLobbyStream] = useState<MediaStream | null>(null);
 
   // Language state (can be changed in lobby)

@@ -2,12 +2,19 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 /**
- * VoxLink Middleware
+ * Entrevoz Middleware
+ * - CORS for API routes
  * - Strips tracking parameters from URLs
- * - Lightweight Edge-compatible middleware
  */
 
-// Tracking parameters to remove
+const ALLOWED_ORIGINS = [
+  "https://entrevoz.co",
+  "https://www.entrevoz.co",
+  "https://voxbridge-kappa.vercel.app",
+  "http://localhost:3000",
+  "http://localhost:3001",
+];
+
 const TRACKING_PARAMS = [
   "fbclid",
   "gclid",
@@ -29,6 +36,37 @@ const TRACKING_PARAMS = [
 
 export async function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl;
+  const origin = request.headers.get("origin");
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // CORS for API routes
+  // ─────────────────────────────────────────────────────────────────────────────
+  if (pathname.startsWith("/api/")) {
+    // Preflight
+    if (request.method === "OPTIONS") {
+      const response = new NextResponse(null, { status: 200 });
+      if (origin && ALLOWED_ORIGINS.includes(origin)) {
+        response.headers.set("Access-Control-Allow-Origin", origin);
+      }
+      response.headers.set(
+        "Access-Control-Allow-Methods",
+        "GET, POST, OPTIONS",
+      );
+      response.headers.set(
+        "Access-Control-Allow-Headers",
+        "Content-Type, Authorization",
+      );
+      response.headers.set("Access-Control-Max-Age", "86400");
+      return response;
+    }
+
+    // Actual request
+    const response = NextResponse.next();
+    if (origin && ALLOWED_ORIGINS.includes(origin)) {
+      response.headers.set("Access-Control-Allow-Origin", origin);
+    }
+    return response;
+  }
 
   // ─────────────────────────────────────────────────────────────────────────────
   // TRACKING PARAM CLEANUP (for call/talk routes)
@@ -53,9 +91,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    // Only match call and talk routes for tracking param cleanup
-    "/call/:path*",
-    "/talk/:path*",
-  ],
+  matcher: ["/api/:path*", "/call/:path*", "/talk/:path*"],
 };
