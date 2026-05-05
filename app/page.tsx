@@ -1070,7 +1070,7 @@ function HomeContent() {
   });
   const [joinCode, setJoinCode] = useState("");
   const [activeTab, setActiveTab] = useState<
-    "video" | "talk" | "voxnote" | "voxtype" | "proximity" | "wingman" | "practice"
+    "video" | "talk" | "voxnote" | "voxtype" | "proximity" | "wingman" | "practice" | "group"
   >("voxtype");
   const [mode, setMode] = useState<"start" | "join">("start");
   const [isJoining, setIsJoining] = useState(false);
@@ -1304,8 +1304,9 @@ function HomeContent() {
     { id: "wingman", label: "Ear", icon: <span>🎧</span>, color: "violet" },
     { id: "talk", label: "Face", icon: <span>💬</span> },
     { id: "video", label: "Call", icon: <span>📹</span> },
+    { id: "group", label: "", icon: <span>👥</span>, color: "teal" },
     { id: "proximity", label: "", icon: <span>📡</span>, color: "purple" },
-    { id: "practice", label: "Practice", icon: <span>🧠</span>, color: "emerald" },
+    { id: "practice", label: "", icon: <span>🧠</span>, color: "emerald" },
   ];
 
   return (
@@ -1408,52 +1409,82 @@ function HomeContent() {
                   Connect AirPods for best experience
                 </p>
               </div>
-            ) : activeTab === "practice" ? (
-              <div className="space-y-4 text-center">
-                <div className="relative w-16 h-16 sm:w-20 sm:h-20 mx-auto">
-                  <div className="absolute inset-0 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 shadow-2xl shadow-emerald-500/30" />
-                  <div
-                    className="absolute inset-0 rounded-full animate-ping bg-emerald-500/20"
-                    style={{ animationDuration: "2s" }}
-                  />
-                  <div className="relative w-full h-full rounded-full flex items-center justify-center">
-                    <span className="text-3xl sm:text-4xl">🧠</span>
+            ) : activeTab === "group" ? (
+              <div className="space-y-5 text-center">
+                <div className="relative w-20 h-20 mx-auto">
+                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-teal-500/20 to-cyan-600/20 backdrop-blur-sm border border-teal-500/20" />
+                  <div className="relative w-full h-full rounded-2xl flex items-center justify-center">
+                    <span className="text-4xl">👥</span>
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-lg sm:text-xl font-bold text-white">
-                    Language OS
+                  <h3 className="text-xl font-bold text-white tracking-tight">
+                    Group Call
+                    <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-[#00C896]/20 text-[#00C896] font-semibold align-middle">NEW</span>
                   </h3>
-                  <p className="text-white/70 text-xs sm:text-sm mt-1">
-                    AI practice with spaced repetition & adaptive personas
+                  <p className="text-white/50 text-sm mt-1.5 max-w-[260px] mx-auto leading-relaxed">
+                    Up to 4 people speaking different languages, all understanding each other in real time
                   </p>
                 </div>
-                <GlassCard variant="subtle" padding="sm" className="text-left">
-                  <ul className="text-xs sm:text-sm text-white/70 space-y-1.5 sm:space-y-2">
-                    <li className="flex items-start gap-1.5 sm:gap-2">
-                      <span className="text-emerald-400">🎭</span>
-                      Practice with AI personas (taxi driver, hotel front desk...)
-                    </li>
-                    <li className="flex items-start gap-1.5 sm:gap-2">
-                      <span className="text-emerald-400">📊</span>
-                      Spaced repetition from your real conversations
-                    </li>
-                    <li className="flex items-start gap-1.5 sm:gap-2">
-                      <span className="text-emerald-400">🎯</span>
-                      Fluency score tracks your progress over time
-                    </li>
-                  </ul>
-                </GlassCard>
+                <div className="space-y-2.5 text-left">
+                  <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                    <span className="text-lg">🌍</span>
+                    <span className="text-white/70 text-sm">Everyone speaks their own language</span>
+                  </div>
+                  <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                    <span className="text-lg">💬</span>
+                    <span className="text-white/70 text-sm">Real-time translated subtitles</span>
+                  </div>
+                  <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                    <span className="text-lg">🔗</span>
+                    <span className="text-white/70 text-sm">Share via WhatsApp or link</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => router.push("/group")}
+                  className="w-full py-4 min-h-[52px] bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-400 hover:to-cyan-500 rounded-2xl text-white font-semibold text-base transition-all duration-200 shadow-xl shadow-teal-500/20 hover:-translate-y-0.5 active:scale-[0.98]"
+                  aria-label="Start Group Call"
+                >
+                  Start Group Call
+                </button>
+              </div>
+            ) : activeTab === "practice" ? (
+              <div className="space-y-5 text-center">
+                <div className="relative w-20 h-20 mx-auto">
+                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-600/20 backdrop-blur-sm border border-emerald-500/20" />
+                  <div className="relative w-full h-full rounded-2xl flex items-center justify-center">
+                    <span className="text-4xl">🧠</span>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white tracking-tight">
+                    Language OS
+                  </h3>
+                  <p className="text-white/50 text-sm mt-1.5 max-w-[260px] mx-auto leading-relaxed">
+                    AI-powered practice with adaptive personas and spaced repetition
+                  </p>
+                </div>
+                <div className="space-y-2.5 text-left">
+                  <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                    <span className="text-lg">🎭</span>
+                    <span className="text-white/70 text-sm">Practice with AI personas</span>
+                  </div>
+                  <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                    <span className="text-lg">📊</span>
+                    <span className="text-white/70 text-sm">Vocab from your real calls</span>
+                  </div>
+                  <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                    <span className="text-lg">🎯</span>
+                    <span className="text-white/70 text-sm">Track fluency over time</span>
+                  </div>
+                </div>
                 <button
                   onClick={() => router.push("/language-os")}
-                  className="w-full py-3 sm:py-4 min-h-[48px] sm:min-h-[56px] bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 rounded-xl sm:rounded-2xl text-white font-semibold text-base sm:text-lg transition-all duration-200 shadow-2xl shadow-emerald-500/25 hover:-translate-y-0.5"
+                  className="w-full py-4 min-h-[52px] bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 rounded-2xl text-white font-semibold text-base transition-all duration-200 shadow-xl shadow-emerald-500/20 hover:-translate-y-0.5 active:scale-[0.98]"
                   aria-label="Start Language OS practice"
                 >
-                  🧠 Start Practicing
+                  Start Practicing
                 </button>
-                <p className="text-xs text-white/70">
-                  Vocab from your Entrevoz calls feeds into practice
-                </p>
               </div>
             ) : activeTab === "proximity" ? (
               <div className="space-y-4 text-center">
