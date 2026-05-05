@@ -499,7 +499,7 @@ function TalkContent() {
       // Cleanup speech recognition
       if (recognitionRef.current) {
         try {
-          recognitionRef.current.stop();
+          recognitionRef.current.abort();
         } catch {
           // Ignore cleanup errors
         }
@@ -735,19 +735,54 @@ function TalkContent() {
     };
 
     recognition.onerror = (e: SpeechRecognitionErrorEvent) => {
-      if (e.error !== "no-speech" && e.error !== "aborted") {
-        console.error("Speech recognition error:", e.error);
+      if (e.error === "no-speech" || e.error === "aborted") return;
+      if (e.error === "not-allowed") {
+        console.error("[Talk STT] Mic permission denied");
+        setIsListening(false);
+        return;
       }
+      if (e.error === "audio-capture") {
+        console.warn("[Talk STT] Audio capture lost — will recover on foreground return");
+        return;
+      }
+      console.error("[Talk STT] Speech recognition error:", e.error);
     };
+
+    // Track restart count to prevent infinite restart loops
+    let restartCount = 0;
+    const maxRestarts = 20;
 
     recognition.onend = () => {
       if (isListeningRef.current && mountedRef.current) {
-        try {
-          recognition.start();
-        } catch {
-          // Ignore restart errors
+        restartCount++;
+        if (restartCount > maxRestarts) {
+          console.warn("[Talk STT] Too many restarts, stopping");
+          setIsListening(false);
+          return;
         }
+        // Backoff: immediate for first few, then escalate
+        const delay = restartCount <= 3 ? 0
+          : Math.min(300 * Math.pow(1.5, restartCount - 3), 5000);
+
+        const doRestart = () => {
+          if (!isListeningRef.current || !mountedRef.current) return;
+          try {
+            recognition.start();
+          } catch {
+            // If start fails, caller can re-invoke startListening
+          }
+        };
+
+        if (delay === 0) doRestart();
+        else setTimeout(doRestart, delay);
       }
+    };
+
+    // Reset restart count on successful speech (proves connection is healthy)
+    const origOnResult = recognition.onresult;
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      restartCount = 0;
+      if (origOnResult) (origOnResult as (e: SpeechRecognitionEvent) => void)(event);
     };
 
     recognitionRef.current = recognition;
@@ -772,9 +807,9 @@ function TalkContent() {
     }
     if (recognitionRef.current) {
       try {
-        recognitionRef.current.stop();
+        recognitionRef.current.abort();
       } catch {
-        // Ignore stop errors
+        // Ignore abort errors
       }
       recognitionRef.current = null;
     }
@@ -867,6 +902,39 @@ function TalkContent() {
     vibrate([30, 20, 30]);
     sendToPartner({ type: "clear", data: {} });
   }, [vibrate, sendToPartner]);
+
+  // Page Visibility: restart STT when returning from background (phone call, etc.)
+  useEffect(() => {
+    let wasBackgrounded = false;
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        wasBackgrounded = true;
+        return;
+      }
+      if (!wasBackgrounded) return;
+      wasBackgrounded = false;
+
+      // Returning to foreground — restart STT if it was active
+      if (isListeningRef.current && mountedRef.current) {
+        console.log("[Talk] Returning from background — restarting STT");
+        // Kill existing recognition and restart fresh
+        if (recognitionRef.current) {
+          try { recognitionRef.current.abort(); } catch { /* ignore */ }
+          recognitionRef.current = null;
+        }
+        // Delay to let OS release audio resources
+        setTimeout(() => {
+          if (isListeningRef.current && mountedRef.current) {
+            startListening();
+          }
+        }, 500);
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [startListening]);
 
   // Derived display values
   const displayTargetLang = partnerLang || defaultTargetLang;

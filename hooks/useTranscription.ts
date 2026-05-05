@@ -209,6 +209,12 @@ export function useTranscription({
   const lastInterimRef = useRef<string>("");
   const lastSentTextRef = useRef<string>("");
 
+  // Resilience: restart backoff and visibility tracking
+  const restartCountRef = useRef(0);
+  const restartBackoffRef = useRef<NodeJS.Timeout | null>(null);
+  const wasBackgroundedRef = useRef(false);
+  const maxConsecutiveRestarts = 20;
+
   // Keep language refs fresh
   useEffect(() => {
     langRef.current = { my: myLanguage, their: theirLanguage };
@@ -410,6 +416,9 @@ export function useTranscription({
     };
 
     rec.onresult = (e: SpeechRecognitionEvent) => {
+      // Reset backoff counter on successful speech
+      restartCountRef.current = 0;
+
       let interim = "";
       let finalChunk = "";
 
@@ -438,12 +447,30 @@ export function useTranscription({
     };
 
     rec.onerror = (e: SpeechRecognitionErrorEvent) => {
+      // Benign errors — recognition auto-restarts via onend
       if (e.error === "no-speech" || e.error === "aborted") return;
+
+      // Fatal: user revoked permission
       if (e.error === "not-allowed") {
         setError("Microphone access denied. Allow mic permission and reload.");
+        isRunRef.current = false;
         setIsListening(false);
         return;
       }
+
+      // Audio capture lost (phone call, OS took mic, Bluetooth disconnect)
+      if (e.error === "audio-capture") {
+        console.warn("[STT] Audio capture lost — will retry on visibility restore");
+        // Don't kill isRunRef — let visibility handler recover
+        return;
+      }
+
+      // Network error (offline, server issue)
+      if (e.error === "network") {
+        console.warn("[STT] Network error — will retry");
+        return;
+      }
+
       console.warn("[STT] Web Speech error:", e.error);
       setError(`Speech recognition error: ${e.error}`);
     };
@@ -451,10 +478,35 @@ export function useTranscription({
     rec.onend = () => {
       setLocalCaption("");
       if (isRunRef.current) {
-        try {
-          rec.start();
-        } catch {
-          /* browser already restarting */
+        // Exponential backoff to prevent rapid restart loops
+        restartCountRef.current++;
+        if (restartCountRef.current > maxConsecutiveRestarts) {
+          console.warn("[STT] Too many restarts, pausing recognition");
+          setError("Speech recognition interrupted. Tap mic to restart.");
+          setIsListening(false);
+          return;
+        }
+
+        // Backoff: 0ms for first few, then escalate
+        const delay = restartCountRef.current <= 3 ? 0
+          : Math.min(300 * Math.pow(1.5, restartCountRef.current - 3), 5000);
+
+        const doRestart = () => {
+          if (!isRunRef.current) { setIsListening(false); return; }
+          try {
+            rec.start();
+          } catch {
+            // If start fails, try creating fresh instance after delay
+            setTimeout(() => {
+              if (isRunRef.current) startWebSpeech();
+            }, 1000);
+          }
+        };
+
+        if (delay === 0) {
+          doRestart();
+        } else {
+          restartBackoffRef.current = setTimeout(doRestart, delay);
         }
       } else {
         setIsListening(false);
@@ -470,10 +522,17 @@ export function useTranscription({
   }, [translateInterim, translateFinal]);
 
   const stopWebSpeech = useCallback(() => {
-    recRef.current?.stop();
-    recRef.current = null;
+    if (recRef.current) {
+      try { recRef.current.abort(); } catch { /* ignore */ }
+      recRef.current = null;
+    }
     setIsListening(false);
     setLocalCaption("");
+    restartCountRef.current = 0;
+    if (restartBackoffRef.current) {
+      clearTimeout(restartBackoffRef.current);
+      restartBackoffRef.current = null;
+    }
     // Cancel any pending translations
     if (abortRef.current) abortRef.current.abort();
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -573,6 +632,7 @@ export function useTranscription({
 
     if (isActive) {
       isRunRef.current = true;
+      restartCountRef.current = 0;
       setError(null);
       lastInterimRef.current = "";
       lastSentTextRef.current = "";
@@ -596,6 +656,51 @@ export function useTranscription({
       if (mode.current === "webspeech") stopWebSpeech();
       else stopWhisper();
     };
+  }, [isActive]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Page Visibility: restart STT when returning from background (phone call, etc.)
+  // ─────────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        wasBackgroundedRef.current = true;
+        return;
+      }
+
+      // Returning to foreground
+      if (!wasBackgroundedRef.current) return;
+      wasBackgroundedRef.current = false;
+
+      if (!isRunRef.current || !isActive) return;
+
+      console.log("[STT] Returning from background — restarting recognition");
+      restartCountRef.current = 0; // Reset backoff
+
+      // Small delay to let OS release audio resources
+      setTimeout(() => {
+        if (!isRunRef.current) return;
+
+        if (mode.current === "webspeech") {
+          // Kill existing and create fresh instance
+          if (recRef.current) {
+            try { recRef.current.abort(); } catch { /* ignore */ }
+            recRef.current = null;
+          }
+          startWebSpeech();
+        } else if (mode.current === "whisper") {
+          // Restart whisper if it died
+          if (!mrRef.current || mrRef.current.state === "inactive") {
+            startWhisper();
+          }
+        }
+      }, 500);
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [isActive]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Restart with new language mid-call
