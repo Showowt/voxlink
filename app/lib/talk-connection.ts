@@ -143,7 +143,6 @@ export class TalkConnection {
       // PeerJS signaling servers with fallback
       const servers = [
         { host: "0.peerjs.com", port: 443, secure: true, path: "/" },
-        { host: "peerjs.92k.de", port: 443, secure: true, path: "/" },
       ];
 
       let connected = false;

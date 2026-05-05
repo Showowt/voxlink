@@ -93,7 +93,6 @@ interface PeerJSServer {
 
 const PEERJS_SERVERS: PeerJSServer[] = [
   { host: "0.peerjs.com", port: 443, secure: true, path: "/" },
-  { host: "peerjs.92k.de", port: 443, secure: true, path: "/" },
 ];
 
 // Fetch ICE servers from secure API (includes TURN credentials)
