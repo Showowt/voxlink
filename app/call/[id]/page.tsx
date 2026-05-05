@@ -648,18 +648,18 @@ function VideoCallContent() {
     isActive: status === "connected" && hasPartner && !inLobby && translationEnabled,
   });
 
-  // Sync transcription hook output to UI state
+  // Sync transcription hook output to UI state — streaming updates
   useEffect(() => {
-    // Show interim text while speaking, final text when done
+    // Show interim text while speaking, final text briefly after
     if (transcription.localCaption) {
       setMyLiveText(transcription.localCaption);
     } else if (transcription.localFinal) {
       setMyLiveText(transcription.localFinal);
-      // Clear after delay so final text doesn't persist forever
+      // Clear after 2s so UI stays clean between utterances
       const timeout = setTimeout(() => {
         setMyLiveText("");
         setMyLiveTranslation("");
-      }, 3000);
+      }, 2000);
       return () => clearTimeout(timeout);
     } else {
       setMyLiveText("");

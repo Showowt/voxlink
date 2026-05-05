@@ -1,24 +1,24 @@
 /**
- * useTranscription.ts
+ * useTranscription.ts — STREAMING REAL-TIME TRANSLATION ENGINE
  *
- * Complete speech-to-text → translation → WebRTC broadcast pipeline.
+ * Translates AS you speak — not after. Sub-200ms visual updates.
  *
- * MODE SELECTION (automatic):
- *   Chrome / Edge  → Web Speech API (real-time, zero latency, free)
- *   Safari / Firefox → MediaRecorder + Whisper API (4s chunks, needs OPENAI_API_KEY)
- *   No mic / error  → silent fallback, sets error state
+ * ARCHITECTURE:
+ *   Mic → Web Speech API (interim results every ~100ms)
+ *       → Client-side instant dictionary (0ms for common phrases)
+ *       → Debounced API translation (150ms for interim, immediate for final)
+ *       → AbortController cancels stale requests
+ *       → Progressive broadcast to partner (live updating subtitles)
  *
- * DATA FLOW:
- *   Your mic → [STT] → raw transcript
- *                    → /api/translate → translated text
- *                    → sendMessage({ type:'transcription', text: raw })
- *                    → sendMessage({ type:'translation',   text: translated, original: raw })
+ * SPEED TECHNIQUES:
+ *   1. Translate INTERIM results (don't wait for pause)
+ *   2. Client-side dictionary for zero-latency common words
+ *   3. AbortController cancels outdated translation requests
+ *   4. Request deduplication (skip if text unchanged)
+ *   5. Parallel final translation (bypasses debounce queue)
+ *   6. Progressive partner updates (they see words appear live)
  *
- * Remote peer:
- *   Receives type:'translation'   → displayed as subtitle
- *   Receives type:'transcription' → fed to Cyrano Mode
- *
- * @version 1.0.0
+ * @version 2.0.0 — Streaming Edition
  */
 
 "use client";
@@ -34,7 +34,7 @@ import type {
 // ─── BCP-47 language tags for Web Speech API ──────────────────────────────────
 const SPEECH_LANG_MAP: Record<string, string> = {
   en: "en-US",
-  es: "es-CO", // Colombian Spanish for target market (vs es-ES)
+  es: "es-CO",
   "es-CO": "es-CO",
   "es-MX": "es-MX",
   "es-ES": "es-ES",
@@ -48,41 +48,78 @@ const SPEECH_LANG_MAP: Record<string, string> = {
   ar: "ar-SA",
   ru: "ru-RU",
   hi: "hi-IN",
+  nl: "nl-NL",
+  pl: "pl-PL",
+  tr: "tr-TR",
+  vi: "vi-VN",
+  th: "th-TH",
+  sv: "sv-SE",
 };
 
-// Whisper chunk duration in ms - lower = faster transcription, higher = more accurate
-const WHISPER_CHUNK_MS = 1500;
+// ─── CLIENT-SIDE INSTANT DICTIONARY ──────────────────────────────────────────
+// Zero-latency translation for the most common conversational phrases
+// These bypass the API entirely — instant response
+const INSTANT_DICT: Record<string, Record<string, string>> = {
+  "en-es": {
+    hello: "hola", hi: "hola", hey: "oye", yes: "si", no: "no",
+    thanks: "gracias", "thank you": "gracias", please: "por favor",
+    sorry: "lo siento", "excuse me": "disculpe", okay: "esta bien",
+    "good morning": "buenos dias", "good afternoon": "buenas tardes",
+    "good night": "buenas noches", "how are you": "como estas",
+    "i understand": "entiendo", "i don't understand": "no entiendo",
+    "can you repeat": "puede repetir", "nice to meet you": "mucho gusto",
+    "see you later": "hasta luego", goodbye: "adios", bye: "adios",
+    "what's your name": "como te llamas", "my name is": "me llamo",
+    "where are you from": "de donde eres", "i love you": "te quiero",
+    "i like it": "me gusta", "very good": "muy bueno", perfect: "perfecto",
+    "how much": "cuanto", "the bill please": "la cuenta por favor",
+    water: "agua", food: "comida", help: "ayuda", sure: "claro",
+    "of course": "por supuesto", maybe: "quizas", "i think so": "creo que si",
+    "no problem": "no hay problema", "you're welcome": "de nada",
+    "i need help": "necesito ayuda", "do you speak english": "hablas ingles",
+    "i don't speak spanish": "no hablo espanol",
+    "can you help me": "puedes ayudarme", "where is": "donde esta",
+    "what time is it": "que hora es", "i want": "quiero", "i need": "necesito",
+    "i would like": "me gustaria", "let's go": "vamos",
+    "wait": "espera", "one moment": "un momento", "come here": "ven aqui",
+    "over there": "por alla", "how much does it cost": "cuanto cuesta",
+    "it's beautiful": "es hermoso", "i'm tired": "estoy cansado",
+    "i'm hungry": "tengo hambre", "i'm lost": "estoy perdido",
+    "what is this": "que es esto", "i like you": "me gustas",
+    "tell me more": "dime mas", "that's interesting": "eso es interesante",
+    "really": "en serio", "wow": "guau", "amazing": "increible",
+    "let me think": "dejame pensar", "i agree": "estoy de acuerdo",
+    "what do you think": "que piensas", "sounds good": "suena bien",
+  },
+  "es-en": {} as Record<string, string>,
+};
+
+// Generate reverse mappings
+for (const [phrase, translation] of Object.entries(INSTANT_DICT["en-es"])) {
+  INSTANT_DICT["es-en"][translation] = phrase;
+}
+
+// Whisper chunk duration
+const WHISPER_CHUNK_MS = 1200;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type TranscriptionMode = "webspeech" | "whisper" | "unavailable";
 
 export interface UseTranscriptionOptions {
-  /** ISO 639-1 code for the language YOU speak */
   myLanguage: string;
-  /** ISO 639-1 code for the language THEY speak */
   theirLanguage: string;
-  /** localStream from useWebRTC — used for Whisper MediaRecorder mode */
   localStream: MediaStream | null;
-  /** sendMessage from useWebRTC — broadcasts to remote peer */
   sendMessage: (message: string) => boolean;
-  /** Only run when an active call is in progress */
   isActive: boolean;
 }
 
 export interface UseTranscriptionReturn {
-  /** Live interim caption (not yet final) */
   localCaption: string;
-  /** Last confirmed final transcript */
   localFinal: string;
-  /** Last translated text we sent */
   localTranslated: string;
-  /** Whether mic is actively listening */
   isListening: boolean;
-  /** Which STT engine is being used */
   mode: TranscriptionMode;
-  /** Any error message */
   error: string | null;
-  /** Manually trigger translation of a string (used for testing) */
   translateAndSend: (text: string) => Promise<void>;
 }
 
@@ -95,11 +132,12 @@ function detectMode(): TranscriptionMode {
   return "unavailable";
 }
 
-// ─── Translation helper ───────────────────────────────────────────────────────
-async function translate(
+// ─── Fast translation with AbortController ───────────────────────────────────
+async function translateAPI(
   text: string,
   from: string,
   to: string,
+  signal?: AbortSignal,
 ): Promise<string | null> {
   if (!text.trim() || from === to) return text;
 
@@ -108,18 +146,40 @@ async function translate(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: text.trim(), from, to }),
+      signal,
     });
 
-    if (!res.ok) {
-      console.warn("[transcription] Translate API error:", res.status);
-      return null;
-    }
-
+    if (!res.ok) return null;
     const data = await res.json();
     return data.translated ?? data.translation ?? null;
-  } catch (e) {
-    console.warn("[transcription] Translate fetch failed:", e);
+  } catch (e: unknown) {
+    if (e instanceof Error && e.name === "AbortError") return null;
     return null;
+  }
+}
+
+// ─── Client-side instant lookup ──────────────────────────────────────────────
+function instantTranslate(text: string, from: string, to: string): string | null {
+  const key = `${from}-${to}`;
+  const dict = INSTANT_DICT[key];
+  if (!dict) return null;
+  return dict[text.toLowerCase().trim()] ?? null;
+}
+
+// ─── Translation cache (client-side, avoids repeat API calls) ────────────────
+const translationCache = new Map<string, string>();
+const MAX_CACHE = 500;
+
+function getCachedTranslation(text: string, from: string, to: string): string | null {
+  return translationCache.get(`${from}:${to}:${text.toLowerCase().trim()}`) ?? null;
+}
+
+function setCachedTranslation(text: string, from: string, to: string, result: string) {
+  const key = `${from}:${to}:${text.toLowerCase().trim()}`;
+  translationCache.set(key, result);
+  if (translationCache.size > MAX_CACHE) {
+    const firstKey = translationCache.keys().next().value;
+    if (firstKey) translationCache.delete(firstKey);
   }
 }
 
@@ -143,27 +203,92 @@ export function useTranscription({
   const isRunRef = useRef(false);
   const langRef = useRef({ my: myLanguage, their: theirLanguage });
 
-  // Keep language refs fresh without restarting listeners
+  // Streaming translation state
+  const abortRef = useRef<AbortController | null>(null);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  const lastInterimRef = useRef<string>("");
+  const lastSentTextRef = useRef<string>("");
+
+  // Keep language refs fresh
   useEffect(() => {
     langRef.current = { my: myLanguage, their: theirLanguage };
   }, [myLanguage, theirLanguage]);
 
-  // ── Translate + broadcast ────────────────────────────────────────────────────
-  const translateAndSend = useCallback(
-    async (rawText: string) => {
+  // ── STREAMING TRANSLATE — translates interim text with cancellation ────────
+  const streamingTranslate = useCallback(
+    async (text: string, isFinal: boolean) => {
       const { my, their } = langRef.current;
-      const trimmed = rawText.trim();
+      const trimmed = text.trim();
       if (!trimmed) return;
 
-      // Always broadcast raw transcript (for Cyrano on remote side)
+      // Skip if we already sent this exact text
+      if (!isFinal && trimmed === lastSentTextRef.current) return;
+
+      // Cancel any in-flight interim translation
+      if (abortRef.current) {
+        abortRef.current.abort();
+      }
+
+      // Always broadcast raw text immediately (partner sees live typing)
       sendMessage(
-        JSON.stringify({ type: "transcription", text: trimmed, lang: my }),
+        JSON.stringify({
+          type: "transcription",
+          text: trimmed,
+          lang: my,
+          isFinal,
+        }),
       );
 
-      // Translate and broadcast translation (for subtitle display on remote side)
-      const translated = await translate(trimmed, my, their);
-      if (translated && translated !== trimmed) {
+      // 1. Try instant dictionary (0ms)
+      const instant = instantTranslate(trimmed, my, their);
+      if (instant) {
+        setLocalTranslated(instant);
+        setCachedTranslation(trimmed, my, their, instant);
+        lastSentTextRef.current = trimmed;
+        sendMessage(
+          JSON.stringify({
+            type: "translation",
+            text: instant,
+            original: trimmed,
+            from: my,
+            to: their,
+            isFinal,
+          }),
+        );
+        return;
+      }
+
+      // 2. Try client-side cache (0ms)
+      const cached = getCachedTranslation(trimmed, my, their);
+      if (cached) {
+        setLocalTranslated(cached);
+        lastSentTextRef.current = trimmed;
+        sendMessage(
+          JSON.stringify({
+            type: "translation",
+            text: cached,
+            original: trimmed,
+            from: my,
+            to: their,
+            isFinal,
+          }),
+        );
+        return;
+      }
+
+      // 3. API translation with AbortController
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      const translated = await translateAPI(trimmed, my, their, controller.signal);
+
+      // Check if this request was superseded
+      if (controller.signal.aborted) return;
+
+      if (translated) {
         setLocalTranslated(translated);
+        setCachedTranslation(trimmed, my, their, translated);
+        lastSentTextRef.current = trimmed;
         sendMessage(
           JSON.stringify({
             type: "translation",
@@ -171,17 +296,7 @@ export function useTranscription({
             original: trimmed,
             from: my,
             to: their,
-          }),
-        );
-      } else if (translated) {
-        // Same language or passthrough
-        sendMessage(
-          JSON.stringify({
-            type: "translation",
-            text: trimmed,
-            original: trimmed,
-            from: my,
-            to: their,
+            isFinal,
           }),
         );
       }
@@ -189,8 +304,93 @@ export function useTranscription({
     [sendMessage],
   );
 
+  // ── DEBOUNCED INTERIM TRANSLATION ──────────────────────────────────────────
+  // Translates while speaking with 150ms debounce (cancels stale requests)
+  const translateInterim = useCallback(
+    (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed || trimmed.length < 2) return;
+
+      // Skip if text hasn't changed
+      if (trimmed === lastInterimRef.current) return;
+      lastInterimRef.current = trimmed;
+
+      // Clear previous debounce
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+
+      // Check instant dictionary synchronously (no debounce needed)
+      const { my, their } = langRef.current;
+      const instant = instantTranslate(trimmed, my, their);
+      if (instant) {
+        setLocalTranslated(instant);
+        sendMessage(
+          JSON.stringify({
+            type: "translation",
+            text: instant,
+            original: trimmed,
+            from: my,
+            to: their,
+            isFinal: false,
+          }),
+        );
+        lastSentTextRef.current = trimmed;
+        return;
+      }
+
+      // Check cache synchronously
+      const cached = getCachedTranslation(trimmed, my, their);
+      if (cached) {
+        setLocalTranslated(cached);
+        sendMessage(
+          JSON.stringify({
+            type: "translation",
+            text: cached,
+            original: trimmed,
+            from: my,
+            to: their,
+            isFinal: false,
+          }),
+        );
+        lastSentTextRef.current = trimmed;
+        return;
+      }
+
+      // Debounce API call — 150ms for real-time feel
+      debounceRef.current = setTimeout(() => {
+        streamingTranslate(trimmed, false);
+      }, 150);
+    },
+    [streamingTranslate, sendMessage],
+  );
+
+  // ── FINAL TRANSLATION — immediate, bypasses debounce ───────────────────────
+  const translateFinal = useCallback(
+    (text: string) => {
+      // Cancel any pending interim translation
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      lastInterimRef.current = "";
+
+      // Translate immediately (no debounce)
+      streamingTranslate(text, true);
+    },
+    [streamingTranslate],
+  );
+
+  // ── Legacy translateAndSend for external callers ───────────────────────────
+  const translateAndSend = useCallback(
+    async (rawText: string) => {
+      translateFinal(rawText);
+    },
+    [translateFinal],
+  );
+
   // ─────────────────────────────────────────────────────────────────────────────
-  // MODE 1: Web Speech API (Chrome / Edge)
+  // MODE 1: Web Speech API (Chrome / Edge) — STREAMING
   // ─────────────────────────────────────────────────────────────────────────────
   const startWebSpeech = useCallback(() => {
     const SR: SpeechRecognitionConstructor | undefined =
@@ -222,18 +422,22 @@ export function useTranscription({
         }
       }
 
-      if (interim) setLocalCaption(interim);
+      // STREAMING: Translate interim results in real-time
+      if (interim) {
+        setLocalCaption(interim);
+        translateInterim(interim);
+      }
 
+      // FINAL: Immediate translation, bypasses debounce
       if (finalChunk.trim()) {
         const final = finalChunk.trim();
         setLocalCaption("");
         setLocalFinal(final);
-        translateAndSend(final); // fire-and-forget — no await needed
+        translateFinal(final);
       }
     };
 
     rec.onerror = (e: SpeechRecognitionErrorEvent) => {
-      // 'no-speech' and 'aborted' are benign — ignore
       if (e.error === "no-speech" || e.error === "aborted") return;
       if (e.error === "not-allowed") {
         setError("Microphone access denied. Allow mic permission and reload.");
@@ -246,7 +450,6 @@ export function useTranscription({
 
     rec.onend = () => {
       setLocalCaption("");
-      // Auto-restart if still supposed to be running
       if (isRunRef.current) {
         try {
           rec.start();
@@ -264,46 +467,41 @@ export function useTranscription({
     } catch {
       setError("Could not start microphone. Check browser permissions.");
     }
-  }, [translateAndSend]);
+  }, [translateInterim, translateFinal]);
 
   const stopWebSpeech = useCallback(() => {
     recRef.current?.stop();
     recRef.current = null;
     setIsListening(false);
     setLocalCaption("");
+    // Cancel any pending translations
+    if (abortRef.current) abortRef.current.abort();
+    if (debounceRef.current) clearTimeout(debounceRef.current);
   }, []);
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // MODE 2: MediaRecorder → Whisper (Safari / Firefox)
+  // MODE 2: MediaRecorder + Whisper (Safari / Firefox)
   // ─────────────────────────────────────────────────────────────────────────────
   const startWhisper = useCallback(async () => {
-    // Get audio stream — prefer localStream (already acquired), fallback to getUserMedia
     let stream: MediaStream;
     if (localStream && localStream.getAudioTracks().length > 0) {
-      // Clone just the audio tracks to avoid interfering with WebRTC stream
       stream = new MediaStream(localStream.getAudioTracks());
     } else {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: false,
-        });
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       } catch {
         setError("Microphone access denied.");
         return;
       }
     }
 
-    // Pick best supported MIME type
     const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
       ? "audio/webm;codecs=opus"
       : MediaRecorder.isTypeSupported("audio/webm")
         ? "audio/webm"
-        : MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")
-          ? "audio/ogg;codecs=opus"
-          : MediaRecorder.isTypeSupported("audio/mp4")
-            ? "audio/mp4"
-            : "";
+        : MediaRecorder.isTypeSupported("audio/mp4")
+          ? "audio/mp4"
+          : "";
 
     const mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
     mrRef.current = mr;
@@ -316,11 +514,9 @@ export function useTranscription({
 
     mr.onstop = async () => {
       if (chunks.length === 0) return;
-
       const blob = new Blob(chunks, { type: mimeType || "audio/webm" });
-      chunks.length = 0; // clear for next chunk
+      chunks.length = 0;
 
-      // Skip tiny blobs (< 1KB = silence)
       if (blob.size < 1024) return;
 
       try {
@@ -328,64 +524,43 @@ export function useTranscription({
         form.append("audio", blob, "chunk.webm");
         form.append("language", langRef.current.my);
 
-        const res = await fetch("/api/transcribe", {
-          method: "POST",
-          body: form,
-        });
-
+        const res = await fetch("/api/transcribe", { method: "POST", body: form });
         if (!res.ok) {
           if (res.status === 501) {
-            setError(
-              "Whisper not configured. Add OPENAI_API_KEY for Safari/Firefox support.",
-            );
+            setError("Whisper not configured. Add OPENAI_API_KEY for Safari/Firefox.");
           }
           return;
         }
 
         const data = await res.json();
         const text = (data.text ?? "").trim();
-
         if (text) {
           setLocalFinal(text);
-          translateAndSend(text);
+          translateFinal(text);
         }
       } catch (e) {
         console.warn("[STT] Whisper chunk failed:", e);
       }
 
-      // Restart recording if still active
       if (isRunRef.current && mrRef.current?.state !== "recording") {
-        try {
-          mrRef.current?.start(WHISPER_CHUNK_MS);
-        } catch {
-          /* stream ended */
-        }
+        try { mrRef.current?.start(WHISPER_CHUNK_MS); } catch { /* stream ended */ }
       }
     };
 
-    mr.onstart = () => {
-      setIsListening(true);
-      setError(null);
-    };
-    mr.onerror = () => {
-      setError("Recording error. Please reload.");
-    };
-
-    // Record in small chunks for faster transcription (1.5s vs 4s)
+    mr.onstart = () => { setIsListening(true); setError(null); };
+    mr.onerror = () => { setError("Recording error. Please reload."); };
     mr.start(WHISPER_CHUNK_MS);
-  }, [localStream, translateAndSend]);
+  }, [localStream, translateFinal]);
 
   const stopWhisper = useCallback(() => {
     if (mrRef.current && mrRef.current.state !== "inactive") {
-      try {
-        mrRef.current.stop();
-      } catch {
-        /* already stopped */
-      }
+      try { mrRef.current.stop(); } catch { /* already stopped */ }
     }
     mrRef.current = null;
     setIsListening(false);
     setLocalCaption("");
+    if (abortRef.current) abortRef.current.abort();
+    if (debounceRef.current) clearTimeout(debounceRef.current);
   }, []);
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -399,22 +574,20 @@ export function useTranscription({
     if (isActive) {
       isRunRef.current = true;
       setError(null);
+      lastInterimRef.current = "";
+      lastSentTextRef.current = "";
 
       if (mode.current === "webspeech") {
         startWebSpeech();
       } else if (mode.current === "whisper") {
         startWhisper();
       } else {
-        setError(
-          "Your browser does not support speech recognition. Use Chrome or Edge for best experience.",
-        );
+        setError("Your browser does not support speech recognition. Use Chrome or Edge.");
       }
     } else {
       isRunRef.current = false;
-
       if (mode.current === "webspeech") stopWebSpeech();
       else stopWhisper();
-
       setLocalCaption("");
     }
 
@@ -425,15 +598,13 @@ export function useTranscription({
     };
   }, [isActive]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // When language changes mid-call, restart recognition with new language
+  // Restart with new language mid-call
   useEffect(() => {
     if (!isActive || !isRunRef.current) return;
     if (mode.current === "webspeech") {
-      // Restart Web Speech with new language tag
       stopWebSpeech();
-      setTimeout(startWebSpeech, 200);
+      setTimeout(startWebSpeech, 150);
     }
-    // Whisper uses language param per-chunk — no restart needed
   }, [myLanguage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
