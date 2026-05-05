@@ -546,6 +546,7 @@ function TalkContent() {
     let lastSpeechTime = Date.now();
 
     recognition.onresult = async (event: SpeechRecognitionEvent) => {
+      restartCount = 0;
       if (!mountedRef.current) return;
 
       // Get current target language (partner's language or fallback)
@@ -776,13 +777,6 @@ function TalkContent() {
         if (delay === 0) doRestart();
         else setTimeout(doRestart, delay);
       }
-    };
-
-    // Reset restart count on successful speech (proves connection is healthy)
-    const origOnResult = recognition.onresult;
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      restartCount = 0;
-      if (origOnResult) (origOnResult as (e: SpeechRecognitionEvent) => void)(event);
     };
 
     recognitionRef.current = recognition;
