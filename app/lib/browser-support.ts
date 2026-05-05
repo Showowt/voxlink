@@ -37,6 +37,7 @@ export interface BrowserSupport {
   isChrome: boolean;
   isFirefox: boolean;
   isEdge: boolean;
+  isInAppBrowser: boolean;
 
   // Network info (if available)
   connectionType: string | null;
@@ -57,6 +58,7 @@ function detectBrowserInfo(): {
   isChrome: boolean;
   isFirefox: boolean;
   isEdge: boolean;
+  isInAppBrowser: boolean;
 } {
   if (typeof navigator === "undefined") {
     return {
@@ -69,6 +71,7 @@ function detectBrowserInfo(): {
       isChrome: false,
       isFirefox: false,
       isEdge: false,
+      isInAppBrowser: false,
     };
   }
 
@@ -101,6 +104,11 @@ function detectBrowserInfo(): {
   const isIOS = /iphone|ipad|ipod/i.test(ua);
   const isAndroid = /android/i.test(ua);
 
+  // Detect in-app browsers (WhatsApp, Instagram, Facebook, Messenger, LINE, etc.)
+  const isInAppBrowser = /FBAN|FBAV|Instagram|Line|WhatsApp|Snapchat|Twitter|Weibo|MicroMessenger|LinkedInApp/i.test(
+    navigator.userAgent,
+  );
+
   return {
     browserName,
     browserVersion,
@@ -111,6 +119,7 @@ function detectBrowserInfo(): {
     isChrome: browserName === "Chrome",
     isFirefox: browserName === "Firefox",
     isEdge: browserName === "Edge",
+    isInAppBrowser,
   };
 }
 
@@ -280,6 +289,7 @@ export function useBrowserSupport(): BrowserSupport {
     isChrome: false,
     isFirefox: false,
     isEdge: false,
+    isInAppBrowser: false,
     connectionType: null,
     effectiveType: null,
   }));

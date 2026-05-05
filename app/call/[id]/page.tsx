@@ -1370,6 +1370,49 @@ function VideoCallContent() {
   // ═══════════════════════════════════════════════════════════════════════════
 
   // Show lobby first
+  // In-app browser detection (WhatsApp, Instagram, Facebook, etc.)
+  if (browserSupport.isInAppBrowser) {
+    const currentUrl = typeof window !== "undefined" ? window.location.href : "";
+    return (
+      <div className="min-h-[100dvh] bg-[#06060a] flex items-center justify-center p-6">
+        <div className="max-w-sm w-full text-center space-y-6">
+          <div className="text-5xl">🌐</div>
+          <h1 className="text-xl font-semibold text-white">
+            Open in Your Browser
+          </h1>
+          <p className="text-white/60 text-sm leading-relaxed">
+            This app needs camera and microphone access, which isn&apos;t available in this browser.
+            Tap the button below to open in {browserSupport.isIOS ? "Safari" : "Chrome"}.
+          </p>
+          {browserSupport.isIOS ? (
+            <div className="space-y-3">
+              <p className="text-white/40 text-xs">
+                Tap <span className="text-white font-medium">⋯</span> or <span className="text-white font-medium">Share</span> then <span className="text-white font-medium">&quot;Open in Safari&quot;</span>
+              </p>
+              <button
+                onClick={() => navigator.clipboard?.writeText(currentUrl)}
+                className="w-full py-3 px-4 rounded-xl bg-white/10 text-white text-sm font-medium border border-white/10 active:bg-white/20"
+              >
+                Copy Link
+              </button>
+            </div>
+          ) : (
+            <a
+              href={`intent://${currentUrl.replace(/^https?:\/\//, "")}#Intent;scheme=https;package=com.android.chrome;end`}
+              className="block w-full py-3 px-4 rounded-xl bg-blue-600 text-white text-sm font-medium text-center active:bg-blue-700"
+            >
+              Open in Chrome
+            </a>
+          )}
+          <p className="text-white/30 text-xs">
+            Or copy this link and paste it in your browser:<br/>
+            <span className="text-white/50 break-all select-all">{currentUrl}</span>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   // Browser unsupported check
   if (!browserSupport.isSupported) {
     return (
