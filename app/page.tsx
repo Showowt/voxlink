@@ -1137,6 +1137,38 @@ function HomeContent() {
     return Array.from(array, (byte) => chars[byte % chars.length]).join("");
   };
 
+  // WhatsApp Call
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  const startWhatsAppCall = () => {
+    if (!name.trim()) { alert("Please enter your name"); return; }
+    const code = generateCode();
+    const targetLang = language === "en" ? "es" : "en";
+    const link = `https://entrevoz.co/call/${code}?lang=${targetLang}`;
+    const hostLink = `/call/${code}?host=true&name=${encodeURIComponent(name)}&lang=${language}`;
+    const msg = encodeURIComponent(`Hey, I want to talk with live translation \u2014 tap to join our call \ud83c\udfa4\n${link}\n(No download needed \u2014 opens in your browser)`);
+    window.open(`https://wa.me/?text=${msg}`, "_blank");
+    setTimeout(() => router.push(hostLink), 800);
+  };
+
+  const shareCallLink = async () => {
+    if (!name.trim()) { alert("Please enter your name"); return; }
+    const code = generateCode();
+    const targetLang = language === "en" ? "es" : "en";
+    const link = `https://entrevoz.co/call/${code}?lang=${targetLang}`;
+    const hostLink = `/call/${code}?host=true&name=${encodeURIComponent(name)}&lang=${language}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Entrevoz", text: `Join my translated call: ${link}`, url: link });
+        router.push(hostLink);
+      } catch (e) { /* cancelled */ }
+    } else {
+      await navigator.clipboard.writeText(link);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 3000);
+    }
+  };
+
   // Start Video Call
   const startVideoCall = () => {
     if (!name.trim()) {
@@ -1445,28 +1477,47 @@ function HomeContent() {
                   </div>
                 )}
 
-                {/* Description - Premium Glass */}
+                {/* WhatsApp CTA - only on Call tab */}
+                {activeTab === "video" && (
+                  <div className="mb-4 space-y-3">
+                    <button
+                      onClick={startWhatsAppCall}
+                      className="w-full flex items-center justify-center gap-3 py-4 rounded-xl font-bold text-white text-lg transition-all hover:brightness-110 active:scale-[0.98]"
+                      style={{ backgroundColor: "#25D366" }}
+                    >
+                      <span className="flex items-center justify-center w-8 h-8 rounded-full text-white font-extrabold text-sm" style={{ backgroundColor: "#128C7E" }}>W</span>
+                      Call via WhatsApp
+                    </button>
+                    <div className="flex gap-3">
+                      <button onClick={shareCallLink} className="flex-1 py-3 rounded-xl border border-white/10 bg-white/5 text-voxxo-400 font-semibold text-sm hover:bg-white/10 transition-all">
+                        Share Link
+                      </button>
+                      <button onClick={() => { const link = `https://entrevoz.co/call/${generateCode()}?lang=${language === "en" ? "es" : "en"}`; navigator.clipboard.writeText(link); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 3000); }} className="flex-1 py-3 rounded-xl border border-white/10 bg-white/5 text-voxxo-400 font-semibold text-sm hover:bg-white/10 transition-all">
+                        {linkCopied ? "Copied!" : "Copy Link"}
+                      </button>
+                    </div>
+                    <GlassCard variant="subtle" padding="sm">
+                      <p className="text-voxxo-400 font-medium text-sm mb-1">How it works</p>
+                      <p className="text-white/50 text-xs leading-relaxed">1. Share the link via WhatsApp or any app &bull; 2. They tap it &mdash; opens in browser &bull; 3. Live translated subtitles instantly. No download needed.</p>
+                    </GlassCard>
+                  </div>
+                )}
+
+                {/* Description - Talk tab only */}
+                {activeTab === "talk" && (
                 <GlassCard
                   variant="subtle"
                   padding="sm"
                   className="mb-5 text-center"
                 >
-                  {activeTab === "video" ? (
-                    <p className="text-white/70 text-sm">
-                      <span className="text-voxxo-400 font-medium">
-                        Video Call:
-                      </span>{" "}
-                      Remote calls with live translation
-                    </p>
-                  ) : (
                     <p className="text-white/70 text-sm">
                       <span className="text-voxxo-400 font-medium">
                         Remote Talk:
                       </span>{" "}
                       Each person uses their own phone
                     </p>
-                  )}
                 </GlassCard>
+                )}
 
                 {/* Name - Premium Glass Input */}
                 <div className="mb-4">
