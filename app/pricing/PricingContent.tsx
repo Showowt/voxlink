@@ -6,6 +6,7 @@ import { GlassCard } from "../components/ui/GlassCard";
 import { GlowButton } from "../components/ui/GlowButton";
 import { VoxxoLogo } from "../components/ui/VoxxoLogo";
 import { AnimatedBackground } from "../components/ui/AnimatedBackground";
+import { BackButton } from "../components/ui/BackButton";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PRICING CONTENT - Client Component with Interactive Elements
@@ -254,30 +255,12 @@ export default function PricingContent() {
   return (
     <AnimatedBackground
       variant="mesh"
-      className="min-h-screen py-8 sm:py-12 px-4 overflow-y-auto"
+      className="min-h-[100dvh] py-8 sm:py-12 px-4 overflow-y-auto"
     >
       <div className="max-w-4xl mx-auto">
         {/* Back to Home */}
         <div className="mb-8">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-white/60 hover:text-white transition-colors min-h-[44px] px-2"
-          >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-            Back to Voxxo
-          </Link>
+          <BackButton href="/" label="Back to Voxxo" />
         </div>
 
         {/* Logo */}

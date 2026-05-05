@@ -50,7 +50,7 @@ function AuthContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#030507] flex items-center justify-center px-4 safe-top safe-bottom">
+    <div className="min-h-[100dvh] bg-[#030507] flex items-center justify-center px-4 safe-top safe-bottom">
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] rounded-full bg-[#00E5A0]/5 blur-[120px]" />
       </div>
@@ -189,7 +189,7 @@ export default function AuthPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#030507] flex items-center justify-center">
+        <div className="min-h-[100dvh] bg-[#030507] flex items-center justify-center">
           <div className="w-8 h-8 border-2 border-[#00E5A0] border-t-transparent rounded-full animate-spin" />
         </div>
       }

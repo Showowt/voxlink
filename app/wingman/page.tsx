@@ -16,6 +16,7 @@ import { useRouter } from "next/navigation";
 import { useTTS } from "@/hooks/useTTS";
 import { useAmbientNoise } from "@/hooks/useAmbientNoise";
 import { useWingman } from "@/hooks/useWingman";
+import { BackButton } from "@/app/components/ui/BackButton";
 import type {
   CyranoMode,
   OutputMode,
@@ -339,14 +340,12 @@ export default function WingmanPage() {
         </div>
 
         <div className="relative z-10 flex-1 flex flex-col max-w-lg mx-auto w-full px-3 sm:px-5 py-6 sm:py-8 safe-top">
+          {/* Back to Home */}
+          <BackButton href="/" label="Home" />
+
           {/* Header */}
           <div className="flex items-center justify-between mb-6 sm:mb-10">
-            <button
-              onClick={() => router.back()}
-              className="text-white/70 hover:text-white/80 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-            >
-              ←
-            </button>
+            <div className="w-6" />
             <div className="text-center">
               <div className="text-xl sm:text-2xl mb-1">🎧</div>
               <h1 className="text-lg sm:text-xl font-bold tracking-tight">

@@ -682,7 +682,7 @@ export default function CyranoOverlay({
 export function CyranoPage() {
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden"
+      className="min-h-[100dvh] flex flex-col items-center justify-center relative overflow-hidden"
       style={{
         background:
           "radial-gradient(ellipse at 20% 50%, #1a0a00 0%, #050508 60%)",

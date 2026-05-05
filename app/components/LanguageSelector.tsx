@@ -207,9 +207,10 @@ export function LanguageGrid({
 }: LanguageGridProps) {
   return (
     <div
-      className={`grid grid-cols-3 sm:grid-cols-4 gap-2 ${className}`}
+      className={`grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-[180px] sm:max-h-none overflow-y-auto overscroll-contain rounded-xl ${className}`}
       role="radiogroup"
       aria-label="Select your language"
+      style={{ WebkitOverflowScrolling: 'touch' }}
     >
       {LANGUAGES.map((lang) => (
         <button

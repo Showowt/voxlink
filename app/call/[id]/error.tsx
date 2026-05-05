@@ -12,7 +12,7 @@ export default function CallError({
   reset: () => void;
 }) {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#060810] via-[#0d1117] to-[#060810] flex items-center justify-center p-4">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-[#060810] via-[#0d1117] to-[#060810] flex items-center justify-center p-4">
       <div className="text-center max-w-md">
         <div className="text-6xl mb-6">📞</div>
         <h2 className="text-2xl font-bold text-white mb-3">Connection Error</h2>

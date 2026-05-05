@@ -176,37 +176,46 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
   const level = progress ? getLevelFromScore(progress.fluencyScore, config.ui.levelNames) : config.ui.levelNames[0];
 
   return (
-    <div className="min-h-screen bg-[#06060a] flex flex-col">
+    <div className="min-h-[100dvh] bg-[#06060a] flex flex-col">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-white/5">
-        <button onClick={() => router.push("/language-os")} className="text-white/50 hover:text-white/80 p-2">
+      <header className="flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 border-b border-white/[0.06]" style={{ background: "linear-gradient(180deg, rgba(0,200,150,0.03) 0%, transparent 100%)" }}>
+        <button onClick={() => router.push("/language-os")} className="text-white/50 hover:text-white/80 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl active:scale-95 transition-all hover:bg-white/[0.06]">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
           </svg>
         </button>
         <div className="text-center">
-          <span className="text-white text-sm font-semibold">{config.flag} {config.displayName}</span>
-          <p className="text-[#00C896] text-[10px]">{level} — {progress?.fluencyScore || 0}%</p>
+          <div className="flex items-center gap-2">
+            <span className="text-lg">{config.flag}</span>
+            <span className="text-white text-sm font-semibold tracking-tight">{config.displayName}</span>
+          </div>
+          <div className="flex items-center justify-center gap-1.5 mt-0.5">
+            <div className="w-1.5 h-1.5 rounded-full bg-[#00C896]" />
+            <p className="text-[#00C896] text-[10px] font-medium">{level} — {progress?.fluencyScore || 0}%</p>
+          </div>
         </div>
         <button
           onClick={() => setShowTranslations(!showTranslations)}
-          className={`p-2 text-xs ${showTranslations ? "text-[#00C896]" : "text-white/30"}`}
+          className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-xs font-bold active:scale-95 transition-all ${showTranslations ? "text-[#00C896] bg-[#00C896]/10" : "text-white/30 hover:bg-white/[0.06]"}`}
         >
           EN
         </button>
       </header>
 
       {/* Tab bar */}
-      <nav className="flex border-b border-white/5 overflow-x-auto">
+      <nav className="flex border-b border-white/[0.06] bg-white/[0.02]">
         {(["talk", "patterns", "missions", "vocab", "progress"] as Tab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`flex-1 min-w-[60px] py-2.5 text-[10px] font-bold tracking-wider uppercase transition-colors ${
-              activeTab === tab ? "text-[#00C896] border-b-2 border-[#00C896]" : "text-white/30"
+            className={`flex-1 min-w-[60px] min-h-[44px] py-3 text-[10px] font-bold tracking-wider uppercase transition-all relative ${
+              activeTab === tab ? "text-[#00C896]" : "text-white/30 hover:text-white/50"
             }`}
           >
             {config.ui[`tab${tab.charAt(0).toUpperCase() + tab.slice(1)}` as keyof typeof config.ui] as string}
+            {activeTab === tab && (
+              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-0.5 rounded-full bg-[#00C896] shadow-sm shadow-[#00C896]/50" />
+            )}
           </button>
         ))}
       </nav>
@@ -216,23 +225,24 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
         {activeTab === "talk" && (
           <div className="flex-1 flex flex-col">
             {/* Persona selector */}
-            <div className="flex gap-2 p-3 overflow-x-auto border-b border-white/5">
+            <div className="flex gap-2 p-3 overflow-x-auto border-b border-white/[0.06] scrollbar-hide">
               {config.personas.map((p) => (
                 <button
                   key={p.id}
                   onClick={() => startNewConversation(p)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs whitespace-nowrap transition-all ${
+                  className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs whitespace-nowrap transition-all active:scale-95 ${
                     activePersona.id === p.id
-                      ? "border text-white"
-                      : "bg-white/5 text-white/50 border border-transparent"
+                      ? "border text-white shadow-lg"
+                      : "bg-white/[0.04] text-white/50 border border-white/[0.08] hover:border-white/15"
                   }`}
                   style={{
-                    background: activePersona.id === p.id ? `${p.accentColor}15` : undefined,
-                    borderColor: activePersona.id === p.id ? `${p.accentColor}50` : undefined,
+                    background: activePersona.id === p.id ? `${p.accentColor}12` : undefined,
+                    borderColor: activePersona.id === p.id ? `${p.accentColor}40` : undefined,
+                    boxShadow: activePersona.id === p.id ? `0 4px 20px ${p.accentColor}20` : undefined,
                   }}
                 >
-                  <span>{p.avatar}</span>
-                  <span>{p.name}</span>
+                  <span className="text-base">{p.avatar}</span>
+                  <span className="font-medium">{p.name}</span>
                 </button>
               ))}
             </div>
@@ -240,17 +250,19 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.length === 0 && (
-                <div className="text-center py-12">
-                  <span className="text-4xl">{activePersona.avatar}</span>
-                  <p className="text-white/70 text-sm mt-3 font-medium">{activePersona.name}</p>
-                  <p className="text-white/30 text-xs mt-1">{activePersona.role}</p>
-                  <p className="text-white/20 text-xs mt-1 italic">{activePersona.setting}</p>
-                  <div className="flex flex-wrap gap-2 justify-center mt-6">
+                <div className="text-center py-10">
+                  <div className="w-20 h-20 mx-auto rounded-2xl flex items-center justify-center mb-4" style={{ background: `${activePersona.accentColor}10`, border: `1px solid ${activePersona.accentColor}20` }}>
+                    <span className="text-4xl">{activePersona.avatar}</span>
+                  </div>
+                  <p className="text-white font-semibold text-base">{activePersona.name}</p>
+                  <p className="text-white/40 text-xs mt-1">{activePersona.role}</p>
+                  <p className="text-white/20 text-[11px] mt-0.5 italic">{activePersona.setting}</p>
+                  <div className="flex flex-wrap gap-2 justify-center mt-6 px-4">
                     {(config.quickPhrases[activePersona.id] || []).map((phrase, i) => (
                       <button
                         key={i}
                         onClick={() => { setInputText(phrase); inputRef.current?.focus(); }}
-                        className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-full text-white/60 text-xs hover:text-white/90 transition-colors"
+                        className="px-3.5 py-2 bg-white/[0.04] border border-white/[0.1] rounded-full text-white/60 text-xs hover:text-white hover:border-[#00C896]/30 hover:bg-[#00C896]/5 transition-all active:scale-95"
                       >
                         {phrase}
                       </button>
@@ -276,15 +288,24 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
 
                     {/* Message bubble */}
                     <div
-                      className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                      className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${
                         msg.role === "user"
-                          ? "bg-[#00C896]/15 text-white border border-[#00C896]/20"
-                          : "bg-white/5 text-white/90 border border-white/8"
+                          ? "text-white rounded-br-md"
+                          : "text-white/90 rounded-bl-md"
                       }`}
+                      style={{
+                        background: msg.role === "user"
+                          ? "linear-gradient(135deg, rgba(0,200,150,0.15) 0%, rgba(0,200,150,0.08) 100%)"
+                          : "linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.03) 100%)",
+                        border: msg.role === "user"
+                          ? "1px solid rgba(0,200,150,0.2)"
+                          : "1px solid rgba(255,255,255,0.08)",
+                        boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+                      }}
                     >
                       <p>{msg.content}</p>
                       {msg.translation && showTranslations && (
-                        <p className="text-white/30 text-xs mt-1.5 italic">{msg.translation}</p>
+                        <p className="text-white/30 text-xs mt-1.5 italic border-t border-white/[0.06] pt-1.5">{msg.translation}</p>
                       )}
                     </div>
 
@@ -333,7 +354,7 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
             </div>
 
             {/* Input */}
-            <div className="p-3 border-t border-white/5">
+            <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-white/[0.06]" style={{ background: "linear-gradient(0deg, rgba(6,6,10,1) 0%, rgba(6,6,10,0.95) 100%)" }}>
               <div className="flex gap-2">
                 <input
                   ref={inputRef}
@@ -342,20 +363,23 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") sendMessage(); }}
                   placeholder={config.ui.startPrompt}
-                  className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm placeholder:text-white/25 outline-none focus:border-[#00C896]/40 transition-colors"
+                  className="flex-1 bg-white/[0.05] border border-white/[0.1] rounded-2xl px-4 py-3.5 text-white text-sm placeholder:text-white/25 outline-none focus:border-[#00C896]/40 focus:bg-white/[0.07] transition-all"
                   disabled={isThinking}
                 />
                 <button
                   onClick={sendMessage}
                   disabled={!inputText.trim() || isThinking}
-                  className="px-4 py-3 rounded-xl font-medium text-sm transition-all disabled:opacity-30"
+                  className="px-5 py-3.5 rounded-2xl font-semibold text-sm transition-all disabled:opacity-30 active:scale-95"
                   style={{
-                    background: inputText.trim() ? "rgba(0,200,150,0.15)" : "rgba(255,255,255,0.05)",
+                    background: inputText.trim() ? "linear-gradient(135deg, rgba(0,200,150,0.2) 0%, rgba(0,200,150,0.1) 100%)" : "rgba(255,255,255,0.05)",
                     border: inputText.trim() ? "1px solid rgba(0,200,150,0.3)" : "1px solid rgba(255,255,255,0.08)",
                     color: "#00C896",
+                    boxShadow: inputText.trim() ? "0 4px 16px rgba(0,200,150,0.15)" : "none",
                   }}
                 >
-                  Send
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
                 </button>
               </div>
             </div>
@@ -487,14 +511,15 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
             {/* Link to Entrevoz */}
             <button
               onClick={() => router.push("/")}
-              className="w-full p-4 rounded-xl text-center transition-all"
+              className="w-full p-5 rounded-2xl text-center transition-all active:scale-[0.98] group"
               style={{
-                background: "rgba(0,200,150,0.05)",
-                border: "1px solid rgba(0,200,150,0.15)",
+                background: "linear-gradient(135deg, rgba(0,200,150,0.08) 0%, rgba(0,100,200,0.05) 100%)",
+                border: "1px solid rgba(0,200,150,0.2)",
+                boxShadow: "0 4px 24px rgba(0,200,150,0.1)",
               }}
             >
-              <p className="text-[#00C896] text-sm font-medium">Ready for a real conversation?</p>
-              <p className="text-white/30 text-xs mt-1">Start a call on Entrevoz</p>
+              <p className="text-[#00C896] text-sm font-semibold group-hover:text-white transition-colors">Ready for a real conversation?</p>
+              <p className="text-white/30 text-xs mt-1">Start a call on Entrevoz →</p>
             </button>
           </div>
         )}
@@ -505,9 +530,9 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="p-3 bg-white/[0.03] border border-white/8 rounded-xl text-center">
-      <p className="text-white font-semibold text-lg">{value}</p>
-      <p className="text-white/30 text-[10px] uppercase tracking-wider">{label}</p>
+    <div className="p-4 rounded-2xl text-center" style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05)" }}>
+      <p className="text-white font-bold text-xl tracking-tight">{value}</p>
+      <p className="text-white/35 text-[10px] uppercase tracking-widest mt-1">{label}</p>
     </div>
   );
 }

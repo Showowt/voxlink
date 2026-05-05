@@ -5,7 +5,7 @@
 
 export default function FaceToFaceLoading() {
   return (
-    <div className="min-h-screen bg-void-DEFAULT flex flex-col safe-all">
+    <div className="min-h-[100dvh] bg-void-DEFAULT flex flex-col safe-all">
       {/* Person A side */}
       <div className="flex-1 flex flex-col p-4 border-b border-white/[0.08]">
         {/* Language selector skeleton */}

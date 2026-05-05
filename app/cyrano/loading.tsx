@@ -5,7 +5,7 @@
 
 export default function CyranoLoading() {
   return (
-    <div className="min-h-screen bg-void-DEFAULT flex flex-col safe-all">
+    <div className="min-h-[100dvh] bg-void-DEFAULT flex flex-col safe-all">
       {/* Header skeleton */}
       <div className="p-4 border-b border-white/[0.06]">
         <div className="flex items-center justify-between max-w-lg mx-auto">

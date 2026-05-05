@@ -8,7 +8,15 @@
  */
 
 import { CyranoPage } from "../components/CyranoOverlay";
+import { BackButton } from "../components/ui/BackButton";
 
 export default function CyranoStandalonePage() {
-  return <CyranoPage />;
+  return (
+    <div className="relative min-h-[100dvh]">
+      <div className="absolute top-4 left-4 z-50">
+        <BackButton href="/" label="Back" />
+      </div>
+      <CyranoPage />
+    </div>
+  );
 }

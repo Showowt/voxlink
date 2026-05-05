@@ -5,7 +5,7 @@
 
 export default function Loading() {
   return (
-    <div className="min-h-screen bg-void-DEFAULT flex items-center justify-center safe-all">
+    <div className="min-h-[100dvh] bg-void-DEFAULT flex items-center justify-center safe-all">
       <div className="text-center">
         {/* Premium spinning loader */}
         <div className="relative w-16 h-16 mx-auto mb-4">

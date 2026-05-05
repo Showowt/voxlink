@@ -171,7 +171,7 @@ export default function AccessGate({ children }: AccessGateProps) {
   // Loading state
   if (isAuthorized === null) {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+      <div className="min-h-[100dvh] bg-[#0a0a0f] flex items-center justify-center">
         <div className="w-10 h-10 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
@@ -184,7 +184,7 @@ export default function AccessGate({ children }: AccessGateProps) {
 
   // Access gate
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0a0a0f] via-[#0d1117] to-[#0a0a0f] flex items-center justify-center p-4">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-[#0a0a0f] via-[#0d1117] to-[#0a0a0f] flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">

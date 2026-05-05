@@ -447,7 +447,7 @@ export const SkeletonPage = forwardRef<HTMLDivElement, SkeletonPageProps>(
     return (
       <div
         ref={ref}
-        className={`min-h-screen bg-void-DEFAULT flex items-center justify-center ${className}`}
+        className={`min-h-[100dvh] bg-void-DEFAULT flex items-center justify-center ${className}`}
         {...props}
       >
         <div className="text-center">

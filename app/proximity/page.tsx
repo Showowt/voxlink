@@ -840,7 +840,7 @@ export default function ProximityPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#060810] flex items-center justify-center">
+        <div className="min-h-[100dvh] bg-[#060810] flex items-center justify-center">
           <div className="text-center">
             <div className="w-12 h-12 border-4 border-[#00DBA8] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
             <p className="text-white/70">Loading Proximity...</p>

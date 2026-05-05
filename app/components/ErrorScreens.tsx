@@ -47,7 +47,7 @@ export function ConnectionFailedScreen({
   message,
 }: BaseErrorProps & { message?: string }) {
   return (
-    <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-6">
+    <div className="min-h-[100dvh] bg-zinc-950 flex flex-col items-center justify-center p-6">
       {/* Icon */}
       <div className="w-20 h-20 rounded-full bg-red-500/20 flex items-center justify-center text-red-500 mb-6">
         <svg
@@ -129,7 +129,7 @@ export function ConnectionFailedScreen({
 
 export function IceBlockedScreen({ onRetry, onBack }: BaseErrorProps) {
   return (
-    <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-6">
+    <div className="min-h-[100dvh] bg-zinc-950 flex flex-col items-center justify-center p-6">
       {/* Icon */}
       <div className="w-20 h-20 rounded-full bg-yellow-500/20 flex items-center justify-center text-yellow-500 mb-6">
         <svg
@@ -232,7 +232,7 @@ export function PermissionDeniedScreen({
         : "Microphone";
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-6">
+    <div className="min-h-[100dvh] bg-zinc-950 flex flex-col items-center justify-center p-6">
       {/* Icon */}
       <div className="w-20 h-20 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-500 mb-6">
         <svg
@@ -323,7 +323,7 @@ export function BrowserUnsupportedScreen({
   const browsers = getRecommendedBrowsers();
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-6">
+    <div className="min-h-[100dvh] bg-zinc-950 flex flex-col items-center justify-center p-6">
       {/* Icon */}
       <div className="w-20 h-20 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-500 mb-6">
         <svg
@@ -411,7 +411,7 @@ export function RoomFullScreen({
   roomCode,
 }: BaseErrorProps & { roomCode?: string }) {
   return (
-    <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-6">
+    <div className="min-h-[100dvh] bg-zinc-950 flex flex-col items-center justify-center p-6">
       {/* Icon */}
       <div className="w-20 h-20 rounded-full bg-yellow-500/20 flex items-center justify-center text-yellow-500 mb-6">
         <svg
@@ -478,7 +478,7 @@ export function RoomFullScreen({
 
 export function TimeoutScreen({ onRetry, onBack }: BaseErrorProps) {
   return (
-    <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-6">
+    <div className="min-h-[100dvh] bg-zinc-950 flex flex-col items-center justify-center p-6">
       {/* Icon */}
       <div className="w-20 h-20 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-500 mb-6">
         <svg
@@ -546,7 +546,7 @@ export function CallEndedScreen({
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-6">
+    <div className="min-h-[100dvh] bg-zinc-950 flex flex-col items-center justify-center p-6">
       {/* Icon */}
       <div className="w-20 h-20 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 mb-6">
         <svg

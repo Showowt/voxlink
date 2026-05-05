@@ -11,7 +11,7 @@ export default function TermsPage() {
   const lastUpdated = "March 6, 2026";
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0a0a0f] via-[#0d1117] to-[#0a0a0f] py-8 px-4 sm:py-12 sm:px-6">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-[#0a0a0f] via-[#0d1117] to-[#0a0a0f] py-8 px-4 sm:py-12 sm:px-6">
       <div className="max-w-3xl mx-auto">
         {/* Header */}
         <div className="mb-8 sm:mb-12">

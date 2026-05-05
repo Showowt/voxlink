@@ -19,7 +19,7 @@ export default function WingmanError({
   }, [error]);
 
   return (
-    <div className="min-h-screen bg-[#080808] text-white flex flex-col items-center justify-center px-6">
+    <div className="min-h-[100dvh] bg-[#080808] text-white flex flex-col items-center justify-center px-6">
       <div className="max-w-md text-center">
         <div className="text-5xl mb-4">🎧</div>
         <h1 className="text-2xl font-bold mb-2">Wingman Hit a Snag</h1>

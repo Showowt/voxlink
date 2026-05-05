@@ -131,7 +131,7 @@ export default function GroupCallPage() {
 
   if (gc.phase === 'lobby' || gc.phase === 'joining') {
     return (
-      <div className="min-h-screen bg-[#06060a] flex items-center justify-center p-4">
+      <div className="min-h-[100dvh] bg-[#06060a] flex items-center justify-center p-4 overflow-y-auto">
         <div className="w-full max-w-sm">
           <div className="text-center mb-6">
             <div className="text-[#00C896] text-xs font-medium tracking-widest uppercase mb-1">Group Call</div>
@@ -155,7 +155,7 @@ export default function GroupCallPage() {
 
             <div className="mb-5">
               <label className="text-white/50 text-xs uppercase tracking-wide block mb-1.5">Your language</label>
-              <div className="grid grid-cols-4 gap-1.5 max-h-36 overflow-y-auto">
+              <div className="grid grid-cols-4 gap-1.5 max-h-32 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
                 {LANGUAGES.map(l => (
                   <button
                     key={l.code}
@@ -207,7 +207,7 @@ export default function GroupCallPage() {
 
   if (gc.phase === 'error') {
     return (
-      <div className="min-h-screen bg-[#06060a] flex items-center justify-center p-6">
+      <div className="min-h-[100dvh] bg-[#06060a] flex items-center justify-center p-6">
         <div className="text-center max-w-xs">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center">
             <svg className="w-7 h-7 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -229,7 +229,7 @@ export default function GroupCallPage() {
 
   if (gc.phase === 'ended') {
     return (
-      <div className="min-h-screen bg-[#06060a] flex items-center justify-center">
+      <div className="min-h-[100dvh] bg-[#06060a] flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#00C896]/10 border border-[#00C896]/20 flex items-center justify-center">
             <svg className="w-7 h-7 text-[#00C896]" fill="none" stroke="currentColor" viewBox="0 0 24 24">

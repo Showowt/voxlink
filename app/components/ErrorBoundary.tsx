@@ -88,7 +88,7 @@ class ErrorBoundary extends Component<Props, State> {
       const canRetry = this.state.retryCount < this.maxRetries
 
       return (
-        <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center p-4">
+        <div className="min-h-[100dvh] bg-[#0a0a0f] flex items-center justify-center p-4">
           <div className="max-w-md w-full bg-[#12121a] rounded-2xl p-6 border border-gray-800 text-center">
             {/* Icon */}
             <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">

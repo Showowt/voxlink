@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useAnalytics } from "@/hooks/useAnalytics";
+import { BackButton } from "@/app/components/ui/BackButton";
 
 const MODES = [
   {
@@ -161,7 +162,7 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#030507] flex items-center justify-center">
+      <div className="min-h-[100dvh] bg-[#030507] flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-[#00E5A0] border-t-transparent rounded-full animate-spin" />
       </div>
     );
@@ -179,7 +180,7 @@ export default function DashboardPage() {
       : "text-white/40";
 
   return (
-    <div className="min-h-screen bg-[#030507] text-white">
+    <div className="min-h-[100dvh] bg-[#030507] text-white">
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-0 right-0 w-[500px] h-[400px] rounded-full bg-[#00E5A0]/3 blur-[120px]" />
       </div>
@@ -191,6 +192,9 @@ export default function DashboardPage() {
       )}
 
       <div className="relative z-10 max-w-2xl mx-auto px-4 py-8 safe-top safe-bottom">
+        <div className="mb-4">
+          <BackButton href="/" label="Back to Voxxo" />
+        </div>
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-xl font-black">

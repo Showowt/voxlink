@@ -65,7 +65,7 @@ export default function GroupLandingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#06060a] flex items-center justify-center p-4">
+    <div className="min-h-[100dvh] bg-[#06060a] flex items-center justify-center p-4 overflow-y-auto">
       <div className="w-full max-w-md">
 
         {/* Back button */}
@@ -112,7 +112,7 @@ export default function GroupLandingPage() {
           {/* Language */}
           <div className="mb-4">
             <div className="text-white/40 text-xs mb-2">Your language</div>
-            <div className="grid grid-cols-4 gap-1.5 max-h-40 overflow-y-auto">
+            <div className="grid grid-cols-4 gap-1.5 max-h-32 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
               {LANGUAGES.map(l => (
                 <button
                   key={l.code}

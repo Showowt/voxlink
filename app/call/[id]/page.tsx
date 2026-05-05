@@ -2182,7 +2182,7 @@ export default function VideoCallPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="min-h-[100dvh] bg-black flex items-center justify-center">
           <div className="w-16 h-16 border-4 border-[#00C896] border-t-transparent rounded-full animate-spin" />
         </div>
       }

@@ -5,7 +5,7 @@
 
 export default function ProximityLoading() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#060810] via-[#0d1117] to-[#060810] flex flex-col safe-all">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-[#060810] via-[#0d1117] to-[#060810] flex flex-col safe-all">
       {/* Header skeleton */}
       <div className="p-4 border-b border-white/[0.06]">
         <div className="flex items-center justify-between max-w-lg mx-auto">

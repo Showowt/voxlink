@@ -18,7 +18,7 @@ import { AnimatedBackground } from "./components/ui/AnimatedBackground";
 import { GlassCard } from "./components/ui/GlassCard";
 import { GlowButton } from "./components/ui/GlowButton";
 import { EntrevozLogo } from "./components/ui/EntrevozLogo";
-import { PillTabs, SimplePillTabs } from "./components/ui/PillTabs";
+import { SimplePillTabs } from "./components/ui/PillTabs";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // VOXTYPE COMPONENT - Type & Verify Translation (Back-Translation)
@@ -1069,6 +1069,7 @@ function HomeContent() {
     return supported ? browserLang : "en";
   });
   const [joinCode, setJoinCode] = useState("");
+  const [activeCategory, setActiveCategory] = useState<"translate" | "connect" | "tools">("translate");
   const [activeTab, setActiveTab] = useState<
     "video" | "talk" | "voxnote" | "voxtype" | "proximity" | "wingman" | "practice" | "group"
   >("voxtype");
@@ -1227,7 +1228,7 @@ function HomeContent() {
   if (isJoining && joinId) {
     return (
       <AnimatedBackground variant="mesh">
-        <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="min-h-[100dvh] flex items-center justify-center p-4">
           <div className="w-full max-w-md">
             <GlassCard variant="elevated" padding="lg" animate>
               <div className="text-center mb-6">
@@ -1297,17 +1298,32 @@ function HomeContent() {
     );
   }
 
-  // Tab configuration for PillTabs
-  const tabs = [
-    { id: "voxtype", label: "Type", icon: <span>⌨️</span> },
-    { id: "voxnote", label: "Voice", icon: <span>🎤</span>, color: "emerald" },
-    { id: "wingman", label: "Ear", icon: <span>🎧</span>, color: "violet" },
-    { id: "talk", label: "Face", icon: <span>💬</span> },
-    { id: "video", label: "Call", icon: <span>📹</span> },
-    { id: "group", label: "", icon: <span>👥</span>, color: "teal" },
-    { id: "proximity", label: "", icon: <span>📡</span>, color: "purple" },
-    { id: "practice", label: "", icon: <span>🧠</span>, color: "emerald" },
+  // Category → feature mapping
+  const categories = [
+    { id: "translate" as const, label: "Translate" },
+    { id: "connect" as const, label: "Connect" },
+    { id: "tools" as const, label: "Tools" },
   ];
+
+  const featuresByCategory = {
+    translate: [
+      { id: "voxtype" as const, label: "Type", desc: "Type & verify", icon: "⌨️" },
+      { id: "voxnote" as const, label: "Voice", desc: "Voice note", icon: "🎤" },
+    ],
+    connect: [
+      { id: "video" as const, label: "Video Call", desc: "1:1 video", icon: "📹" },
+      { id: "talk" as const, label: "Talk", desc: "Text chat", icon: "💬" },
+      { id: "group" as const, label: "Group", desc: "2-4 people", icon: "👥", isNew: true },
+    ],
+    tools: [
+      { id: "wingman" as const, label: "Wingman", desc: "AI earpiece", icon: "🎧" },
+      { id: "proximity" as const, label: "Nearby", desc: "Find users", icon: "📡" },
+      { id: "practice" as const, label: "Practice", desc: "Language OS", icon: "🧠" },
+    ],
+  };
+
+  const currentFeatures = featuresByCategory[activeCategory];
+  const activeFeature = currentFeatures.find(f => f.id === activeTab) || currentFeatures[0];
 
   return (
     <AnimatedBackground
@@ -1341,17 +1357,58 @@ function HomeContent() {
           padding="none"
           className="overflow-hidden"
         >
-          {/* Mode Tabs - Premium PillTabs */}
-          <div className="p-2 sm:p-3 border-b border-white/[0.06]">
-            <PillTabs
-              tabs={tabs}
-              activeTab={activeTab}
-              onChange={(id) => setActiveTab(id as typeof activeTab)}
-              variant="compact"
-            />
+          {/* Category Navigation */}
+          <div className="border-b border-white/[0.06]">
+            {/* Top: 3 category tabs */}
+            <div className="flex">
+              {categories.map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => {
+                    setActiveCategory(cat.id);
+                    const first = featuresByCategory[cat.id][0];
+                    if (first) setActiveTab(first.id);
+                  }}
+                  className={`flex-1 py-3 text-xs sm:text-sm font-medium tracking-wide transition-all relative ${
+                    activeCategory === cat.id
+                      ? "text-white"
+                      : "text-white/40 hover:text-white/60"
+                  }`}
+                >
+                  {cat.label}
+                  {activeCategory === cat.id && (
+                    <span className="absolute bottom-0 left-1/4 right-1/4 h-[2px] bg-[#00E5A0] rounded-full" />
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Sub: feature pills within selected category */}
+            <div className="flex gap-1.5 px-3 py-2.5 overflow-x-auto scrollbar-hide">
+              {currentFeatures.map(feat => {
+                const isActive = activeTab === feat.id;
+                return (
+                  <button
+                    key={feat.id}
+                    onClick={() => setActiveTab(feat.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all shrink-0 ${
+                      isActive
+                        ? "bg-white/[0.12] text-white border border-white/[0.15]"
+                        : "text-white/50 hover:text-white/70 hover:bg-white/[0.05]"
+                    }`}
+                  >
+                    <span className="text-sm">{feat.icon}</span>
+                    {feat.label}
+                    {(feat as { isNew?: boolean }).isNew && (
+                      <span className="text-[8px] px-1 py-0.5 rounded bg-[#00E5A0]/20 text-[#00E5A0] font-bold leading-none">NEW</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="p-3 sm:p-5 max-h-[calc(100dvh-200px)] xs:max-h-[calc(100dvh-220px)] sm:max-h-none overflow-y-auto">
+          <div className="p-3 sm:p-5 max-h-[calc(100dvh-260px)] sm:max-h-none overflow-y-auto overscroll-contain -webkit-overflow-scrolling-touch">
             {/* VoxType Tab - Type & Verify Translation */}
             {activeTab === "voxtype" ? (
               <VoxTypeTab />
@@ -1736,7 +1793,7 @@ export default function Home() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-void-DEFAULT flex items-center justify-center">
+        <div className="min-h-[100dvh] bg-void-DEFAULT flex items-center justify-center">
           <div className="text-center">
             <div className="relative w-14 h-14 mx-auto mb-4">
               <div className="absolute inset-0 rounded-full border-4 border-voxxo-500/30" />

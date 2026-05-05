@@ -8,7 +8,7 @@ export default function TalkError({
   reset: () => void;
 }) {
   return (
-    <div className="min-h-screen bg-[#080808] flex items-center justify-center p-4">
+    <div className="min-h-[100dvh] bg-[#080808] flex items-center justify-center p-4">
       <div className="text-center max-w-md">
         <div className="text-6xl mb-6">💬</div>
         <h2 className="text-2xl font-bold text-white mb-3">Connection Error</h2>

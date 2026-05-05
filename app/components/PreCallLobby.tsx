@@ -246,7 +246,7 @@ export default function PreCallLobby({
     stream && (cameraPermission === "granted" || micPermission === "granted");
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#060810] via-[#0d1117] to-[#060810] flex items-center justify-center p-4">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-[#060810] via-[#0d1117] to-[#060810] flex items-center justify-center p-4">
       <div className="w-full max-w-lg">
         <div className="bg-[#12121a] rounded-2xl border border-gray-800 overflow-hidden shadow-xl">
           {/* Header */}

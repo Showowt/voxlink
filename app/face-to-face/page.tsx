@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { getFlag, getSpeechCode, LANGUAGES } from "../lib/languages";
 import { LanguageSelector } from "../components/LanguageSelector";
+import { BackButton } from "@/app/components/ui/BackButton";
 import type {
   SpeechRecognitionEvent,
   SpeechRecognitionErrorEvent,
@@ -315,7 +316,7 @@ export default function FaceToFacePage() {
   // Browser not supported
   if (!browserSupported) {
     return (
-      <div className="min-h-screen bg-[#060810] flex items-center justify-center p-4">
+      <div className="min-h-[100dvh] bg-[#060810] flex items-center justify-center p-4">
         <div className="max-w-md text-center">
           <div className="text-6xl mb-4">⚠️</div>
           <h2 className="text-2xl font-bold text-white mb-2">
@@ -340,8 +341,12 @@ export default function FaceToFacePage() {
   // Setup mode - language selection
   if (isSetupMode) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#060810] via-[#0d1117] to-[#060810] flex items-center justify-center p-4">
-        <div className="w-full max-w-md">
+      <div className="min-h-[100dvh] bg-gradient-to-br from-[#060810] via-[#0d1117] to-[#060810] flex flex-col p-4">
+        <div className="w-full max-w-md mx-auto">
+          {/* Back to Home */}
+          <div className="mb-4">
+            <BackButton href="/" label="Home" />
+          </div>
           <div className="bg-[#12121a] rounded-2xl border border-gray-800 p-6">
             {/* Header */}
             <div className="text-center mb-6">
@@ -437,15 +442,6 @@ export default function FaceToFacePage() {
               aria-label="Start Translation"
             >
               🚀 Start Translation
-            </button>
-
-            {/* Back Link */}
-            <button
-              onClick={() => router.push("/")}
-              className="w-full mt-3 py-3 bg-[#1a1a2e] border border-gray-700 rounded-xl text-white/70 hover:text-white hover:border-gray-600 transition min-h-[44px]"
-              aria-label="Back to Home"
-            >
-              ← Back to Home
             </button>
           </div>
         </div>
