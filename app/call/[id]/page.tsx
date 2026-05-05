@@ -30,6 +30,13 @@ import {
   type UseCyranoReturn,
 } from "../../lib/useCyrano";
 import { useTranscription } from "@/hooks/useTranscription";
+import TextInputFallback from "../../components/TextInputFallback";
+import PostCallSummary from "../../components/PostCallSummary";
+import OfflinePhrases from "../../components/OfflinePhrases";
+import CulturalWhisper from "../../components/CulturalWhisper";
+import BackTranslationBadge from "../../components/BackTranslationBadge";
+import { useConversationMemory } from "@/hooks/useConversationMemory";
+import { getDeviceId } from "@/app/lib/language-os/device-id";
 
 // Text-to-Speech helper
 const speakText = (text: string, lang: string) => {
@@ -614,6 +621,24 @@ function VideoCallContent() {
   // UI state
   const [copied, setCopied] = useState(false);
   const [iceState, setIceState] = useState<IceConnectionState | null>(null);
+
+  // Text Input Fallback state
+  const [showTextInput, setShowTextInput] = useState(false);
+
+  // Post-Call Summary state
+  const [showPostCall, setShowPostCall] = useState(false);
+
+  // Offline Phrases state
+  const [showOfflinePhrases, setShowOfflinePhrases] = useState(false);
+
+  // Learning Mode state
+  const [learningMode, setLearningMode] = useState(false);
+
+  // Cultural Whispers state
+  const [culturalWhispersEnabled] = useState(true);
+
+  // Conversation Memory
+  const conversationMemory = useConversationMemory();
 
   // Cyrano Mode state
   const [cyranoOpen, setCyranoOpen] = useState(false);
@@ -1245,7 +1270,39 @@ function VideoCallContent() {
     if (peerRef.current) {
       peerRef.current.disconnect();
     }
-    router.push("/");
+    // Save conversation memory
+    if (transcript.length >= 2 && partnerName) {
+      conversationMemory.saveCallMemory({
+        partnerName,
+        lang: partnerLang || expectedPartnerLang,
+        duration: callDuration,
+        languages: [userLang, partnerLang || expectedPartnerLang],
+        messages: transcript.map((t) => ({ text: t.original, speaker: t.speaker })),
+      });
+    }
+
+    // Bridge vocab to Language OS (fire and forget)
+    if (transcript.length >= 2) {
+      const langPair = `${userLang}-${partnerLang || expectedPartnerLang}`;
+      fetch("/api/language-os/entrevoz-bridge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: getDeviceId(),
+          languagePair: langPair,
+          transcript: transcript.map((t) => ({ text: t.original, language: t.speaker === "me" ? userLang : (partnerLang || expectedPartnerLang) })),
+          conversationId: roomCode,
+          durationSeconds: callDuration,
+        }),
+      }).catch(() => {});
+    }
+
+    // Show post-call summary if we had any conversation
+    if (transcript.length >= 2) {
+      setShowPostCall(true);
+    } else {
+      router.push("/");
+    }
   };
 
   const copyLink = () => {
@@ -1547,6 +1604,17 @@ function VideoCallContent() {
           )}
         </div>
 
+        {/* Cultural Whisper */}
+        {theirLiveText && (
+          <div className="absolute bottom-44 md:bottom-52 inset-x-0 px-3 md:px-4 pointer-events-auto z-10">
+            <CulturalWhisper
+              partnerLang={partnerLang || expectedPartnerLang}
+              lastPartnerText={theirLiveText}
+              enabled={culturalWhispersEnabled}
+            />
+          </div>
+        )}
+
         {/* LIVE CAPTIONS - Mobile responsive */}
         <div className="absolute bottom-20 md:bottom-24 inset-x-0 px-2 md:px-4 space-y-2 md:space-y-3 pointer-events-none">
           {/* Partner's speech */}
@@ -1614,18 +1682,27 @@ function VideoCallContent() {
                     <span className="inline-block w-0.5 h-3 md:h-4 bg-white/90 ml-1 animate-blink" />
                   </p>
                   {myLiveTranslation && (
-                    <p
-                      className={`text-[#00C896] font-medium leading-relaxed ${
-                        fontSize === "small"
-                          ? "text-sm md:text-base"
-                          : fontSize === "medium"
-                            ? "text-base md:text-lg"
-                            : "text-lg md:text-2xl"
-                      }`}
-                      aria-label="Translation"
-                    >
-                      → {myLiveTranslation}
-                    </p>
+                    <>
+                      <p
+                        className={`text-[#00C896] font-medium leading-relaxed ${
+                          fontSize === "small"
+                            ? "text-sm md:text-base"
+                            : fontSize === "medium"
+                              ? "text-base md:text-lg"
+                              : "text-lg md:text-2xl"
+                        }`}
+                        aria-label="Translation"
+                      >
+                        → {myLiveTranslation}
+                      </p>
+                      <BackTranslationBadge
+                        originalText={myLiveText}
+                        translatedText={myLiveTranslation}
+                        sourceLang={userLang}
+                        targetLang={partnerLang || expectedPartnerLang}
+                        visible={learningMode}
+                      />
+                    </>
                   )}
                 </div>
               </div>
@@ -1810,6 +1887,23 @@ function VideoCallContent() {
         )}
       </div>
 
+      {/* Text Input Fallback */}
+      <TextInputFallback
+        visible={showTextInput}
+        onDismiss={() => setShowTextInput(false)}
+        sendMessage={sendWebRTCMessage}
+        sourceLang={userLang}
+        targetLang={partnerLang || expectedPartnerLang}
+      />
+
+      {/* Offline Phrases */}
+      <OfflinePhrases
+        visible={showOfflinePhrases}
+        onDismiss={() => setShowOfflinePhrases(false)}
+        sourceLang={userLang}
+        targetLang={partnerLang || expectedPartnerLang}
+      />
+
       {/* Controls - Mobile optimized with flex wrap */}
       <div className="bg-black/80 backdrop-blur-xl border-t border-white/10 px-2 md:px-4 py-3 md:py-4 safe-area-bottom">
         <div className="flex items-center justify-center gap-3 md:gap-4 flex-wrap">
@@ -1833,6 +1927,36 @@ function VideoCallContent() {
             }`}
           >
             {isVideoOff ? "📵" : "📹"}
+          </button>
+
+          {/* Text Input Fallback */}
+          <button
+            onClick={() => setShowTextInput((v) => !v)}
+            title="Type to translate"
+            className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center text-lg md:text-xl transition-all ${
+              showTextInput
+                ? "bg-[#00C896]/20 text-[#00C896]"
+                : "bg-white/10 text-white hover:bg-white/20"
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </button>
+
+          {/* Offline Phrases */}
+          <button
+            onClick={() => setShowOfflinePhrases((v) => !v)}
+            title="Quick Phrases"
+            className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center text-lg md:text-xl transition-all ${
+              showOfflinePhrases
+                ? "bg-[#00C896]/20 text-[#00C896]"
+                : "bg-white/10 text-white hover:bg-white/20"
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+            </svg>
           </button>
 
           {/* Cyrano Mode Toggle */}
@@ -1923,6 +2047,27 @@ function VideoCallContent() {
           )}
         </p>
       </div>
+
+      {/* Post-Call Summary */}
+      <PostCallSummary
+        visible={showPostCall}
+        messages={transcript.map((t) => ({
+          original: t.original,
+          translated: t.translated,
+          sender: t.speaker,
+          timestamp: t.timestamp.toISOString(),
+        }))}
+        duration={callDuration}
+        languages={[userLang, partnerLang || expectedPartnerLang]}
+        onClose={() => {
+          setShowPostCall(false);
+          router.push("/");
+        }}
+        onNewCall={() => {
+          setShowPostCall(false);
+          window.location.href = "/";
+        }}
+      />
 
       <style jsx>{`
         @keyframes blink {

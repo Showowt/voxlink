@@ -1070,7 +1070,7 @@ function HomeContent() {
   });
   const [joinCode, setJoinCode] = useState("");
   const [activeTab, setActiveTab] = useState<
-    "video" | "talk" | "voxnote" | "voxtype" | "proximity" | "wingman"
+    "video" | "talk" | "voxnote" | "voxtype" | "proximity" | "wingman" | "practice"
   >("voxtype");
   const [mode, setMode] = useState<"start" | "join">("start");
   const [isJoining, setIsJoining] = useState(false);
@@ -1305,6 +1305,7 @@ function HomeContent() {
     { id: "talk", label: "Face", icon: <span>💬</span> },
     { id: "video", label: "Call", icon: <span>📹</span> },
     { id: "proximity", label: "", icon: <span>📡</span>, color: "purple" },
+    { id: "practice", label: "Practice", icon: <span>🧠</span>, color: "emerald" },
   ];
 
   return (
@@ -1405,6 +1406,53 @@ function HomeContent() {
                 </button>
                 <p className="text-xs text-white/70">
                   Connect AirPods for best experience
+                </p>
+              </div>
+            ) : activeTab === "practice" ? (
+              <div className="space-y-4 text-center">
+                <div className="relative w-16 h-16 sm:w-20 sm:h-20 mx-auto">
+                  <div className="absolute inset-0 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 shadow-2xl shadow-emerald-500/30" />
+                  <div
+                    className="absolute inset-0 rounded-full animate-ping bg-emerald-500/20"
+                    style={{ animationDuration: "2s" }}
+                  />
+                  <div className="relative w-full h-full rounded-full flex items-center justify-center">
+                    <span className="text-3xl sm:text-4xl">🧠</span>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-lg sm:text-xl font-bold text-white">
+                    Language OS
+                  </h3>
+                  <p className="text-white/70 text-xs sm:text-sm mt-1">
+                    AI practice with spaced repetition & adaptive personas
+                  </p>
+                </div>
+                <GlassCard variant="subtle" padding="sm" className="text-left">
+                  <ul className="text-xs sm:text-sm text-white/70 space-y-1.5 sm:space-y-2">
+                    <li className="flex items-start gap-1.5 sm:gap-2">
+                      <span className="text-emerald-400">🎭</span>
+                      Practice with AI personas (taxi driver, hotel front desk...)
+                    </li>
+                    <li className="flex items-start gap-1.5 sm:gap-2">
+                      <span className="text-emerald-400">📊</span>
+                      Spaced repetition from your real conversations
+                    </li>
+                    <li className="flex items-start gap-1.5 sm:gap-2">
+                      <span className="text-emerald-400">🎯</span>
+                      Fluency score tracks your progress over time
+                    </li>
+                  </ul>
+                </GlassCard>
+                <button
+                  onClick={() => router.push("/language-os")}
+                  className="w-full py-3 sm:py-4 min-h-[48px] sm:min-h-[56px] bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 rounded-xl sm:rounded-2xl text-white font-semibold text-base sm:text-lg transition-all duration-200 shadow-2xl shadow-emerald-500/25 hover:-translate-y-0.5"
+                  aria-label="Start Language OS practice"
+                >
+                  🧠 Start Practicing
+                </button>
+                <p className="text-xs text-white/70">
+                  Vocab from your Entrevoz calls feeds into practice
                 </p>
               </div>
             ) : activeTab === "proximity" ? (
