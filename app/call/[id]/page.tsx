@@ -36,6 +36,7 @@ import OfflinePhrases from "../../components/OfflinePhrases";
 import CulturalWhisper from "../../components/CulturalWhisper";
 import BackTranslationBadge from "../../components/BackTranslationBadge";
 import { useConversationMemory } from "@/hooks/useConversationMemory";
+import { useVoiceDubbing } from "@/hooks/useVoiceDubbing";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
 
 // Text-to-Speech helper
@@ -650,6 +651,7 @@ function VideoCallContent() {
   // Refs (need to be defined before useTranscription hook)
   const peerRef = useRef<PeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
 
   // WebRTC sendMessage wrapper for useTranscription hook
   const sendWebRTCMessage = useCallback((message: string): boolean => {
@@ -711,6 +713,23 @@ function VideoCallContent() {
       console.warn("[Transcription]", transcription.error);
     }
   }, [transcription.error]);
+
+  // ── Voice Dubbing (additive — does not affect subtitle system) ──────────
+  const {
+    state: dubbingState,
+    enable: enableDubbing,
+    disable: disableDubbing,
+    processTranscript: processDub,
+    cleanup: cleanupDubbing,
+  } = useVoiceDubbing(remoteStreamRef.current, userLang);
+
+  // Ref so handleDataMessage can access dubbing without stale closure
+  const processDubRef = useRef(processDub);
+  const dubbingEnabledRef = useRef(dubbingState.isEnabled);
+  useEffect(() => {
+    processDubRef.current = processDub;
+    dubbingEnabledRef.current = dubbingState.isEnabled;
+  }, [processDub, dubbingState.isEnabled]);
 
   // Quality monitoring state
   const [quality, setQuality] = useState<ConnectionQuality | null>(null);
@@ -897,6 +916,7 @@ function VideoCallContent() {
           onRemoteStream: (stream) => {
             if (!mountedRef.current) return;
             console.log("📺 Got remote stream!");
+            remoteStreamRef.current = stream;
             if (remoteVideoRef.current) {
               remoteVideoRef.current.srcObject = stream;
             }
@@ -1078,6 +1098,11 @@ function VideoCallContent() {
         // Show original text and pre-translated text
         setTheirLiveText(original || text);
         setTheirLiveTranslation(text);
+
+        // Feed to voice dubbing if enabled (additive — subtitles still show)
+        if (dubbingEnabledRef.current && original && from) {
+          processDubRef.current(original, from, userLang);
+        }
 
         // Speak the translation
         speakText(text, userLang);
@@ -1268,6 +1293,7 @@ function VideoCallContent() {
 
   const endCall = () => {
     stopListening();
+    cleanupDubbing();
     cyrano.deactivate();
     setCyranoOpen(false);
     setCyranoPhrase("");
@@ -1927,6 +1953,40 @@ function VideoCallContent() {
 
       {/* Controls - Mobile optimized with flex wrap */}
       <div className="bg-black/80 backdrop-blur-xl border-t border-white/10 px-2 md:px-4 py-3 md:py-4 safe-area-bottom">
+        {/* Voice dubbing status */}
+        {dubbingState.isEnabled && dubbingState.phase !== "idle" && (
+          <div className="flex items-center justify-center gap-2 mb-3 pb-3 border-b border-white/10">
+            {dubbingState.phase === "sampling" && (
+              <>
+                <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                <span className="text-zinc-400 text-xs">
+                  Learning voice {dubbingState.samplingProgress}%...
+                </span>
+              </>
+            )}
+            {dubbingState.phase === "cloning" && (
+              <>
+                <div className="w-3 h-3 rounded-full border border-zinc-400 border-t-transparent animate-spin" />
+                <span className="text-zinc-400 text-xs">Creating voice clone...</span>
+              </>
+            )}
+            {dubbingState.phase === "ready" && (
+              <>
+                <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                <span className="text-zinc-400 text-xs">
+                  Voice dubbing active
+                  {dubbingState.isPlaying && " · Speaking..."}
+                </span>
+              </>
+            )}
+            {dubbingState.phase === "unavailable" && (
+              <>
+                <div className="w-1.5 h-1.5 rounded-full bg-zinc-500" />
+                <span className="text-zinc-500 text-xs">Voice dubbing unavailable</span>
+              </>
+            )}
+          </div>
+        )}
         <div className="flex items-center justify-center gap-3 md:gap-4 flex-wrap">
           <button
             onClick={toggleMute}
@@ -2006,6 +2066,50 @@ function VideoCallContent() {
               <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
             )}
           </button>
+
+          {/* Voice Dubbing Toggle */}
+          {isConnected && hasRemoteStream && (
+            <button
+              onClick={() => dubbingState.isEnabled ? disableDubbing() : enableDubbing()}
+              className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center text-lg md:text-xl transition-all relative ${
+                dubbingState.isEnabled
+                  ? dubbingState.phase === "ready"
+                    ? "bg-green-600 text-white"
+                    : dubbingState.phase === "unavailable"
+                      ? "bg-zinc-800 text-zinc-500"
+                      : "bg-amber-600 text-white"
+                  : "bg-white/10 text-white hover:bg-white/20"
+              }`}
+              title={
+                dubbingState.phase === "sampling"
+                  ? `Learning voice... ${dubbingState.samplingProgress}%`
+                  : dubbingState.phase === "cloning"
+                    ? "Creating voice clone..."
+                    : dubbingState.phase === "ready"
+                      ? "Voice dubbing active"
+                      : dubbingState.phase === "unavailable"
+                        ? "Voice dubbing unavailable"
+                        : "Enable voice dubbing"
+              }
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
+              </svg>
+              {dubbingState.phase === "sampling" && (
+                <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-400 flex items-center justify-center">
+                  <div className="w-2 h-2 rounded-full bg-amber-800 animate-ping" />
+                </div>
+              )}
+              {dubbingState.phase === "cloning" && (
+                <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-blue-400">
+                  <div className="w-4 h-4 rounded-full border-2 border-blue-800 border-t-transparent animate-spin" />
+                </div>
+              )}
+              {dubbingState.phase === "ready" && (
+                <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-green-400 animate-pulse" />
+              )}
+            </button>
+          )}
 
           <button
             onClick={isListening ? stopListening : startListening}
