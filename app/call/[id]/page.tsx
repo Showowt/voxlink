@@ -600,6 +600,7 @@ function VideoCallContent() {
   const [hasPartner, setHasPartner] = useState(false);
   const [hasRemoteStream, setHasRemoteStream] = useState(false);
   const [partnerName, setPartnerName] = useState("");
+  const partnerDeviceIdRef = useRef<string>("");
 
   // Media state
   const [isMuted, setIsMuted] = useState(false);
@@ -913,6 +914,11 @@ function VideoCallContent() {
             setPartnerName(name);
             setHasPartner(true);
           },
+          onPartnerInfo: (info) => {
+            if (!mountedRef.current) return;
+            if (info.deviceId) partnerDeviceIdRef.current = info.deviceId;
+            if (info.lang) setPartnerLang(info.lang);
+          },
           onPartnerLeft: () => {
             if (!mountedRef.current) return;
             console.log("👋 Partner left");
@@ -946,6 +952,7 @@ function VideoCallContent() {
           userName,
           "video",
           localStream,
+          { deviceId: getDeviceId(), lang: userLang },
         );
 
         if (!success && mountedRef.current) {
@@ -1293,6 +1300,20 @@ function VideoCallContent() {
           transcript: transcript.map((t) => ({ text: t.original, language: t.speaker === "me" ? userLang : (partnerLang || expectedPartnerLang) })),
           conversationId: roomCode,
           durationSeconds: callDuration,
+        }),
+      }).catch(() => {});
+    }
+
+    // Save contact (fire and forget)
+    if (partnerDeviceIdRef.current && partnerName) {
+      fetch("/api/contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ownerDeviceId: getDeviceId(),
+          contactDeviceId: partnerDeviceIdRef.current,
+          displayName: partnerName,
+          language: partnerLang || expectedPartnerLang,
         }),
       }).catch(() => {});
     }

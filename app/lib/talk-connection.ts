@@ -28,10 +28,17 @@ export interface TalkMessage {
   messageId?: string;
 }
 
+export interface TalkPartnerInfo {
+  name: string;
+  lang?: string;
+  deviceId?: string;
+}
+
 export interface TalkConnectionCallbacks {
   onStatusChange?: (status: TalkConnectionStatus, message?: string) => void;
   onMessage?: (message: TalkMessage) => void;
   onPartnerConnected?: (name: string, lang?: string) => void;
+  onPartnerInfo?: (info: TalkPartnerInfo) => void;
   onPartnerDisconnected?: () => void;
 }
 
@@ -67,6 +74,7 @@ export class TalkConnection {
   private _partnerLang: string = "";
   private _userName: string = "";
   private _userLang: string = "";
+  private _deviceId: string = "";
   private roomId: string = "";
 
   private callbacks: TalkConnectionCallbacks = {};
@@ -104,10 +112,12 @@ export class TalkConnection {
     isHost: boolean,
     userName: string,
     userLang: string = "en",
+    deviceId: string = "",
   ): Promise<boolean> {
     this._isHost = isHost;
     this._userName = userName;
     this._userLang = userLang;
+    this._deviceId = deviceId;
     this.roomId = roomId.toUpperCase(); // Normalize to uppercase
     this.isDestroyed = false;
 
@@ -401,6 +411,7 @@ export class TalkConnection {
       data: {
         name: this._userName,
         lang: this._userLang,
+        deviceId: this._deviceId,
         role: this._isHost ? "host" : "guest",
       },
     });
@@ -449,11 +460,13 @@ export class TalkConnection {
   private handlePresence(presenceData: Record<string, unknown>): void {
     const name = String(presenceData.name || "Partner");
     const lang = String(presenceData.lang || "");
+    const deviceId = presenceData.deviceId ? String(presenceData.deviceId) : undefined;
     console.log("[Entrevoz] Partner presence:", name, "lang:", lang);
 
     this._partnerName = name;
     this._partnerLang = lang;
     this.callbacks.onPartnerConnected?.(name, lang);
+    this.callbacks.onPartnerInfo?.({ name, lang: lang || undefined, deviceId });
 
     // Send presence back if we haven't yet
     this.sendPresence();

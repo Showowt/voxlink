@@ -20,6 +20,7 @@ import {
 } from "../../components/ErrorScreens";
 import ReconnectingOverlay from "../../components/ReconnectingOverlay";
 import { useBrowserSupport } from "../../lib/browser-support";
+import { getDeviceId } from "@/app/lib/language-os/device-id";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // VOXXO TALK MODE - FaceTime-Quality Live Translation
@@ -126,6 +127,7 @@ function TalkContent() {
   const isHandsFreeRef = useRef(false);
   // Partner language ref - keeps current value accessible in callbacks
   const partnerLangRef = useRef<string | null>(null);
+  const partnerDeviceIdRef = useRef<string>("");
   const historyEndRef = useRef<HTMLDivElement>(null);
   const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const liveTextTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -459,6 +461,10 @@ function TalkContent() {
         }
         vibrate([100, 50, 100]);
       },
+      onPartnerInfo: (info) => {
+        if (!mountedRef.current) return;
+        if (info.deviceId) partnerDeviceIdRef.current = info.deviceId;
+      },
 
       onPartnerDisconnected: () => {
         if (!mountedRef.current) return;
@@ -470,7 +476,7 @@ function TalkContent() {
     });
 
     connectionRef.current = connection;
-    connection.initialize(roomId, isHost, userName, userLang);
+    connection.initialize(roomId, isHost, userName, userLang, getDeviceId());
 
     return () => {
       mountedRef.current = false;
@@ -831,9 +837,22 @@ function TalkContent() {
 
   const endSession = useCallback(() => {
     stopListening();
+    // Save contact (fire and forget)
+    if (partnerDeviceIdRef.current && partnerName) {
+      fetch("/api/contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ownerDeviceId: getDeviceId(),
+          contactDeviceId: partnerDeviceIdRef.current,
+          displayName: partnerName,
+          language: partnerLang || defaultTargetLang,
+        }),
+      }).catch(() => {});
+    }
     connectionRef.current?.disconnect();
     router.push("/");
-  }, [stopListening, router]);
+  }, [stopListening, router, partnerName, partnerLang, defaultTargetLang]);
 
   const speak = useCallback((text: string, lang: string) => {
     speechSynthesis.cancel();

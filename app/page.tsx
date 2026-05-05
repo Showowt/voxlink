@@ -1071,7 +1071,7 @@ function HomeContent() {
   const [joinCode, setJoinCode] = useState("");
   const [activeCategory, setActiveCategory] = useState<"translate" | "connect" | "tools">("translate");
   const [activeTab, setActiveTab] = useState<
-    "video" | "talk" | "voxnote" | "voxtype" | "proximity" | "wingman" | "practice" | "group"
+    "video" | "talk" | "voxnote" | "voxtype" | "proximity" | "wingman" | "practice" | "group" | "contacts"
   >("voxtype");
   const [mode, setMode] = useState<"start" | "join">("start");
   const [isJoining, setIsJoining] = useState(false);
@@ -1314,6 +1314,7 @@ function HomeContent() {
       { id: "video" as const, label: "Video Call", desc: "1:1 video", icon: "📹" },
       { id: "talk" as const, label: "Talk", desc: "Text chat", icon: "💬" },
       { id: "group" as const, label: "Group", desc: "2-4 people", icon: "👥", isNew: true },
+      { id: "contacts" as const, label: "Contacts", desc: "Favorites", icon: "⭐" },
     ],
     tools: [
       { id: "wingman" as const, label: "Wingman", desc: "AI earpiece", icon: "🎧" },
@@ -1503,6 +1504,42 @@ function HomeContent() {
                   aria-label="Start Group Call"
                 >
                   Start Group Call
+                </button>
+              </div>
+            ) : activeTab === "contacts" ? (
+              <div className="space-y-5 text-center">
+                <div className="relative w-20 h-20 mx-auto">
+                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 backdrop-blur-sm border border-amber-500/20" />
+                  <div className="relative w-full h-full rounded-2xl flex items-center justify-center">
+                    <span className="text-4xl">⭐</span>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white tracking-tight">Contacts</h3>
+                  <p className="text-white/50 text-sm mt-1.5 max-w-[260px] mx-auto leading-relaxed">
+                    Your favorites and recent calls. Reconnect instantly with one tap.
+                  </p>
+                </div>
+                <div className="space-y-2.5 text-left">
+                  <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                    <span className="text-lg">⭐</span>
+                    <span className="text-white/70 text-sm">Pin favorites for instant access</span>
+                  </div>
+                  <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                    <span className="text-lg">📞</span>
+                    <span className="text-white/70 text-sm">Auto-saved after every call</span>
+                  </div>
+                  <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                    <span className="text-lg">↗</span>
+                    <span className="text-white/70 text-sm">Share invite links via WhatsApp</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => router.push("/contacts")}
+                  className="w-full py-4 min-h-[52px] bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 rounded-2xl text-white font-semibold text-base transition-all duration-200 shadow-xl shadow-amber-500/20 hover:-translate-y-0.5 active:scale-[0.98]"
+                  aria-label="View Contacts"
+                >
+                  View Contacts
                 </button>
               </div>
             ) : activeTab === "practice" ? (

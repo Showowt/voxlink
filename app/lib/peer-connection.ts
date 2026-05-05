@@ -58,11 +58,18 @@ export interface ConnectionQuality {
   timestamp: number;
 }
 
+export interface PartnerInfo {
+  name: string;
+  deviceId?: string;
+  lang?: string;
+}
+
 export interface PeerCallbacks {
   onStatusChange?: (status: ConnectionStatus, message?: string) => void;
   onRemoteStream?: (stream: MediaStream) => void;
   onDataMessage?: (data: unknown) => void;
   onPartnerJoined?: (name: string) => void;
+  onPartnerInfo?: (info: PartnerInfo) => void;
   onPartnerLeft?: () => void;
   onError?: (error: string) => void;
   onIceStateChange?: (state: IceConnectionState) => void;
@@ -114,6 +121,8 @@ export class PeerConnection {
   private roomId: string = "";
   private isHost: boolean = false;
   private userName: string = "";
+  private deviceId: string = "";
+  private lang: string = "";
   private myPeerId: string = "";
   private hostPeerId: string = "";
 
@@ -258,10 +267,13 @@ export class PeerConnection {
     userName: string,
     mode: ConnectionMode,
     localStream?: MediaStream,
+    options?: { deviceId?: string; lang?: string },
   ): Promise<boolean> {
     this.roomId = roomId.toUpperCase(); // Normalize to uppercase
     this.isHost = isHost;
     this.userName = userName;
+    this.deviceId = options?.deviceId || "";
+    this.lang = options?.lang || "";
     this.mode = mode;
     this.localStream = localStream || null;
     this.isDestroyed = false;
@@ -585,7 +597,7 @@ export class PeerConnection {
       this.lastPongTime = Date.now();
 
       // Send hello
-      this.send({ type: "hello", name: this.userName });
+      this.send({ type: "hello", name: this.userName, deviceId: this.deviceId, lang: this.lang });
 
       // Start keep-alive
       this.startKeepAlive();
@@ -650,11 +662,14 @@ export class PeerConnection {
     // Hello message
     if (msg.type === "hello") {
       const name = String(msg.name || "Partner");
+      const partnerDeviceId = msg.deviceId ? String(msg.deviceId) : undefined;
+      const partnerLang = msg.lang ? String(msg.lang) : undefined;
       console.log("[Entrevoz Video] Partner joined:", name);
       this.callbacks.onPartnerJoined?.(name);
+      this.callbacks.onPartnerInfo?.({ name, deviceId: partnerDeviceId, lang: partnerLang });
 
       // Send hello back
-      this.send({ type: "hello", name: this.userName });
+      this.send({ type: "hello", name: this.userName, deviceId: this.deviceId, lang: this.lang });
       return;
     }
 
