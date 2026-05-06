@@ -1,4 +1,5 @@
 import Peer, { DataConnection } from "peerjs";
+import { RoomSignal } from "./room-signal";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ENTREVOZ TALK CONNECTION v2.0 - Bulletproof Face-to-Face Mode
@@ -85,6 +86,10 @@ export class TalkConnection {
   private connectionAttemptInterval: NodeJS.Timeout | null = null;
   private isDestroyed = false;
 
+  // Supabase room signaling
+  private roomSignal: RoomSignal | null = null;
+  private signalingHealthCheck: NodeJS.Timeout | null = null;
+
   // Track connection health
   private lastPongTime: number = Date.now();
   private connectionHealthy: boolean = false;
@@ -121,15 +126,12 @@ export class TalkConnection {
     this.roomId = roomId.toUpperCase(); // Normalize to uppercase
     this.isDestroyed = false;
 
-    // Generate peer IDs
-    // Host: stable ID so guests can find them
-    // Guest: unique ID with timestamp
+    // Deterministic host ID (fast path for fresh rooms)
     this._hostPeerId = `entrevoz-${this.roomId}-host`;
 
     if (isHost) {
       this._peerId = this._hostPeerId;
     } else {
-      // Guest needs unique ID to avoid conflicts
       const uniqueId = Math.random().toString(36).substring(2, 8);
       this._peerId = `entrevoz-${this.roomId}-guest-${uniqueId}`;
     }
@@ -137,23 +139,21 @@ export class TalkConnection {
     this.setStatus("initializing", "Connecting to server...");
 
     try {
-      // Fetch ICE servers (TURN credentials from server)
       const iceServers = await getIceServers();
 
-      // PeerJS signaling servers with fallback
       const servers = [
         { host: "0.peerjs.com", port: 443, secure: true, path: "/" },
       ];
 
       let connected = false;
       let lastError: Error | null = null;
-      const maxIdRetries = isHost ? 6 : 1;
+      const maxIdRetries = isHost ? 3 : 1;
 
       for (let idAttempt = 0; idAttempt < maxIdRetries && !connected; idAttempt++) {
         if (idAttempt > 0) {
-          console.log(`[Entrevoz] Host ID taken, waiting 3s before retry ${idAttempt + 1}/${maxIdRetries}...`);
+          console.log(`[Entrevoz] Host ID taken, waiting 2s before retry ${idAttempt + 1}/${maxIdRetries}...`);
           this.setStatus("initializing", "Reconnecting...");
-          await new Promise((r) => setTimeout(r, 3000));
+          await new Promise((r) => setTimeout(r, 2000));
           if (this.isDestroyed) return false;
         }
 
@@ -167,10 +167,7 @@ export class TalkConnection {
               port: server.port,
               secure: server.secure,
               path: server.path,
-              config: {
-                iceServers,
-                iceCandidatePoolSize: 10,
-              },
+              config: { iceServers, iceCandidatePoolSize: 10 },
               debug: 1,
             });
 
@@ -188,9 +185,39 @@ export class TalkConnection {
               this.peer = null;
             }
 
-            // If unavailable-id on host, break server loop to retry with delay
             if (isHost && (errType === "unavailable-id" || errMsg.includes("already in use"))) {
               break;
+            }
+          }
+        }
+      }
+
+      // HOST FALLBACK: Random ID if deterministic ID was stale
+      if (!connected && isHost) {
+        const randomId = Math.random().toString(36).substring(2, 8);
+        this._peerId = `ev-${this.roomId}-th-${randomId}`;
+        console.log("[Entrevoz] Stale ID — switching to random:", this._peerId);
+        this.setStatus("initializing", "Reconnecting...");
+
+        for (let i = 0; i < servers.length && !connected; i++) {
+          const server = servers[i];
+          try {
+            this.peer = new Peer(this._peerId, {
+              host: server.host,
+              port: server.port,
+              secure: server.secure,
+              path: server.path,
+              config: { iceServers, iceCandidatePoolSize: 10 },
+              debug: 1,
+            });
+            await this.waitForPeerOpen();
+            console.log("[Entrevoz] Connected with random ID:", this._peerId);
+            connected = true;
+          } catch (err) {
+            lastError = err instanceof Error ? err : new Error(String(err));
+            if (this.peer) {
+              try { this.peer.destroy(); } catch { /* ignore */ }
+              this.peer = null;
             }
           }
         }
@@ -202,8 +229,31 @@ export class TalkConnection {
 
       this.setupPeerListeners();
 
+      // Supabase room signaling — broadcast our peer ID
+      this.roomSignal = new RoomSignal();
+      await this.roomSignal.start(
+        this.roomId,
+        isHost ? "host" : "guest",
+        this._peerId,
+        {
+          onHostPeerId: (peerId) => {
+            if (this._isHost || this.isDestroyed) return;
+            if (peerId !== this._hostPeerId) {
+              console.log("[Entrevoz] Supabase: host peer ID updated:", peerId);
+              this._hostPeerId = peerId;
+            }
+            if (this._status !== "connected") {
+              this.startConnectionAttempts();
+            }
+          },
+          onGuestPeerId: () => { /* host sees guest — logged in RoomSignal */ },
+        },
+      );
+
       if (isHost) {
         this.setStatus("waiting", "Share the link - waiting for partner...");
+        // Self-healing: rebuild PeerJS if signaling drops
+        this.startSignalingHealthCheck(iceServers, servers[0]);
       } else {
         this.setStatus("connecting", "Looking for host...");
         this.startConnectionAttempts();
@@ -611,6 +661,52 @@ export class TalkConnection {
     this.callbacks.onStatusChange?.(status, message);
   }
 
+  // Self-healing: monitor PeerJS signaling and rebuild if it drops
+  private startSignalingHealthCheck(
+    iceServers: RTCIceServer[],
+    server: { host: string; port: number; secure: boolean; path: string },
+  ): void {
+    if (this.signalingHealthCheck) clearInterval(this.signalingHealthCheck);
+
+    this.signalingHealthCheck = setInterval(async () => {
+      if (this.isDestroyed) {
+        if (this.signalingHealthCheck) clearInterval(this.signalingHealthCheck);
+        return;
+      }
+      if (this._status === "connected") return;
+
+      if (!this.peer || this.peer.destroyed || !this.peer.open) {
+        console.warn("[Entrevoz] PeerJS signaling dead — rebuilding...");
+        if (this.peer) {
+          try { this.peer.destroy(); } catch { /* ignore */ }
+          this.peer = null;
+        }
+
+        const randomId = Math.random().toString(36).substring(2, 8);
+        this._peerId = this._isHost
+          ? `ev-${this.roomId}-th-${randomId}`
+          : `ev-${this.roomId}-tg-${randomId}`;
+
+        try {
+          this.peer = new Peer(this._peerId, {
+            host: server.host,
+            port: server.port,
+            secure: server.secure,
+            path: server.path,
+            config: { iceServers, iceCandidatePoolSize: 10 },
+            debug: 1,
+          });
+          await this.waitForPeerOpen();
+          this.setupPeerListeners();
+          this.roomSignal?.updatePeerId(this._peerId);
+          console.log("[Entrevoz] Peer rebuilt:", this._peerId);
+        } catch (err) {
+          console.error("[Entrevoz] Rebuild failed:", err);
+        }
+      }
+    }, 8000);
+  }
+
   disconnect(): void {
     console.log("[Entrevoz] Disconnecting...");
     this.isDestroyed = true;
@@ -621,6 +717,16 @@ export class TalkConnection {
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
+    }
+
+    if (this.signalingHealthCheck) {
+      clearInterval(this.signalingHealthCheck);
+      this.signalingHealthCheck = null;
+    }
+
+    if (this.roomSignal) {
+      this.roomSignal.stop();
+      this.roomSignal = null;
     }
 
     this.cleanupDataConnection();

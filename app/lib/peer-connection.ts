@@ -1,4 +1,5 @@
 import Peer, { MediaConnection, DataConnection } from "peerjs";
+import { RoomSignal } from "./room-signal";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // NETWORK CONNECTION TYPE (Navigator.connection API)
@@ -153,6 +154,11 @@ export class PeerConnection {
     timestamp: number;
   } | null = null;
 
+  // Supabase room signaling — peer discovery without PeerJS signaling server
+  private roomSignal: RoomSignal | null = null;
+  private hasSupabaseSignaling: boolean = false;
+  private signalingHealthCheck: NodeJS.Timeout | null = null;
+
   // Network change detection
   private networkChangeHandler: (() => void) | null = null;
   private onlineHandler: (() => void) | null = null;
@@ -286,7 +292,7 @@ export class PeerConnection {
     this.isDestroyed = false;
     this.connectionAttempts = 0;
 
-    // Generate peer IDs - deterministic for host, unique for guest
+    // Deterministic host ID (fast path for fresh rooms)
     this.hostPeerId = `entrevoz-video-${this.roomId}-host`;
 
     if (isHost) {
@@ -302,25 +308,25 @@ export class PeerConnection {
       // Fetch ICE servers (TURN credentials from server)
       const iceServers = await getIceServers();
 
-      // Try signaling servers with fallback
-      // For host: retry same ID after delay if unavailable (stale session on PeerJS cloud)
+      // ── PHASE 1: Register on PeerJS ──────────────────────────────────────
+      // Host tries deterministic ID first (fast), then random ID (always works).
+      // Guest always uses random ID (no stale-ID risk).
       let connected = false;
       let lastError: Error | null = null;
-      const maxIdRetries = isHost ? 6 : 1; // Host retries up to 6 times (18s total) for stale ID
+      const maxIdRetries = isHost ? 3 : 1; // Fewer retries — random fallback catches the rest
 
       for (let idAttempt = 0; idAttempt < maxIdRetries && !connected; idAttempt++) {
         if (idAttempt > 0) {
-          // Wait for PeerJS cloud to release the stale session
-          console.log(`[Entrevoz Video] Host ID taken, waiting 3s before retry ${idAttempt + 1}/${maxIdRetries}...`);
+          console.log(`[Entrevoz Video] Host ID taken, waiting 2s before retry ${idAttempt + 1}/${maxIdRetries}...`);
           this.setStatus("initializing", "Reconnecting to server...");
-          await new Promise((r) => setTimeout(r, 3000));
+          await new Promise((r) => setTimeout(r, 2000));
           if (this.isDestroyed) return false;
         }
 
         for (let i = 0; i < PEERJS_SERVERS.length && !connected; i++) {
           const server = PEERJS_SERVERS[i];
           console.log(
-            `[Entrevoz Video] Trying signaling server ${i + 1}/${PEERJS_SERVERS.length}: ${server.host}`,
+            `[Entrevoz Video] Trying ${server.host} as: ${this.myPeerId}`,
           );
 
           try {
@@ -332,9 +338,9 @@ export class PeerConnection {
               config: {
                 iceServers,
                 iceCandidatePoolSize: 10,
-                iceTransportPolicy: "all", // Try direct first, fall back to relay
-                bundlePolicy: "max-bundle", // Multiplex all media over single transport
-                rtcpMuxPolicy: "require", // Reduce port usage
+                iceTransportPolicy: "all",
+                bundlePolicy: "max-bundle",
+                rtcpMuxPolicy: "require",
               },
               debug: 1,
             });
@@ -354,19 +360,50 @@ export class PeerConnection {
             );
             lastError = err instanceof Error ? err : new Error(String(err));
 
-            // Clean up failed peer
             if (this.peer) {
-              try {
-                this.peer.destroy();
-              } catch {
-                // Ignore cleanup errors
-              }
+              try { this.peer.destroy(); } catch { /* ignore */ }
               this.peer = null;
             }
 
-            // If unavailable-id on host, break server loop to retry with delay
             if (isHost && (errType === "unavailable-id" || errMsg.includes("already in use"))) {
               break;
+            }
+          }
+        }
+      }
+
+      // ── HOST FALLBACK: Random ID if deterministic ID was stale ──────────
+      if (!connected && isHost) {
+        const randomId = Math.random().toString(36).substring(2, 8);
+        this.myPeerId = `ev-${this.roomId}-h-${randomId}`;
+        console.log("[Entrevoz Video] Stale ID — switching to random:", this.myPeerId);
+        this.setStatus("initializing", "Reconnecting...");
+
+        for (let i = 0; i < PEERJS_SERVERS.length && !connected; i++) {
+          const server = PEERJS_SERVERS[i];
+          try {
+            this.peer = new Peer(this.myPeerId, {
+              host: server.host,
+              port: server.port,
+              secure: server.secure,
+              path: server.path,
+              config: {
+                iceServers,
+                iceCandidatePoolSize: 10,
+                iceTransportPolicy: "all",
+                bundlePolicy: "max-bundle",
+                rtcpMuxPolicy: "require",
+              },
+              debug: 1,
+            });
+            await this.waitForPeerOpen();
+            console.log("[Entrevoz Video] Connected with random ID:", this.myPeerId);
+            connected = true;
+          } catch (err) {
+            lastError = err instanceof Error ? err : new Error(String(err));
+            if (this.peer) {
+              try { this.peer.destroy(); } catch { /* ignore */ }
+              this.peer = null;
             }
           }
         }
@@ -378,10 +415,42 @@ export class PeerConnection {
 
       this.setupPeerListeners();
 
+      // ── PHASE 2: Supabase room signaling ─────────────────────────────────
+      // Broadcast our peer ID via Supabase so the other side can find us
+      // even if PeerJS signaling is slow or dropped our registration.
+      this.roomSignal = new RoomSignal();
+      this.hasSupabaseSignaling = await this.roomSignal.start(
+        this.roomId,
+        isHost ? "host" : "guest",
+        this.myPeerId,
+        {
+          onHostPeerId: (peerId) => {
+            if (this.isHost || this.isDestroyed) return;
+            // Guest discovered host's actual peer ID
+            if (peerId !== this.hostPeerId) {
+              console.log("[Entrevoz Video] Supabase: host peer ID updated:", peerId);
+              this.hostPeerId = peerId;
+              this.connectionAttempts = 0; // Reset counter for new target
+            }
+            // Start or re-kick connection attempts
+            if (this._status !== "connected") {
+              this.startConnectionAttempts();
+            }
+          },
+          onGuestPeerId: (_peerId) => {
+            // Host sees guest — logged for debugging
+          },
+        },
+      );
+
       if (isHost) {
         this.setStatus("waiting", "Waiting for partner...");
+        // Monitor PeerJS signaling health — rebuild if it dies
+        this.startSignalingHealthCheck(iceServers);
       } else {
         this.setStatus("connecting", "Looking for host...");
+        // Start connection attempts immediately (uses deterministic ID).
+        // If Supabase signal arrives with a different ID, attempts will switch target.
         this.startConnectionAttempts();
       }
 
@@ -1302,6 +1371,79 @@ export class PeerConnection {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // SIGNALING HEALTH CHECK — Detect silent PeerJS drops, rebuild automatically
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  private startSignalingHealthCheck(iceServers: RTCIceServer[]): void {
+    if (this.signalingHealthCheck) clearInterval(this.signalingHealthCheck);
+
+    this.signalingHealthCheck = setInterval(async () => {
+      if (this.isDestroyed) {
+        this.stopSignalingHealthCheck();
+        return;
+      }
+      // Don't rebuild if we're already connected with a partner
+      if (this._status === "connected") return;
+
+      // Check if PeerJS signaling is still alive
+      if (!this.peer || this.peer.destroyed || !this.peer.open) {
+        console.warn("[Entrevoz Video] PeerJS signaling dead — rebuilding...");
+        await this.rebuildPeer(iceServers);
+      }
+    }, 8000); // Check every 8 seconds
+  }
+
+  private stopSignalingHealthCheck(): void {
+    if (this.signalingHealthCheck) {
+      clearInterval(this.signalingHealthCheck);
+      this.signalingHealthCheck = null;
+    }
+  }
+
+  private async rebuildPeer(iceServers: RTCIceServer[]): Promise<void> {
+    // Destroy old peer
+    if (this.peer) {
+      try { this.peer.destroy(); } catch { /* ignore */ }
+      this.peer = null;
+    }
+
+    // Generate new random ID
+    const randomId = Math.random().toString(36).substring(2, 8);
+    this.myPeerId = this.isHost
+      ? `ev-${this.roomId}-h-${randomId}`
+      : `ev-${this.roomId}-g-${randomId}`;
+
+    console.log("[Entrevoz Video] Rebuilding peer as:", this.myPeerId);
+
+    try {
+      this.peer = new Peer(this.myPeerId, {
+        host: PEERJS_SERVERS[0].host,
+        port: PEERJS_SERVERS[0].port,
+        secure: PEERJS_SERVERS[0].secure,
+        path: PEERJS_SERVERS[0].path,
+        config: {
+          iceServers,
+          iceCandidatePoolSize: 10,
+          iceTransportPolicy: "all",
+          bundlePolicy: "max-bundle",
+          rtcpMuxPolicy: "require",
+        },
+        debug: 1,
+      });
+
+      await this.waitForPeerOpen();
+      this.setupPeerListeners();
+
+      // Broadcast new ID via Supabase
+      this.roomSignal?.updatePeerId(this.myPeerId);
+
+      console.log("[Entrevoz Video] Peer rebuilt successfully:", this.myPeerId);
+    } catch (err) {
+      console.error("[Entrevoz Video] Rebuild failed:", err);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // PUBLIC METHODS
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1329,6 +1471,13 @@ export class PeerConnection {
     this.clearVideoRetryTimeout();
     this.clearStreamTimeout();
     this.removeNetworkListeners();
+    this.stopSignalingHealthCheck();
+
+    // Stop Supabase room signaling
+    if (this.roomSignal) {
+      this.roomSignal.stop();
+      this.roomSignal = null;
+    }
 
     // Stop local media tracks (camera/microphone)
     if (this.localStream) {
