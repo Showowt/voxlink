@@ -2013,10 +2013,10 @@ function VideoCallContent() {
                 </span>
               </>
             )}
-            {dubbingState.phase === "unavailable" && (
+            {dubbingState.phase === "error" && (
               <>
                 <div className="w-1.5 h-1.5 rounded-full bg-zinc-500" />
-                <span className="text-zinc-500 text-xs">Voice dubbing unavailable</span>
+                <span className="text-zinc-500 text-xs">Voice dubbing error</span>
               </>
             )}
           </div>
@@ -2109,7 +2109,7 @@ function VideoCallContent() {
                 dubbingState.isEnabled
                   ? dubbingState.phase === "ready"
                     ? "bg-green-600 text-white"
-                    : dubbingState.phase === "unavailable"
+                    : dubbingState.phase === "error"
                       ? "bg-zinc-800 text-zinc-500"
                       : "bg-amber-600 text-white"
                   : "bg-white/10 text-white hover:bg-white/20"
@@ -2121,8 +2121,8 @@ function VideoCallContent() {
                     ? "Creating voice clone..."
                     : dubbingState.phase === "ready"
                       ? "Voice dubbing active"
-                      : dubbingState.phase === "unavailable"
-                        ? "Voice dubbing unavailable"
+                      : dubbingState.phase === "error"
+                        ? "Voice dubbing error"
                         : "Enable voice dubbing"
               }
             >

@@ -65,27 +65,32 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Skip TTS if text is empty after translation
   if (!translatedText.trim()) {
     return NextResponse.json({ error: "Empty translation" }, { status: 400 });
   }
 
-  // Step 2: ElevenLabs TTS with Flash model — maximum speed, minimum latency
+  // Step 2: ElevenLabs TTS — Multilingual v2 for quality, Flash for speed
+  // Use multilingual model for non-English target languages (much better pronunciation)
+  // Fall back to flash for English (speed matters more than accent matching)
+  const isEnglish = targetLang.startsWith("en");
+  const modelId = isEnglish ? "eleven_flash_v2_5" : "eleven_multilingual_v2";
+
   const ttsPayload = {
     text: translatedText,
-    model_id: "eleven_flash_v2_5",
+    model_id: modelId,
     voice_settings: {
-      stability: 0.3,
-      similarity_boost: 0.85,
-      style: 0.0,
+      stability: 0.5, // Higher = more consistent, less robotic
+      similarity_boost: 0.95, // Max similarity to cloned voice
+      style: 0.15, // Slight expressiveness
       use_speaker_boost: true,
     },
   };
 
   try {
-    // Use optimize_streaming_latency=4 (max) and smaller audio format for speed
+    // optimize_streaming_latency: 3 = good balance of speed + quality
+    // output_format: mp3_44100_64 = good quality at reasonable size
     const ttsRes = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}/stream?optimize_streaming_latency=4&output_format=mp3_22050_32`,
+      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}/stream?optimize_streaming_latency=3&output_format=mp3_44100_64`,
       {
         method: "POST",
         headers: {
@@ -110,7 +115,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Stream the audio back
     const audioArrayBuffer = await ttsRes.arrayBuffer();
     const audioBase64 = Buffer.from(audioArrayBuffer).toString("base64");
 

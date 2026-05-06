@@ -77,13 +77,16 @@ export async function POST(req: NextRequest) {
   // Decode audio
   const audioBuffer = Buffer.from(audioBase64, "base64");
 
-  // Build multipart form for ElevenLabs
+  // Build multipart form for ElevenLabs Instant Voice Clone
   const formData = new FormData();
+  const ext = mimeType.includes("mp4") ? "mp4" : "webm";
   const audioBlob = new Blob([audioBuffer], { type: mimeType });
-  formData.append("files", audioBlob, "voice_sample.webm");
+  formData.append("files", audioBlob, `voice_sample.${ext}`);
   formData.append("name", `entrevoz-${Date.now()}`);
   formData.append("description", "Entrevoz real-time voice clone");
   formData.append("remove_background_noise", "true");
+  // Labels help ElevenLabs optimize the clone
+  formData.append("labels", JSON.stringify({ use_case: "real_time_dubbing", quality: "high" }));
 
   try {
     const cloneRes = await fetch("https://api.elevenlabs.io/v1/voices/add", {
@@ -156,7 +159,7 @@ export async function DELETE(req: NextRequest) {
       headers: { "xi-api-key": apiKey },
     });
   } catch {
-    /* non-critical — ElevenLabs auto-expires clones */
+    /* non-critical */
   }
 
   return NextResponse.json({ success: true });

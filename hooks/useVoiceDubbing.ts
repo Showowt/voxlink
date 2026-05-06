@@ -6,16 +6,15 @@ import { useState, useRef, useCallback, useEffect } from "react";
 
 export type DubbingPhase =
   | "idle" // feature off (default)
-  | "sampling" // collecting first 15s of audio for voice fingerprint
+  | "sampling" // collecting voice audio for fingerprint
   | "cloning" // POST to ElevenLabs to create voice clone
   | "ready" // voice clone ready, dubbing active
-  | "unavailable" // ElevenLabs not configured or clone failed — subtitle fallback
   | "error"; // unexpected failure
 
 export interface VoiceDubbingState {
   phase: DubbingPhase;
   voiceId: string | null;
-  samplingProgress: number; // 0-100% (0-15 seconds)
+  samplingProgress: number; // 0-100%
   isPlaying: boolean;
   isEnabled: boolean;
   lastTranslation: string;
@@ -31,14 +30,17 @@ export interface UseVoiceDubbingReturn {
     targetLang: string,
   ) => void;
   cleanup: () => void;
-  isDubPlaying: boolean; // True when dub audio is actively playing — caller should mute partner
+  isDubPlaying: boolean;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const SAMPLE_DURATION_MS = 8000; // 8s of audio for voice clone (faster activation)
-const MIN_TEXT_LENGTH = 3; // Dub short phrases too
-const MAX_TEXT_LENGTH = 300; // ElevenLabs limit for flash model
+const SAMPLE_DURATION_MS = 15000; // 15s target for quality clone
+const SILENCE_EXTEND_MS = 10000; // Extend up to 10s extra if silence detected
+const MAX_SAMPLE_MS = 25000; // Absolute max sampling time
+const MIN_SPEECH_CHUNKS = 10; // Need at least 10 data chunks with audio (5s of speech)
+const MIN_TEXT_LENGTH = 3;
+const MAX_TEXT_LENGTH = 500; // Multilingual model handles longer text
 const DUB_GAIN = 2.5; // Loud dub volume (partner video is muted while playing)
 
 // Default ElevenLabs voices by language (fallback when clone fails)
@@ -75,18 +77,19 @@ export function useVoiceDubbing(
   // Refs — no re-renders
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const speechChunkCountRef = useRef(0); // Count chunks with actual audio data
   const samplingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const samplingStartRef = useRef<number>(0);
   const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
-  const audioQueueRef = useRef<string[]>([]); // base64 audio queue
+  const audioQueueRef = useRef<string[]>([]);
   const isPlayingRef = useRef(false);
   const voiceIdRef = useRef<string | null>(null);
   const targetLangRef = useRef(targetLang);
   const sessionKeyRef = useRef(`session-${Date.now()}`);
   const enabledRef = useRef(false);
-  const processingRef = useRef(false); // Prevent concurrent dub requests
+  const processingRef = useRef(false);
 
   // Keep targetLang ref in sync
   useEffect(() => {
@@ -101,7 +104,6 @@ export function useVoiceDubbing(
     }
     const ctx = audioContextRef.current;
 
-    // Resume if suspended (browser autoplay policy)
     if (ctx.state === "suspended") await ctx.resume();
 
     try {
@@ -128,7 +130,6 @@ export function useVoiceDubbing(
       source.onended = () => {
         isPlayingRef.current = false;
         setState((s) => ({ ...s, isPlaying: false }));
-        // Play next in queue
         if (audioQueueRef.current.length > 0) {
           const next = audioQueueRef.current.shift()!;
           playAudioBase64(next);
@@ -141,7 +142,7 @@ export function useVoiceDubbing(
     }
   }, []);
 
-  // ─── Voice sampling ──────────────────────────────────────────────────────
+  // ─── Voice sampling with silence detection ─────────────────────────────
 
   const stopSamplingAndClone = useCallback(
     async (mimeType: string) => {
@@ -150,14 +151,17 @@ export function useVoiceDubbing(
         recorder.stop();
       }
       if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+      if (samplingTimerRef.current) clearTimeout(samplingTimerRef.current);
 
-      // Give recorder 200ms to flush final data
-      await new Promise((r) => setTimeout(r, 200));
+      // Give recorder 300ms to flush final data
+      await new Promise((r) => setTimeout(r, 300));
 
       const chunks = audioChunksRef.current;
       if (chunks.length === 0) {
-        console.warn("[VoiceDub] No audio chunks collected");
-        setState((s) => ({ ...s, phase: "unavailable" }));
+        console.warn("[VoiceDub] No audio chunks collected, using default voice");
+        const defaultVoice = DEFAULT_VOICES[targetLangRef.current.split("-")[0]] || DEFAULT_VOICES.en;
+        voiceIdRef.current = defaultVoice;
+        setState((s) => ({ ...s, phase: "ready", voiceId: defaultVoice, samplingProgress: 100 }));
         return;
       }
 
@@ -191,7 +195,6 @@ export function useVoiceDubbing(
 
         if (!res.ok || data.fallback) {
           console.warn("[VoiceDub] Clone failed, using default voice");
-          // Fall back to a default ElevenLabs voice instead of disabling
           const defaultVoice = DEFAULT_VOICES[targetLangRef.current.split("-")[0]] || DEFAULT_VOICES.en;
           voiceIdRef.current = defaultVoice;
           setState((s) => ({ ...s, phase: "ready", voiceId: defaultVoice }));
@@ -200,9 +203,9 @@ export function useVoiceDubbing(
 
         voiceIdRef.current = data.voiceId;
         setState((s) => ({ ...s, phase: "ready", voiceId: data.voiceId }));
+        console.log("[VoiceDub] Voice clone created:", data.voiceId);
       } catch (e) {
         console.warn("[VoiceDub] Clone network error, using default voice:", e);
-        // Fall back to default voice on network error too
         const defaultVoice = DEFAULT_VOICES[targetLangRef.current.split("-")[0]] || DEFAULT_VOICES.en;
         voiceIdRef.current = defaultVoice;
         setState((s) => ({ ...s, phase: "ready", voiceId: defaultVoice }));
@@ -218,14 +221,15 @@ export function useVoiceDubbing(
         !MediaRecorder.isTypeSupported("audio/webm") &&
         !MediaRecorder.isTypeSupported("audio/mp4")
       ) {
-        console.warn(
-          "[VoiceDub] MediaRecorder not supported, falling back to subtitles",
-        );
-        setState((s) => ({ ...s, phase: "unavailable" }));
+        console.warn("[VoiceDub] MediaRecorder not supported");
+        const defaultVoice = DEFAULT_VOICES[targetLangRef.current.split("-")[0]] || DEFAULT_VOICES.en;
+        voiceIdRef.current = defaultVoice;
+        setState((s) => ({ ...s, phase: "ready", voiceId: defaultVoice, samplingProgress: 100 }));
         return;
       }
 
       audioChunksRef.current = [];
+      speechChunkCountRef.current = 0;
       samplingStartRef.current = Date.now();
 
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
@@ -235,22 +239,30 @@ export function useVoiceDubbing(
           : "audio/mp4";
 
       try {
-        // Only record audio track from remote stream
         const audioTracks = stream.getAudioTracks();
         if (audioTracks.length === 0) {
           console.warn("[VoiceDub] No audio tracks in remote stream");
-          setState((s) => ({ ...s, phase: "unavailable" }));
+          const defaultVoice = DEFAULT_VOICES[targetLangRef.current.split("-")[0]] || DEFAULT_VOICES.en;
+          voiceIdRef.current = defaultVoice;
+          setState((s) => ({ ...s, phase: "ready", voiceId: defaultVoice, samplingProgress: 100 }));
           return;
         }
+
         const audioStream = new MediaStream(audioTracks);
         const recorder = new MediaRecorder(audioStream, {
           mimeType,
-          audioBitsPerSecond: 128000,
+          audioBitsPerSecond: 192000, // Higher bitrate for better clone quality
         });
         mediaRecorderRef.current = recorder;
 
         recorder.ondataavailable = (e) => {
-          if (e.data.size > 0) audioChunksRef.current.push(e.data);
+          if (e.data.size > 0) {
+            audioChunksRef.current.push(e.data);
+            // Track chunks with meaningful audio (>500 bytes suggests speech, not silence)
+            if (e.data.size > 500) {
+              speechChunkCountRef.current++;
+            }
+          }
         };
 
         recorder.start(500); // Collect data every 500ms
@@ -260,20 +272,31 @@ export function useVoiceDubbing(
         // Progress indicator
         progressTimerRef.current = setInterval(() => {
           const elapsed = Date.now() - samplingStartRef.current;
-          const progress = Math.min(
-            100,
-            Math.round((elapsed / SAMPLE_DURATION_MS) * 100),
-          );
+          const progress = Math.min(100, Math.round((elapsed / SAMPLE_DURATION_MS) * 100));
           setState((s) => ({ ...s, samplingProgress: progress }));
-        }, 300);
+        }, 200);
 
-        // Stop sampling after SAMPLE_DURATION_MS
-        samplingTimerRef.current = setTimeout(() => {
-          stopSamplingAndClone(mimeType);
-        }, SAMPLE_DURATION_MS);
+        // Smart stop: after SAMPLE_DURATION_MS, check if we have enough speech
+        const checkAndStop = () => {
+          const elapsed = Date.now() - samplingStartRef.current;
+          const hasEnoughSpeech = speechChunkCountRef.current >= MIN_SPEECH_CHUNKS;
+
+          if (hasEnoughSpeech || elapsed >= MAX_SAMPLE_MS) {
+            // Good to go — clone with what we have
+            stopSamplingAndClone(mimeType);
+          } else if (elapsed < MAX_SAMPLE_MS) {
+            // Not enough speech yet — extend sampling
+            console.log(`[VoiceDub] Only ${speechChunkCountRef.current} speech chunks, extending...`);
+            samplingTimerRef.current = setTimeout(checkAndStop, SILENCE_EXTEND_MS);
+          }
+        };
+
+        samplingTimerRef.current = setTimeout(checkAndStop, SAMPLE_DURATION_MS);
       } catch (e) {
         console.warn("[VoiceDub] MediaRecorder setup failed:", e);
-        setState((s) => ({ ...s, phase: "unavailable" }));
+        const defaultVoice = DEFAULT_VOICES[targetLangRef.current.split("-")[0]] || DEFAULT_VOICES.en;
+        voiceIdRef.current = defaultVoice;
+        setState((s) => ({ ...s, phase: "ready", voiceId: defaultVoice, samplingProgress: 100 }));
       }
     },
     [stopSamplingAndClone],
@@ -283,20 +306,15 @@ export function useVoiceDubbing(
 
   const processTranscript = useCallback(
     async (text: string, sourceLang: string, targetLang: string) => {
-      // Only process when ready and enabled
       if (!enabledRef.current) return;
       if (!voiceIdRef.current) return;
       if (!text?.trim() || text.length < MIN_TEXT_LENGTH) return;
       if (text.length > MAX_TEXT_LENGTH) return;
-      if (processingRef.current) {
-        // Don't pile up requests — drop if currently processing
-        return;
-      }
+      if (processingRef.current) return;
 
       processingRef.current = true;
 
       try {
-        // Text is already translated by the caller — go straight to TTS
         const res = await fetch("/api/voice-dub", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -315,9 +333,7 @@ export function useVoiceDubbing(
         }
 
         if (data.audioBase64 && !data.fallback) {
-          // Queue audio (don't interrupt currently playing)
           if (isPlayingRef.current) {
-            // Only queue if queue is short (drop older pending audio)
             if (audioQueueRef.current.length < 2) {
               audioQueueRef.current.push(data.audioBase64);
             }
@@ -325,7 +341,6 @@ export function useVoiceDubbing(
             playAudioBase64(data.audioBase64);
           }
         }
-        // If fallback=true: translatedText is still set → caller updates subtitle
       } catch (e) {
         console.warn("[VoiceDub] Dub request failed:", e);
       } finally {
@@ -344,8 +359,8 @@ export function useVoiceDubbing(
     if (remoteStream && remoteStream.getAudioTracks().length) {
       startSampling(remoteStream);
     } else {
-      // No remote audio yet — use default voice immediately (no clone needed)
-      console.log("[VoiceDub] No remote stream yet, using default voice");
+      // No remote audio yet — use default voice immediately
+      console.log("[VoiceDub] No remote stream, using default voice");
       const defaultVoice = DEFAULT_VOICES[targetLangRef.current.split("-")[0]] || DEFAULT_VOICES.en;
       voiceIdRef.current = defaultVoice;
       setState((s) => ({ ...s, phase: "ready", voiceId: defaultVoice, samplingProgress: 100 }));
@@ -355,23 +370,13 @@ export function useVoiceDubbing(
   const disable = useCallback(() => {
     enabledRef.current = false;
 
-    // Stop recorder
-    if (
-      mediaRecorderRef.current &&
-      mediaRecorderRef.current.state !== "inactive"
-    ) {
-      try {
-        mediaRecorderRef.current.stop();
-      } catch {
-        /* ignore */
-      }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      try { mediaRecorderRef.current.stop(); } catch { /* ignore */ }
     }
 
-    // Clear timers
     if (samplingTimerRef.current) clearTimeout(samplingTimerRef.current);
     if (progressTimerRef.current) clearInterval(progressTimerRef.current);
 
-    // Clear audio queue
     audioQueueRef.current = [];
 
     setState((s) => ({
@@ -388,8 +393,7 @@ export function useVoiceDubbing(
   const cleanup = useCallback(() => {
     disable();
 
-    // Delete voice clone from ElevenLabs (don't accumulate clones)
-    // But don't delete default/pre-made voices
+    // Delete voice clone from ElevenLabs (don't delete default voices)
     const isDefaultVoice = Object.values(DEFAULT_VOICES).includes(voiceIdRef.current || "");
     if (voiceIdRef.current && !isDefaultVoice) {
       fetch("/api/voice-clone", {
@@ -399,19 +403,13 @@ export function useVoiceDubbing(
       }).catch(() => {});
     }
 
-    // Close audio context
-    try {
-      audioContextRef.current?.close();
-    } catch {
-      /* ignore */
-    }
+    try { audioContextRef.current?.close(); } catch { /* ignore */ }
     audioContextRef.current = null;
     gainNodeRef.current = null;
     voiceIdRef.current = null;
     processingRef.current = false;
   }, [disable]);
 
-  // Auto-cleanup on unmount
   useEffect(() => () => cleanup(), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { state, enable, disable, processTranscript, cleanup, isDubPlaying: state.isPlaying };
