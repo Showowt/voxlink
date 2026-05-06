@@ -57,6 +57,7 @@ const DEFAULT_VOICES: Record<string, string> = {
   ar: "21m00Tcm4TlvDq8ikWAM", // Rachel
   ru: "pNInz6obpgDQGcFmaJgB", // Adam
   hi: "21m00Tcm4TlvDq8ikWAM", // Rachel
+  lt: "MF3mGyEYCl7XYWbV9V6O", // Elli (multilingual)
 };
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────

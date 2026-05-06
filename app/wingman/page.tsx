@@ -82,6 +82,7 @@ const LANGUAGES = [
   { code: "it", label: "Italian", flag: "🇮🇹" },
   { code: "zh", label: "Chinese", flag: "🇨🇳" },
   { code: "ja", label: "Japanese", flag: "🇯🇵" },
+  { code: "lt", label: "Lithuanian", flag: "🇱🇹" },
 ];
 
 const TONE_COLORS = {

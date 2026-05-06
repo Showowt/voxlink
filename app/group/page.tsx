@@ -16,6 +16,7 @@ const LANGUAGES = [
   { code: 'ar', name: 'Arabic', flag: '\u{1F1F8}\u{1F1E6}' },
   { code: 'ru', name: 'Russian', flag: '\u{1F1F7}\u{1F1FA}' },
   { code: 'hi', name: 'Hindi', flag: '\u{1F1EE}\u{1F1F3}' },
+  { code: 'lt', name: 'Lithuanian', flag: '\u{1F1F1}\u{1F1F9}' },
 ];
 
 function getDeviceId(): string {

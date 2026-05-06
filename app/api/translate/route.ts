@@ -512,6 +512,8 @@ export async function POST(req: NextRequest) {
         magyar: "hu",
         finnish: "fi",
         suomi: "fi",
+        lithuanian: "lt",
+        lietuviu: "lt",
         danish: "da",
         dansk: "da",
         norwegian: "no",

@@ -198,6 +198,13 @@ export const LANGUAGES: Language[] = [
     speechCode: "fi-FI",
   },
   {
+    code: "lt",
+    name: "Lithuanian",
+    nativeName: "Lietuvių",
+    flag: "🇱🇹",
+    speechCode: "lt-LT",
+  },
+  {
     code: "da",
     name: "Danish",
     nativeName: "Dansk",

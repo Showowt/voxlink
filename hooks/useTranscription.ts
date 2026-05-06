@@ -63,6 +63,7 @@ const SPEECH_LANG_MAP: Record<string, string> = {
   ro: "ro-RO",
   hu: "hu-HU",
   fi: "fi-FI",
+  lt: "lt-LT",
   da: "da-DK",
   no: "nb-NO",
   ms: "ms-MY",
