@@ -48,25 +48,45 @@ export async function GET(request: NextRequest) {
 
   // Add TURN servers only if credentials are configured
   if (TURN_USERNAME && TURN_CREDENTIAL) {
+    // Multiple TURN endpoints for redundancy — UDP first (fastest), then TCP, then TLS
     iceServers.push(
+      // UDP on port 80 — works on most networks, fastest relay
       {
         urls: "turn:a.relay.metered.ca:80",
         username: TURN_USERNAME,
         credential: TURN_CREDENTIAL,
       },
+      // UDP on port 443 — bypasses some firewalls
       {
         urls: "turn:a.relay.metered.ca:443",
         username: TURN_USERNAME,
         credential: TURN_CREDENTIAL,
       },
+      // Secondary relay region for lower latency (US East)
+      {
+        urls: "turn:b.relay.metered.ca:80",
+        username: TURN_USERNAME,
+        credential: TURN_CREDENTIAL,
+      },
+      // TCP on port 443 — works behind strict firewalls/proxies
       {
         urls: "turn:a.relay.metered.ca:443?transport=tcp",
         username: TURN_USERNAME,
         credential: TURN_CREDENTIAL,
       },
-      // TURNS (TLS) for maximum compatibility
+      {
+        urls: "turn:b.relay.metered.ca:443?transport=tcp",
+        username: TURN_USERNAME,
+        credential: TURN_CREDENTIAL,
+      },
+      // TURNS (TLS) — maximum compatibility, works on any network
       {
         urls: "turns:a.relay.metered.ca:443?transport=tcp",
+        username: TURN_USERNAME,
+        credential: TURN_CREDENTIAL,
+      },
+      {
+        urls: "turns:b.relay.metered.ca:443?transport=tcp",
         username: TURN_USERNAME,
         credential: TURN_CREDENTIAL,
       },
@@ -76,11 +96,23 @@ export async function GET(request: NextRequest) {
     console.warn(
       "[Voxxo] TURN credentials not configured - using public relay",
     );
-    iceServers.push({
-      urls: "turn:openrelay.metered.ca:443",
-      username: "openrelayproject",
-      credential: "openrelayproject",
-    });
+    iceServers.push(
+      {
+        urls: "turn:openrelay.metered.ca:80",
+        username: "openrelayproject",
+        credential: "openrelayproject",
+      },
+      {
+        urls: "turn:openrelay.metered.ca:443",
+        username: "openrelayproject",
+        credential: "openrelayproject",
+      },
+      {
+        urls: "turn:openrelay.metered.ca:443?transport=tcp",
+        username: "openrelayproject",
+        credential: "openrelayproject",
+      },
+    );
   }
 
   return NextResponse.json(

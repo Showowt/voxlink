@@ -95,6 +95,13 @@ const PEERJS_SERVERS: PeerJSServer[] = [
   { host: "0.peerjs.com", port: 443, secure: true, path: "/" },
 ];
 
+// Video constraints — optimized for real-time translation calls, not beauty streams
+const VIDEO_CONSTRAINTS: MediaTrackConstraints = {
+  width: { ideal: 640, max: 1280 },
+  height: { ideal: 480, max: 720 },
+  frameRate: { ideal: 24, max: 30 },
+};
+
 // Fetch ICE servers from secure API (includes TURN credentials)
 async function getIceServers(): Promise<RTCIceServer[]> {
   try {
@@ -136,8 +143,8 @@ export class PeerConnection {
   private statsInterval: NodeJS.Timeout | null = null;
   private videoRetryTimeout: NodeJS.Timeout | null = null;
   private videoRetryAttempts: number = 0;
-  private static readonly MAX_VIDEO_RETRIES = 3;
-  private static readonly VIDEO_RETRY_DELAY = 5000; // 5 seconds
+  private static readonly MAX_VIDEO_RETRIES = 6;
+  private static readonly VIDEO_RETRY_DELAY = 2000; // 2 seconds
   private lastPongTime: number = Date.now();
   private previousStats: {
     packetsReceived: number;
@@ -325,6 +332,9 @@ export class PeerConnection {
               config: {
                 iceServers,
                 iceCandidatePoolSize: 10,
+                iceTransportPolicy: "all", // Try direct first, fall back to relay
+                bundlePolicy: "max-bundle", // Multiplex all media over single transport
+                rtcpMuxPolicy: "require", // Reduce port usage
               },
               debug: 1,
             });
@@ -827,8 +837,8 @@ export class PeerConnection {
       this.videoRetryAttempts < PeerConnection.MAX_VIDEO_RETRIES &&
       !this.isDestroyed
     ) {
-      // Calculate retry delay with exponential backoff: 2s, 4s, 8s
-      const retryDelay = 2000 * Math.pow(2, this.videoRetryAttempts - 1);
+      // Calculate retry delay: 1.5s, 2s, 3s, 4s, 5s, 6s
+      const retryDelay = Math.min(1500 * Math.pow(1.3, this.videoRetryAttempts - 1), 6000);
       console.log(
         `[Entrevoz Video] Scheduling video retry in ${retryDelay}ms (attempt ${this.videoRetryAttempts + 1}/${PeerConnection.MAX_VIDEO_RETRIES})`,
       );
@@ -1019,10 +1029,32 @@ export class PeerConnection {
       }
     });
 
-    // Monitor ICE state for connection health
+    // Apply bandwidth limits to prevent overloading poor connections
     const pc = (call as unknown as { peerConnection: RTCPeerConnection })
       .peerConnection;
     if (pc) {
+      // Limit video bandwidth to 500kbps and audio to 64kbps
+      try {
+        const senders = pc.getSenders();
+        for (const sender of senders) {
+          if (!sender.track) continue;
+          const params = sender.getParameters();
+          if (!params.encodings || params.encodings.length === 0) {
+            params.encodings = [{}];
+          }
+          if (sender.track.kind === "video") {
+            params.encodings[0].maxBitrate = 500000; // 500kbps max video
+            params.encodings[0].scaleResolutionDownBy = 1;
+          } else if (sender.track.kind === "audio") {
+            params.encodings[0].maxBitrate = 64000; // 64kbps audio (Opus is great here)
+          }
+          sender.setParameters(params).catch(() => { /* ignore on older browsers */ });
+        }
+      } catch {
+        // setParameters not supported — bandwidth will be uncapped
+      }
+
+      // Monitor ICE state for connection health
       pc.oniceconnectionstatechange = () => {
         const state = pc.iceConnectionState as IceConnectionState;
         console.log("[Entrevoz Video] ICE state:", state);
@@ -1048,19 +1080,27 @@ export class PeerConnection {
         }
 
         if (state === "disconnected") {
-          // Wait 3 seconds before attempting ICE restart for disconnected state
+          // Wait 1.5 seconds then restart ICE — fast recovery
           setTimeout(() => {
             if (pc.iceConnectionState === "disconnected" && !this.isDestroyed) {
               console.log(
-                "[Entrevoz Video] ICE still disconnected after 3s, restarting...",
+                "[Entrevoz Video] ICE still disconnected after 1.5s, restarting...",
               );
               try {
                 pc.restartIce?.();
               } catch {
                 // Ignore
               }
+              // If still disconnected after another 3s, renegotiate video
+              setTimeout(() => {
+                if (pc.iceConnectionState === "disconnected" && !this.isDestroyed && this.dataConnection?.open) {
+                  console.log("[Entrevoz Video] ICE still disconnected, renegotiating video...");
+                  this.videoRetryAttempts = 0;
+                  this.initiateVideoCallWithRetry();
+                }
+              }, 3000);
             }
-          }, 3000);
+          }, 1500);
         }
 
         if (state === "connected" || state === "completed") {
@@ -1098,12 +1138,13 @@ export class PeerConnection {
 
   // Track consecutive failed pongs for recovery decision
   private missedPongs: number = 0;
-  private static readonly MAX_MISSED_PONGS = 3; // 15 seconds (3 x 5s)
+  private static readonly MAX_MISSED_PONGS = 2; // 6 seconds (2 x 3s) — faster detection
 
   private startKeepAlive(): void {
     this.stopKeepAlive();
     this.missedPongs = 0;
 
+    // Ping every 3 seconds (was 5s) for faster dead connection detection
     this.keepAliveInterval = setInterval(() => {
       if (!this.dataConnection?.open) {
         this.stopKeepAlive();
@@ -1112,13 +1153,13 @@ export class PeerConnection {
 
       // Check connection health
       const timeSinceLastPong = Date.now() - this.lastPongTime;
-      if (timeSinceLastPong > 15000) {
+      if (timeSinceLastPong > 8000) {
         this.missedPongs++;
         console.warn(
           `[Entrevoz Video] No pong for ${Math.round(timeSinceLastPong / 1000)}s (missed: ${this.missedPongs}/${PeerConnection.MAX_MISSED_PONGS})`,
         );
 
-        // After 3 missed pongs (15 seconds), trigger recovery
+        // After 2 missed pongs (6s), trigger ICE restart immediately
         if (this.missedPongs >= PeerConnection.MAX_MISSED_PONGS) {
           console.warn(
             "[Entrevoz Video] Connection dead - triggering ICE restart",
@@ -1127,12 +1168,11 @@ export class PeerConnection {
           this.triggerIceRestart();
         }
       } else {
-        // Reset missed pongs counter on successful pong
         this.missedPongs = 0;
       }
 
       this.send({ type: "ping", time: Date.now() });
-    }, 5000);
+    }, 3000);
   }
 
   private stopKeepAlive(): void {
@@ -1335,24 +1375,36 @@ export async function getCamera(
   facingMode: "user" | "environment" = "user",
 ): Promise<MediaStream> {
   const constraints = [
-    // HD video + audio
+    // Optimized for real-time calls: 640x480 cap reduces bandwidth, strong noise suppression
     {
-      video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
+      video: {
+        facingMode,
+        width: { ideal: 640, max: 1280 },
+        height: { ideal: 480, max: 720 },
+        frameRate: { ideal: 24, max: 30 },
+      },
       audio: {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
+        sampleRate: 48000,
+        channelCount: 1, // Mono — less bandwidth, better for speech
       },
     },
-    // SD video + audio fallback
+    // Lower quality fallback
     {
-      video: { facingMode, width: { ideal: 640 }, height: { ideal: 480 } },
-      audio: { echoCancellation: true, noiseSuppression: true },
+      video: {
+        facingMode,
+        width: { ideal: 480 },
+        height: { ideal: 360 },
+        frameRate: { ideal: 20 },
+      },
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     },
     // Minimum video + audio
-    { video: true, audio: true },
-    // Audio only (no camera) - allows calls without camera
-    { video: false, audio: { echoCancellation: true, noiseSuppression: true } },
+    { video: true, audio: { echoCancellation: true, noiseSuppression: true } },
+    // Audio only (no camera)
+    { video: false, audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } },
     // Minimum audio only
     { video: false, audio: true },
   ];
