@@ -1572,13 +1572,22 @@ function HomeContent() {
                     <span className="text-white/70 text-sm">Track fluency over time</span>
                   </div>
                 </div>
-                <button
-                  onClick={() => router.push("/language-os")}
-                  className="w-full py-4 min-h-[52px] bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 rounded-2xl text-white font-semibold text-base transition-all duration-200 shadow-xl shadow-emerald-500/20 hover:-translate-y-0.5 active:scale-[0.98]"
-                  aria-label="Start Language OS practice"
-                >
-                  Start Practicing
-                </button>
+                <div className="flex gap-2.5">
+                  <button
+                    onClick={() => router.push("/language-os")}
+                    className="flex-1 py-4 min-h-[52px] bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 rounded-2xl text-white font-semibold text-base transition-all duration-200 shadow-xl shadow-emerald-500/20 hover:-translate-y-0.5 active:scale-[0.98]"
+                    aria-label="Start Language OS practice"
+                  >
+                    Start Practicing
+                  </button>
+                  <button
+                    onClick={() => router.push("/english")}
+                    className="py-4 px-4 min-h-[52px] bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-400 hover:to-indigo-500 rounded-2xl text-white font-semibold text-sm transition-all duration-200 shadow-xl shadow-blue-500/20 hover:-translate-y-0.5 active:scale-[0.98] flex items-center gap-1.5"
+                    aria-label="Learn English"
+                  >
+                    <span>Learn English</span>
+                  </button>
+                </div>
               </div>
             ) : activeTab === "proximity" ? (
               <div className="space-y-4 text-center">

@@ -1,10 +1,12 @@
 import type { LanguageConfig } from "./types";
 import { esCoConfig } from "./configs/es-CO";
 import { enLtConfig } from "./configs/en-lt";
+import { esEnUsConfig } from "./configs/es-en-US";
 
 const SUPPORTED_CONFIGS: Record<string, LanguageConfig> = {
   "en-es-CO": esCoConfig,
   "en-lt": enLtConfig,
+  "es-en-US": esEnUsConfig,
 };
 
 export function getLanguageConfig(languagePair: string): LanguageConfig | null {
