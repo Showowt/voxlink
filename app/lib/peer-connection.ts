@@ -686,6 +686,12 @@ export class PeerConnection {
       this.callbacks.onPartnerJoined?.(name);
       this.callbacks.onPartnerInfo?.({ name, deviceId: partnerDeviceId, lang: partnerLang });
 
+      // Data channel is confirmed working — mark connected immediately
+      // so mic/STT can start while video negotiation continues in background
+      if (this._status !== "connected") {
+        this.setStatus("connected", "Connected!");
+      }
+
       // Send hello back
       this.send({ type: "hello", name: this.userName, deviceId: this.deviceId, lang: this.lang });
       return;
