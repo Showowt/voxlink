@@ -496,7 +496,16 @@ export class PeerConnection {
     this.peer.on("disconnected", () => {
       console.log("[Entrevoz Video] Disconnected from signaling server");
       if (!this.isDestroyed && this.peer && !this.peer.destroyed) {
-        setTimeout(() => this.peer?.reconnect(), 1000);
+        // Aggressive reconnect — try immediately, then at 1s, then at 3s
+        const tryReconnect = (attempt: number) => {
+          if (this.isDestroyed || !this.peer || this.peer.destroyed || this.peer.open) return;
+          console.log(`[Entrevoz Video] Reconnect attempt ${attempt}`);
+          try { this.peer.reconnect(); } catch { /* ignore */ }
+          if (attempt < 3) {
+            setTimeout(() => tryReconnect(attempt + 1), attempt * 1500);
+          }
+        };
+        tryReconnect(1);
       }
     });
   }
@@ -505,20 +514,28 @@ export class PeerConnection {
   // CONNECTION ATTEMPTS (Guest) - Exponential Backoff with Jitter
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // Backoff configuration
-  private static readonly BASE_DELAY = 1000; // 1 second
-  private static readonly MAX_DELAY = 16000; // 16 seconds max
-  private static readonly BACKOFF_FACTOR = 2;
-  private static readonly JITTER_FACTOR = 0.2; // ±20%
+  // Backoff configuration — fast initial retries, then exponential
+  private static readonly FAST_RETRY_COUNT = 6; // First 6 attempts are rapid
+  private static readonly FAST_RETRY_DELAY = 500; // 500ms between fast retries
+  private static readonly BASE_DELAY = 1500; // After fast phase
+  private static readonly MAX_DELAY = 10000; // 10 seconds max
+  private static readonly BACKOFF_FACTOR = 1.8;
+  private static readonly JITTER_FACTOR = 0.15; // ±15%
 
   private calculateBackoffDelay(): number {
-    // Exponential: 1s → 2s → 4s → 8s → 16s (capped)
+    // First N attempts: rapid-fire 500ms (covers host registration delay)
+    if (this.connectionAttempts <= PeerConnection.FAST_RETRY_COUNT) {
+      return PeerConnection.FAST_RETRY_DELAY;
+    }
+
+    // After fast phase: exponential backoff
+    const attemptsSinceFast = this.connectionAttempts - PeerConnection.FAST_RETRY_COUNT;
     const exponentialDelay =
       PeerConnection.BASE_DELAY *
-      Math.pow(PeerConnection.BACKOFF_FACTOR, this.connectionAttempts - 1);
+      Math.pow(PeerConnection.BACKOFF_FACTOR, attemptsSinceFast - 1);
     const cappedDelay = Math.min(exponentialDelay, PeerConnection.MAX_DELAY);
 
-    // Add jitter (±20%) to prevent thundering herd
+    // Add jitter to prevent thundering herd
     const jitter = cappedDelay * PeerConnection.JITTER_FACTOR;
     const randomJitter = (Math.random() - 0.5) * 2 * jitter;
 

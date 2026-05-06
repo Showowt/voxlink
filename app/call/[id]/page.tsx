@@ -722,7 +722,15 @@ function VideoCallContent() {
     disable: disableDubbing,
     processTranscript: processDub,
     cleanup: cleanupDubbing,
+    isDubPlaying,
   } = useVoiceDubbing(remoteStreamRef.current, userLang);
+
+  // Mute partner's raw voice when dub is playing (no overlapping voices)
+  useEffect(() => {
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.muted = isDubPlaying;
+    }
+  }, [isDubPlaying]);
 
   // Ref so handleDataMessage can access dubbing without stale closure
   const processDubRef = useRef(processDub);
