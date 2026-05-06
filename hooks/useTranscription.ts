@@ -55,6 +55,18 @@ const SPEECH_LANG_MAP: Record<string, string> = {
   vi: "vi-VN",
   th: "th-TH",
   sv: "sv-SE",
+  id: "id-ID",
+  uk: "uk-UA",
+  el: "el-GR",
+  he: "he-IL",
+  cs: "cs-CZ",
+  ro: "ro-RO",
+  hu: "hu-HU",
+  fi: "fi-FI",
+  da: "da-DK",
+  no: "nb-NO",
+  ms: "ms-MY",
+  tl: "fil-PH",
 };
 
 // ─── CLIENT-SIDE INSTANT DICTIONARY ──────────────────────────────────────────
