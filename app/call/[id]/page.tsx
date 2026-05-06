@@ -34,7 +34,7 @@ import TextInputFallback from "../../components/TextInputFallback";
 import PostCallSummary from "../../components/PostCallSummary";
 import OfflinePhrases from "../../components/OfflinePhrases";
 import CulturalWhisper from "../../components/CulturalWhisper";
-import BackTranslationBadge from "../../components/BackTranslationBadge";
+// BackTranslationBadge removed from live captions (available in history panel)
 import { useConversationMemory } from "@/hooks/useConversationMemory";
 import { useVoiceDubbing } from "@/hooks/useVoiceDubbing";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
@@ -680,9 +680,10 @@ function VideoCallContent() {
   useEffect(() => {
     // Show interim text while speaking, final text briefly after
     if (transcription.localCaption) {
-      setMyLiveText(transcription.localCaption);
+      // Truncate to last 150 chars to prevent wall of text
+      setMyLiveText(transcription.localCaption.slice(-150));
     } else if (transcription.localFinal) {
-      setMyLiveText(transcription.localFinal);
+      setMyLiveText(transcription.localFinal.slice(-150));
       // Clear after 2s so UI stays clean between utterances
       const timeout = setTimeout(() => {
         setMyLiveText("");
@@ -1020,6 +1021,7 @@ function VideoCallContent() {
     original: string;
     from: string;
     to: string;
+    isFinal?: boolean;
   }
 
   // Type for new transcription messages from useTranscription hook
@@ -1090,60 +1092,66 @@ function VideoCallContent() {
 
       // Handle NEW translation message format (from useTranscription hook)
       if (isTranslationMessage(parsed)) {
-        const { text, original, from } = parsed;
+        const { text, original, from, isFinal } = parsed;
 
         // Track partner's language
         if (from) setPartnerLang(from);
 
-        // Show original text and pre-translated text
-        setTheirLiveText(original || text);
-        setTheirLiveTranslation(text);
+        // Show only the latest segment (truncate long text)
+        const displayOriginal = original || text;
+        const displayTranslation = text;
+        setTheirLiveText(displayOriginal.slice(-150));
+        setTheirLiveTranslation(displayTranslation.slice(-150));
 
         // Feed to voice dubbing if enabled (additive — subtitles still show)
         if (dubbingEnabledRef.current && original && from) {
           processDubRef.current(original, from, userLang);
         }
 
-        // Speak the translation
-        speakText(text, userLang);
-
-        // Add to transcript
-        addToTranscript(
-          "partner",
-          partnerName || "Partner",
-          original || text,
-          text,
-          from || "en",
-        );
-
-        // Feed to Cyrano
-        if (cyrano.isActive && original) {
-          cyrano.addTheirLine(original);
+        // Speak the translation (only final to avoid repeat TTS)
+        if (isFinal) {
+          speakText(text, userLang);
         }
 
-        // Auto-clear after 5 seconds
+        // Add to transcript only on final
+        if (isFinal) {
+          addToTranscript(
+            "partner",
+            partnerName || "Partner",
+            original || text,
+            text,
+            from || "en",
+          );
+
+          // Feed to Cyrano
+          if (cyrano.isActive && original) {
+            cyrano.addTheirLine(original);
+          }
+        }
+
+        // Auto-clear after 3 seconds
         theirCaptionTimeoutRef.current = setTimeout(() => {
           setTheirLiveText("");
           setTheirLiveTranslation("");
-        }, 5000);
+        }, 3000);
         return;
       }
 
-      // Handle NEW transcription message format (raw speech, for Cyrano)
+      // Handle NEW transcription message format (raw speech interim)
       if (isTranscriptionMessage(parsed)) {
         const { text, lang } = parsed;
 
         // Track partner's language
         if (lang) setPartnerLang(lang);
 
-        // Show interim text (will be replaced by translation message)
-        setTheirLiveText(text);
+        // Show only last 150 chars of interim (prevents wall of text)
+        setTheirLiveText(text.slice(-150));
 
-        // Auto-clear after 5 seconds
+        // Auto-clear after 3 seconds
         theirCaptionTimeoutRef.current = setTimeout(() => {
           setTheirLiveText("");
           setTheirLiveTranslation("");
-        }, 5000);
+        }, 3000);
         return;
       }
 
@@ -1705,42 +1713,28 @@ function VideoCallContent() {
           </div>
         )}
 
-        {/* LIVE CAPTIONS - Mobile responsive */}
-        <div className="absolute bottom-20 md:bottom-24 inset-x-0 px-2 md:px-4 space-y-2 md:space-y-3 pointer-events-none">
+        {/* LIVE CAPTIONS - Compact subtitle style, max 3 lines */}
+        <div className="absolute bottom-20 md:bottom-24 inset-x-0 px-2 md:px-4 space-y-1.5 pointer-events-none">
           {/* Partner's speech */}
           {theirLiveText && (
             <div className="flex justify-start caption-slide-in">
-              <div className="max-w-[95%] md:max-w-[75%]">
-                <div
-                  className="bg-purple-500/20 backdrop-blur-xl border border-purple-500/30 px-3 py-2 md:px-4 md:py-3 shadow-lg"
-                  role="log"
-                  aria-live="polite"
-                  aria-atomic="true"
-                  aria-label="Partner speaking"
-                >
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <span className="text-purple-400 text-xs font-medium">
-                      {partnerName || "Partner"}
-                    </span>
-                    <span className="text-purple-400/50 text-xs">
-                      {getFlag(partnerLang || "es")}
-                    </span>
-                  </div>
-                  <p className="text-white/90 text-xs md:text-sm leading-relaxed mb-1">
-                    {theirLiveText}
+              <div className="max-w-[90%] md:max-w-[70%]">
+                <div className="bg-black/70 backdrop-blur-md rounded-lg px-3 py-2">
+                  <p className="text-white/70 text-xs leading-snug line-clamp-2">
+                    <span className="text-purple-400 font-medium">{partnerName || "Partner"}</span>{" "}
+                    {theirLiveText.length > 120 ? "..." + theirLiveText.slice(-120) : theirLiveText}
                   </p>
                   {theirLiveTranslation && (
                     <p
-                      className={`text-white font-medium leading-relaxed ${
+                      className={`text-white font-medium leading-snug line-clamp-2 mt-0.5 ${
                         fontSize === "small"
-                          ? "text-sm md:text-base"
+                          ? "text-sm"
                           : fontSize === "medium"
-                            ? "text-base md:text-lg"
-                            : "text-lg md:text-2xl"
+                            ? "text-base"
+                            : "text-lg"
                       }`}
-                      aria-label="Translation"
                     >
-                      {theirLiveTranslation}
+                      {theirLiveTranslation.length > 150 ? "..." + theirLiveTranslation.slice(-150) : theirLiveTranslation}
                     </p>
                   )}
                 </div>
@@ -1751,48 +1745,25 @@ function VideoCallContent() {
           {/* My speech */}
           {myLiveText && (
             <div className="flex justify-end caption-slide-in">
-              <div className="max-w-[95%] md:max-w-[75%]">
-                <div
-                  className="bg-[#00C896]/20 backdrop-blur-xl border border-[#00C896]/30 px-3 py-2 md:px-4 md:py-3 shadow-lg"
-                  role="log"
-                  aria-live="polite"
-                  aria-atomic="true"
-                  aria-label="You speaking"
-                >
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <span className="text-[#00C896] text-xs font-medium">
-                      You
-                    </span>
-                    <span className="text-[#00C896]/50 text-xs">
-                      {getFlag(userLang)}
-                    </span>
-                  </div>
-                  <p className="text-white/90 text-xs md:text-sm leading-relaxed mb-1">
-                    {myLiveText}
-                    <span className="inline-block w-0.5 h-3 md:h-4 bg-white/90 ml-1 animate-blink" />
+              <div className="max-w-[90%] md:max-w-[70%]">
+                <div className="bg-black/70 backdrop-blur-md rounded-lg px-3 py-2">
+                  <p className="text-white/70 text-xs leading-snug line-clamp-2">
+                    <span className="text-[#00C896] font-medium">You</span>{" "}
+                    {myLiveText.length > 120 ? "..." + myLiveText.slice(-120) : myLiveText}
+                    <span className="inline-block w-0.5 h-3 bg-white/70 ml-0.5 animate-blink" />
                   </p>
                   {myLiveTranslation && (
-                    <>
-                      <p
-                        className={`text-[#00C896] font-medium leading-relaxed ${
-                          fontSize === "small"
-                            ? "text-sm md:text-base"
-                            : fontSize === "medium"
-                              ? "text-base md:text-lg"
-                              : "text-lg md:text-2xl"
-                        }`}
-                        aria-label="Translation"
-                      >
-                        → {myLiveTranslation}
-                      </p>
-                      <BackTranslationBadge
-                        originalText={myLiveText}
-                        translatedText={myLiveTranslation}
-                        sourceLang={userLang}
-                        targetLang={partnerLang || expectedPartnerLang}
-                        visible={learningMode}
-                      />
-                    </>
+                    <p
+                      className={`text-[#00C896] font-medium leading-snug line-clamp-2 mt-0.5 ${
+                        fontSize === "small"
+                          ? "text-sm"
+                          : fontSize === "medium"
+                            ? "text-base"
+                            : "text-lg"
+                      }`}
+                    >
+                      → {myLiveTranslation.length > 150 ? "..." + myLiveTranslation.slice(-150) : myLiveTranslation}
+                    </p>
                   )}
                 </div>
               </div>
