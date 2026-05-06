@@ -1103,14 +1103,15 @@ function VideoCallContent() {
         setTheirLiveText(displayOriginal.slice(-150));
         setTheirLiveTranslation(displayTranslation.slice(-150));
 
-        // Feed to voice dubbing if enabled (additive — subtitles still show)
-        if (dubbingEnabledRef.current && original && from) {
-          processDubRef.current(original, from, userLang);
-        }
-
-        // Speak the translation (only final to avoid repeat TTS)
+        // Voice output: either ElevenLabs dubbing OR browser TTS (never both)
         if (isFinal) {
-          speakText(text, userLang);
+          if (dubbingEnabledRef.current && text) {
+            // Voice dubbing: pass the ALREADY TRANSLATED text (skip re-translation)
+            processDubRef.current(text, from || "en", userLang);
+          } else {
+            // Fallback: browser TTS
+            speakText(text, userLang);
+          }
         }
 
         // Add to transcript only on final
@@ -2082,7 +2083,7 @@ function VideoCallContent() {
           </button>
 
           {/* Voice Dubbing Toggle */}
-          {isConnected && hasRemoteStream && (
+          {isConnected && (
             <button
               onClick={() => dubbingState.isEnabled ? disableDubbing() : enableDubbing()}
               className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center text-lg md:text-xl transition-all relative ${

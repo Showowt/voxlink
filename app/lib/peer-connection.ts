@@ -128,6 +128,7 @@ export class PeerConnection {
   private _status: ConnectionStatus = "initializing";
   private callbacks: PeerCallbacks = {};
   private isDestroyed: boolean = false;
+  private helloAcknowledged: boolean = false;
   private connectionAttempts: number = 0;
   private maxConnectionAttempts: number = 30; // Increased from 5
   private connectionAttemptInterval: NodeJS.Timeout | null = null;
@@ -692,8 +693,11 @@ export class PeerConnection {
         this.setStatus("connected", "Connected!");
       }
 
-      // Send hello back
-      this.send({ type: "hello", name: this.userName, deviceId: this.deviceId, lang: this.lang });
+      // Send hello back ONCE (prevent infinite hello ping-pong)
+      if (!this.helloAcknowledged) {
+        this.helloAcknowledged = true;
+        this.send({ type: "hello", name: this.userName, deviceId: this.deviceId, lang: this.lang });
+      }
       return;
     }
 
@@ -1124,6 +1128,7 @@ export class PeerConnection {
   private handlePartnerLeft(): void {
     this.stopKeepAlive();
     this.stopStatsMonitoring();
+    this.helloAcknowledged = false;
     this.callbacks.onPartnerLeft?.();
     this.remoteStream = null;
 

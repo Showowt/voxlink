@@ -40,6 +40,22 @@ const MIN_TEXT_LENGTH = 4; // Don't dub single words
 const MAX_TEXT_LENGTH = 300; // ElevenLabs limit for flash model
 const AUDIO_GAIN = 0.85; // Slight reduction to prevent clipping
 
+// Default ElevenLabs voices by language (fallback when clone fails)
+const DEFAULT_VOICES: Record<string, string> = {
+  en: "21m00Tcm4TlvDq8ikWAM", // Rachel
+  es: "AZnzlk1XvdvUeBnXmlld", // Domi
+  fr: "MF3mGyEYCl7XYWbV9V6O", // Elli
+  de: "TxGEqnHWrfWFTfGW9XjX", // Josh
+  it: "VR6AewLTigWG4xSOukaG", // Arnold
+  pt: "pNInz6obpgDQGcFmaJgB", // Adam
+  ja: "ThT5KcBeYPX3keUQqHPh", // Dorothy
+  ko: "AZnzlk1XvdvUeBnXmlld", // Domi
+  zh: "ThT5KcBeYPX3keUQqHPh", // Dorothy
+  ar: "21m00Tcm4TlvDq8ikWAM", // Rachel
+  ru: "pNInz6obpgDQGcFmaJgB", // Adam
+  hi: "21m00Tcm4TlvDq8ikWAM", // Rachel
+};
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useVoiceDubbing(
@@ -173,16 +189,22 @@ export function useVoiceDubbing(
         const data = await res.json();
 
         if (!res.ok || data.fallback) {
-          console.warn("[VoiceDub] Clone failed, falling back to subtitles");
-          setState((s) => ({ ...s, phase: "unavailable" }));
+          console.warn("[VoiceDub] Clone failed, using default voice");
+          // Fall back to a default ElevenLabs voice instead of disabling
+          const defaultVoice = DEFAULT_VOICES[targetLangRef.current.split("-")[0]] || DEFAULT_VOICES.en;
+          voiceIdRef.current = defaultVoice;
+          setState((s) => ({ ...s, phase: "ready", voiceId: defaultVoice }));
           return;
         }
 
         voiceIdRef.current = data.voiceId;
         setState((s) => ({ ...s, phase: "ready", voiceId: data.voiceId }));
       } catch (e) {
-        console.warn("[VoiceDub] Clone network error:", e);
-        setState((s) => ({ ...s, phase: "unavailable" }));
+        console.warn("[VoiceDub] Clone network error, using default voice:", e);
+        // Fall back to default voice on network error too
+        const defaultVoice = DEFAULT_VOICES[targetLangRef.current.split("-")[0]] || DEFAULT_VOICES.en;
+        voiceIdRef.current = defaultVoice;
+        setState((s) => ({ ...s, phase: "ready", voiceId: defaultVoice }));
       }
     },
     [],
@@ -270,14 +292,10 @@ export function useVoiceDubbing(
         return;
       }
 
-      // Don't dub if same language (no translation needed)
-      const srcBase = sourceLang.split("-")[0].toLowerCase();
-      const tgtBase = targetLang.split("-")[0].toLowerCase();
-      if (srcBase === tgtBase) return;
-
       processingRef.current = true;
 
       try {
+        // Text is already translated by the caller — go straight to TTS
         const res = await fetch("/api/voice-dub", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -285,6 +303,7 @@ export function useVoiceDubbing(
             text: text.trim(),
             voiceId: voiceIdRef.current,
             targetLang: targetLangRef.current,
+            skipTranslation: true,
           }),
         });
 
@@ -318,13 +337,18 @@ export function useVoiceDubbing(
   // ─── Enable / Disable ────────────────────────────────────────────────────
 
   const enable = useCallback(() => {
-    if (!remoteStream || !remoteStream.getAudioTracks().length) {
-      console.warn("[VoiceDub] No remote audio stream");
-      return;
-    }
     enabledRef.current = true;
     setState((s) => ({ ...s, isEnabled: true }));
-    startSampling(remoteStream);
+
+    if (remoteStream && remoteStream.getAudioTracks().length) {
+      startSampling(remoteStream);
+    } else {
+      // No remote audio yet — use default voice immediately (no clone needed)
+      console.log("[VoiceDub] No remote stream yet, using default voice");
+      const defaultVoice = DEFAULT_VOICES[targetLangRef.current.split("-")[0]] || DEFAULT_VOICES.en;
+      voiceIdRef.current = defaultVoice;
+      setState((s) => ({ ...s, phase: "ready", voiceId: defaultVoice, samplingProgress: 100 }));
+    }
   }, [remoteStream, startSampling]);
 
   const disable = useCallback(() => {
@@ -364,7 +388,9 @@ export function useVoiceDubbing(
     disable();
 
     // Delete voice clone from ElevenLabs (don't accumulate clones)
-    if (voiceIdRef.current) {
+    // But don't delete default/pre-made voices
+    const isDefaultVoice = Object.values(DEFAULT_VOICES).includes(voiceIdRef.current || "");
+    if (voiceIdRef.current && !isDefaultVoice) {
       fetch("/api/voice-clone", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },

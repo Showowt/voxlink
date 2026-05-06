@@ -29,10 +29,11 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}) as Record<string, unknown>);
-  const { text, voiceId, targetLang = "en" } = body as {
+  const { text, voiceId, targetLang = "en", skipTranslation = false } = body as {
     text?: string;
     voiceId?: string;
     targetLang?: string;
+    skipTranslation?: boolean;
   };
 
   if (!text?.trim() || !voiceId) {
@@ -42,24 +43,26 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Step 1: Translate text (use existing translate API internally)
+  // Step 1: Translate text (skip if caller already translated)
   let translatedText = text;
-  try {
-    const translateRes = await fetch(`${req.nextUrl.origin}/api/translate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        text,
-        sourceLang: "auto",
-        targetLang,
-      }),
-    });
-    if (translateRes.ok) {
-      const td = await translateRes.json();
-      translatedText = td.translation ?? td.translated ?? text;
+  if (!skipTranslation) {
+    try {
+      const translateRes = await fetch(`${req.nextUrl.origin}/api/translate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text,
+          sourceLang: "auto",
+          targetLang,
+        }),
+      });
+      if (translateRes.ok) {
+        const td = await translateRes.json();
+        translatedText = td.translation ?? td.translated ?? text;
+      }
+    } catch {
+      /* use original text as fallback */
     }
-  } catch {
-    /* use original text as fallback */
   }
 
   // Skip TTS if text is empty after translation
