@@ -30,6 +30,7 @@ import type {
   SpeechRecognitionEvent,
   SpeechRecognitionErrorEvent,
 } from "@/app/lib/speech-types";
+import { offlineTranslate } from "@/lib/offline-dictionary";
 
 // ─── BCP-47 language tags for Web Speech API ──────────────────────────────────
 const SPEECH_LANG_MAP: Record<string, string> = {
@@ -158,12 +159,18 @@ async function translateAPI(
   }
 }
 
-// ─── Client-side instant lookup ──────────────────────────────────────────────
+// ─── Client-side instant lookup (local dict + offline multi-language) ────────
 function instantTranslate(text: string, from: string, to: string): string | null {
+  const normalized = text.toLowerCase().trim();
+  // Try local en↔es dict first (fastest)
   const key = `${from}-${to}`;
   const dict = INSTANT_DICT[key];
-  if (!dict) return null;
-  return dict[text.toLowerCase().trim()] ?? null;
+  if (dict) {
+    const result = dict[normalized];
+    if (result) return result;
+  }
+  // Try the full offline multi-language dictionary (pivot through English)
+  return offlineTranslate(normalized, from, to);
 }
 
 // ─── Translation cache (client-side, avoids repeat API calls) ────────────────

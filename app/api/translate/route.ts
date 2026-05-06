@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { checkRateLimit, rateLimitHeaders, trackEvent } from "@/lib/rate-limit";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { offlineTranslate } from "@/lib/offline-dictionary";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // VOXLINK ULTRA-FAST TRANSLATION API
@@ -279,6 +280,48 @@ for (const [phrase, translation] of Object.entries(PHRASES["en-es"])) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// CLAUDE AI TRANSLATION - Bulletproof fallback (never fails silently)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function translateClaude(
+  text: string,
+  from: string,
+  to: string,
+): Promise<string | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 300,
+        messages: [
+          {
+            role: "user",
+            content: `Translate the following text from ${from} to ${to}. Return ONLY the translation, nothing else. No quotes, no explanation.\n\nText: ${text}`,
+          },
+        ],
+      }),
+      signal: AbortSignal.timeout(3000),
+    });
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    const content = data?.content?.[0]?.text?.trim();
+    return content || null;
+  } catch {
+    return null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // TRANSLATION APIS - Optimized for speed (2s timeout, parallel execution)
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -506,8 +549,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Dictionary lookup (INSTANT)
-    const dictResult = PHRASES[langPair]?.[cleanText.toLowerCase()];
+    // 2. Dictionary lookup — multi-language offline dictionary (INSTANT)
+    const dictResult = offlineTranslate(cleanText, from, to) ?? PHRASES[langPair]?.[cleanText.toLowerCase()];
     if (dictResult) {
       setCache(cacheKey, dictResult);
       return NextResponse.json(
@@ -523,7 +566,7 @@ export async function POST(req: NextRequest) {
     // 3. Partial phrase matching for compound sentences
     const words = cleanText.toLowerCase().split(/\s+/);
     if (words.length <= 3) {
-      const partial = PHRASES[langPair]?.[words.join(" ")];
+      const partial = offlineTranslate(words.join(" "), from, to) ?? PHRASES[langPair]?.[words.join(" ")];
       if (partial) {
         setCache(cacheKey, partial);
         return NextResponse.json(
@@ -566,7 +609,13 @@ export async function POST(req: NextRequest) {
       if (translation) source = "libre";
     }
 
-    // 6. Final result
+    // 6. CLAUDE AI — Ultimate fallback. Never silently return original text.
+    if (!translation) {
+      translation = await translateClaude(cleanText, from, to);
+      if (translation) source = "claude";
+    }
+
+    // 7. Final result
     const finalTranslation = translation || cleanText;
     const latency = Date.now() - startTime;
 
