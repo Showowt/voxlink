@@ -31,71 +31,43 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Read TURN credentials at runtime
-  const TURN_USERNAME = process.env.TURN_USERNAME;
-  const TURN_CREDENTIAL = process.env.TURN_CREDENTIAL;
+  // Metered TURN credentials via REST API
+  const METERED_API_KEY = process.env.METERED_API_KEY;
+  const METERED_DOMAIN =
+    process.env.METERED_DOMAIN ?? "machinemind.metered.live";
 
   // Base ICE servers with STUN (always available)
   const iceServers: RTCIceServer[] = [
-    // Google STUN - public, no credentials needed
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
     { urls: "stun:stun2.l.google.com:19302" },
-
-    // Twilio STUN - public
     { urls: "stun:global.stun.twilio.com:3478" },
   ];
 
-  // Add TURN servers only if credentials are configured
-  if (TURN_USERNAME && TURN_CREDENTIAL) {
-    // Multiple TURN endpoints for redundancy — UDP first (fastest), then TCP, then TLS
-    iceServers.push(
-      // UDP on port 80 — works on most networks, fastest relay
-      {
-        urls: "turn:a.relay.metered.ca:80",
-        username: TURN_USERNAME,
-        credential: TURN_CREDENTIAL,
-      },
-      // UDP on port 443 — bypasses some firewalls
-      {
-        urls: "turn:a.relay.metered.ca:443",
-        username: TURN_USERNAME,
-        credential: TURN_CREDENTIAL,
-      },
-      // Secondary relay region for lower latency (US East)
-      {
-        urls: "turn:b.relay.metered.ca:80",
-        username: TURN_USERNAME,
-        credential: TURN_CREDENTIAL,
-      },
-      // TCP on port 443 — works behind strict firewalls/proxies
-      {
-        urls: "turn:a.relay.metered.ca:443?transport=tcp",
-        username: TURN_USERNAME,
-        credential: TURN_CREDENTIAL,
-      },
-      {
-        urls: "turn:b.relay.metered.ca:443?transport=tcp",
-        username: TURN_USERNAME,
-        credential: TURN_CREDENTIAL,
-      },
-      // TURNS (TLS) — maximum compatibility, works on any network
-      {
-        urls: "turns:a.relay.metered.ca:443?transport=tcp",
-        username: TURN_USERNAME,
-        credential: TURN_CREDENTIAL,
-      },
-      {
-        urls: "turns:b.relay.metered.ca:443?transport=tcp",
-        username: TURN_USERNAME,
-        credential: TURN_CREDENTIAL,
-      },
-    );
-  } else {
-    // Fallback to public OpenRelay (less reliable but always works)
-    console.warn(
-      "[Voxxo] TURN credentials not configured - using public relay",
-    );
+  let provider = "stun-only";
+
+  if (METERED_API_KEY) {
+    try {
+      const meteredUrl = `https://${METERED_DOMAIN}/api/v1/turn/credentials?apiKey=${METERED_API_KEY}`;
+      const res = await fetch(meteredUrl, { next: { revalidate: 3600 } });
+
+      if (res.ok) {
+        const turnServers = (await res.json()) as RTCIceServer[];
+        iceServers.push(...turnServers);
+        provider = "metered";
+      } else {
+        console.warn(
+          `[TURN] Metered API returned ${res.status} — falling back to public relay`,
+        );
+      }
+    } catch (err) {
+      console.warn("[TURN] Metered API fetch failed:", err);
+    }
+  }
+
+  // Fallback to public OpenRelay if Metered didn't provide TURN servers
+  if (provider !== "metered") {
+    console.warn("[TURN] Using public OpenRelay fallback");
     iceServers.push(
       {
         urls: "turn:openrelay.metered.ca:80",
@@ -118,8 +90,8 @@ export async function GET(request: NextRequest) {
   return NextResponse.json(
     {
       iceServers,
-      ttl: 86400, // 24 hours
-      provider: TURN_USERNAME ? "metered" : "openrelay",
+      ttl: 86400,
+      provider,
       timestamp: Date.now(),
     },
     {
