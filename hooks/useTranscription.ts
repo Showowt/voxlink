@@ -382,10 +382,10 @@ export function useTranscription({
         return;
       }
 
-      // Debounce API call — 150ms for real-time feel
+      // Debounce API call — 50ms for near-instant feel
       debounceRef.current = setTimeout(() => {
         streamingTranslate(trimmed, false);
-      }, 150);
+      }, 50);
     },
     [streamingTranslate, sendMessage],
   );

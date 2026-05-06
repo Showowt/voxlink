@@ -39,7 +39,7 @@ import { useConversationMemory } from "@/hooks/useConversationMemory";
 import { useVoiceDubbing } from "@/hooks/useVoiceDubbing";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
 
-// Text-to-Speech helper
+// Text-to-Speech helper — loud and fast
 const speakText = (text: string, lang: string) => {
   if (!text.trim() || typeof window === "undefined") return;
 
@@ -48,9 +48,9 @@ const speakText = (text: string, lang: string) => {
 
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = getSpeechCode(lang);
-  utterance.rate = 0.9;
+  utterance.rate = 1.1; // Slightly faster for real-time feel
   utterance.pitch = 1;
-  utterance.volume = 1;
+  utterance.volume = 1; // Max browser TTS volume
 
   window.speechSynthesis.speak(utterance);
 };

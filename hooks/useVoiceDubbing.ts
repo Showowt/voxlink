@@ -35,10 +35,11 @@ export interface UseVoiceDubbingReturn {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const SAMPLE_DURATION_MS = 15000; // 15s of audio for voice clone
-const MIN_TEXT_LENGTH = 4; // Don't dub single words
+const SAMPLE_DURATION_MS = 8000; // 8s of audio for voice clone (faster activation)
+const MIN_TEXT_LENGTH = 3; // Dub short phrases too
 const MAX_TEXT_LENGTH = 300; // ElevenLabs limit for flash model
-const AUDIO_GAIN = 0.85; // Slight reduction to prevent clipping
+const DUB_GAIN = 2.5; // Loud — dub must dominate over raw partner voice
+const DUCK_GAIN = 0.15; // Duck partner's raw voice when dub plays
 
 // Default ElevenLabs voices by language (fallback when clone fails)
 const DEFAULT_VOICES: Record<string, string> = {
@@ -79,6 +80,8 @@ export function useVoiceDubbing(
   const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
+  const remoteGainNodeRef = useRef<GainNode | null>(null);
+  const remoteSourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const audioQueueRef = useRef<string[]>([]); // base64 audio queue
   const isPlayingRef = useRef(false);
   const voiceIdRef = useRef<string | null>(null);
@@ -91,6 +94,36 @@ export function useVoiceDubbing(
   useEffect(() => {
     targetLangRef.current = targetLang;
   }, [targetLang]);
+
+  // ─── Duck remote stream volume when dub is playing ─────────────────────
+  const duckRemoteAudio = useCallback((duck: boolean) => {
+    if (!remoteGainNodeRef.current) return;
+    const target = duck ? DUCK_GAIN : 1.0;
+    remoteGainNodeRef.current.gain.setTargetAtTime(target, audioContextRef.current?.currentTime || 0, 0.05);
+  }, []);
+
+  // Setup audio ducking on remote stream
+  useEffect(() => {
+    if (!remoteStream || !enabledRef.current) return;
+    // Only set up once
+    if (remoteSourceNodeRef.current) return;
+
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new AudioContext();
+      }
+      const ctx = audioContextRef.current;
+      const source = ctx.createMediaStreamSource(remoteStream);
+      const gain = ctx.createGain();
+      gain.gain.value = 1.0;
+      source.connect(gain);
+      gain.connect(ctx.destination);
+      remoteSourceNodeRef.current = source;
+      remoteGainNodeRef.current = gain;
+    } catch {
+      // Non-critical — ducking won't work but dub still plays
+    }
+  }, [remoteStream]);
 
   // ─── Audio playback ──────────────────────────────────────────────────────
 
@@ -113,19 +146,22 @@ export function useVoiceDubbing(
 
       if (!gainNodeRef.current) {
         gainNodeRef.current = ctx.createGain();
-        gainNodeRef.current.gain.value = AUDIO_GAIN;
+        gainNodeRef.current.gain.value = DUB_GAIN;
         gainNodeRef.current.connect(ctx.destination);
       }
 
       source.buffer = audioBuffer;
       source.connect(gainNodeRef.current);
 
+      // Duck remote audio while dub plays
+      duckRemoteAudio(true);
       setState((s) => ({ ...s, isPlaying: true }));
       isPlayingRef.current = true;
 
       source.start();
       source.onended = () => {
         isPlayingRef.current = false;
+        duckRemoteAudio(false);
         setState((s) => ({ ...s, isPlaying: false }));
         // Play next in queue
         if (audioQueueRef.current.length > 0) {
@@ -136,9 +172,10 @@ export function useVoiceDubbing(
     } catch (e) {
       console.warn("[VoiceDub] Audio decode error:", e);
       isPlayingRef.current = false;
+      duckRemoteAudio(false);
       setState((s) => ({ ...s, isPlaying: false }));
     }
-  }, []);
+  }, [duckRemoteAudio]);
 
   // ─── Voice sampling ──────────────────────────────────────────────────────
 

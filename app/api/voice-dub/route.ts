@@ -70,22 +70,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Empty translation" }, { status: 400 });
   }
 
-  // Step 2: ElevenLabs TTS with Flash model (fastest, lowest latency)
+  // Step 2: ElevenLabs TTS with Flash model — maximum speed, minimum latency
   const ttsPayload = {
     text: translatedText,
     model_id: "eleven_flash_v2_5",
     voice_settings: {
-      stability: 0.4,
-      similarity_boost: 0.9,
+      stability: 0.3,
+      similarity_boost: 0.85,
       style: 0.0,
       use_speaker_boost: true,
     },
-    output_format: "mp3_44100_128",
   };
 
   try {
+    // Use optimize_streaming_latency=4 (max) and smaller audio format for speed
     const ttsRes = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}/stream`,
+      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}/stream?optimize_streaming_latency=4&output_format=mp3_22050_32`,
       {
         method: "POST",
         headers: {
