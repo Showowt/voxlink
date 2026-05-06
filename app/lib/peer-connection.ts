@@ -299,7 +299,7 @@ export class PeerConnection {
       // For host: retry same ID after delay if unavailable (stale session on PeerJS cloud)
       let connected = false;
       let lastError: Error | null = null;
-      const maxIdRetries = isHost ? 3 : 1; // Host retries up to 3 times for stale ID
+      const maxIdRetries = isHost ? 6 : 1; // Host retries up to 6 times (18s total) for stale ID
 
       for (let idAttempt = 0; idAttempt < maxIdRetries && !connected; idAttempt++) {
         if (idAttempt > 0) {

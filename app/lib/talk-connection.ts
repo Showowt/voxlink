@@ -147,7 +147,7 @@ export class TalkConnection {
 
       let connected = false;
       let lastError: Error | null = null;
-      const maxIdRetries = isHost ? 3 : 1;
+      const maxIdRetries = isHost ? 6 : 1;
 
       for (let idAttempt = 0; idAttempt < maxIdRetries && !connected; idAttempt++) {
         if (idAttempt > 0) {
@@ -325,7 +325,10 @@ export class TalkConnection {
     this.stopConnectionAttempts();
 
     let attempts = 0;
-    const maxAttempts = 30; // Try for 1 minute
+    const maxAttempts = 30;
+    const FAST_RETRIES = 6; // First 6 at 500ms
+    const FAST_DELAY = 500;
+    const SLOW_DELAY = 2000;
 
     const tryConnect = () => {
       if (this.isDestroyed || this._status === "connected") {
@@ -341,18 +344,19 @@ export class TalkConnection {
 
       console.log(`[Entrevoz] Connection attempt ${attempts}/${maxAttempts}`);
       this.connectToHost();
+
+      // Fast retries first, then slow
+      const delay = attempts <= FAST_RETRIES ? FAST_DELAY : SLOW_DELAY;
+      this.connectionAttemptInterval = setTimeout(tryConnect, delay);
     };
 
     // Try immediately
     tryConnect();
-
-    // Then retry every 2 seconds
-    this.connectionAttemptInterval = setInterval(tryConnect, 2000);
   }
 
   private stopConnectionAttempts(): void {
     if (this.connectionAttemptInterval) {
-      clearInterval(this.connectionAttemptInterval);
+      clearTimeout(this.connectionAttemptInterval);
       this.connectionAttemptInterval = null;
     }
   }

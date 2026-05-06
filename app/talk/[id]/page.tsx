@@ -478,7 +478,14 @@ function TalkContent() {
     connectionRef.current = connection;
     connection.initialize(roomId, isHost, userName, userLang, getDeviceId());
 
+    // Force-destroy on page close/refresh
+    const handleUnload = () => connectionRef.current?.disconnect();
+    window.addEventListener("beforeunload", handleUnload);
+    window.addEventListener("pagehide", handleUnload);
+
     return () => {
+      window.removeEventListener("beforeunload", handleUnload);
+      window.removeEventListener("pagehide", handleUnload);
       mountedRef.current = false;
       initRef.current = false;
       connection.disconnect();

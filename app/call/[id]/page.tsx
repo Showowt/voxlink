@@ -1001,7 +1001,18 @@ function VideoCallContent() {
 
     init();
 
+    // Force-destroy peer on page close/refresh (React cleanup doesn't reliably run)
+    const handleUnload = () => {
+      if (peerRef.current) {
+        peerRef.current.disconnect();
+      }
+    };
+    window.addEventListener("beforeunload", handleUnload);
+    window.addEventListener("pagehide", handleUnload);
+
     return () => {
+      window.removeEventListener("beforeunload", handleUnload);
+      window.removeEventListener("pagehide", handleUnload);
       mountedRef.current = false;
       stopListening();
       // Disconnect peer FIRST to prevent "track already stopped" errors
