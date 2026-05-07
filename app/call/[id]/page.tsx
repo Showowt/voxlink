@@ -1125,7 +1125,7 @@ function VideoCallContent() {
         // Voice output: either ElevenLabs dubbing OR browser TTS (never both)
         if (isFinal) {
           if (dubbingEnabledRef.current && text) {
-            // Voice dubbing: pass the ALREADY TRANSLATED text (skip re-translation)
+            // Voice dubbing: pass the ALREADY TRANSLATED text (skip re-translation for speed)
             processDubRef.current(text, from || "en", userLang);
           } else {
             // Fallback: browser TTS
