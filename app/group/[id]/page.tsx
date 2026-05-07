@@ -132,7 +132,7 @@ export default function GroupCallPage() {
 
   if (gc.phase === 'lobby' || gc.phase === 'joining') {
     return (
-      <div className="min-h-[100dvh] bg-[#06060a] flex items-center justify-center p-4 overflow-y-auto">
+      <div className="min-h-[100dvh] bg-[#06060a] flex items-center justify-center p-4 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
         <div className="w-full max-w-sm">
           <div className="text-center mb-6">
             <div className="text-[#00C896] text-xs font-medium tracking-widest uppercase mb-1">Group Call</div>

@@ -110,7 +110,7 @@ class ErrorBoundary extends Component<Props, State> {
               <summary className="text-gray-500 text-xs cursor-pointer hover:text-gray-400">
                 Technical details
               </summary>
-              <pre className="text-red-400 text-xs mt-2 overflow-auto max-h-32">
+              <pre className="text-red-400 text-xs mt-2 overflow-auto overscroll-contain max-h-32" style={{ WebkitOverflowScrolling: 'touch' }}>
                 {this.state.error?.message}
               </pre>
             </details>

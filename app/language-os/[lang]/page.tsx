@@ -425,7 +425,7 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
         )}
 
         {activeTab === "patterns" && (
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          <div className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-3" style={{ WebkitOverflowScrolling: 'touch' }}>
             {config.grammarPatterns.map((pattern) => (
               <div key={pattern.id} className="p-4 bg-white/[0.03] border border-white/8 rounded-xl">
                 <h3 className="text-white font-semibold text-sm">{pattern.title}</h3>
@@ -453,7 +453,7 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
         )}
 
         {activeTab === "missions" && (
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          <div className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-3" style={{ WebkitOverflowScrolling: 'touch' }}>
             {config.missions.map((mission) => {
               const isCompleted = progress?.completedMissions.includes(mission.id);
               return (
@@ -484,7 +484,7 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
         )}
 
         {activeTab === "vocab" && (
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 overflow-y-auto overscroll-contain p-4" style={{ WebkitOverflowScrolling: 'touch' }}>
             {(!progress || progress.vocabBank.length === 0) ? (
               <div className="text-center py-12">
                 <p className="text-white/30 text-sm">No vocabulary yet. Start a conversation!</p>
@@ -508,7 +508,7 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
         )}
 
         {activeTab === "progress" && (
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
             {/* Fluency ring */}
             <div className="flex flex-col items-center py-6">
               <div className="relative w-32 h-32">

@@ -255,7 +255,7 @@ export default function PricingContent() {
   return (
     <AnimatedBackground
       variant="mesh"
-      className="min-h-[100dvh] py-8 sm:py-12 px-4 overflow-y-auto"
+      className="min-h-[100dvh] py-8 sm:py-12 px-4 overflow-y-auto overscroll-contain"
     >
       <div className="max-w-4xl mx-auto">
         {/* Back to Home */}

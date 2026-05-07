@@ -222,7 +222,7 @@ function CyranoPanel({
 
       {/* Setup (not active) - ONBOARDING */}
       {!isActive && (
-        <div className="p-4 flex flex-col gap-4 flex-1 overflow-y-auto">
+        <div className="p-4 flex flex-col gap-4 flex-1 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
           {/* First-time onboarding banner */}
           {showOnboarding && (
             <div
@@ -400,7 +400,7 @@ function CyranoPanel({
           </div>
 
           {/* Suggestions */}
-          <div className="p-3 flex flex-col gap-2 flex-1 overflow-y-auto">
+          <div className="p-3 flex flex-col gap-2 flex-1 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
             {isThinking && (
               <div className="flex items-center gap-3 py-2 px-1">
                 <div className="flex gap-1">
@@ -1826,7 +1826,8 @@ function VideoCallContent() {
               </button>
             </div>
             <div
-              className="flex-1 overflow-y-auto p-3 space-y-3"
+              className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-3"
+              style={{ WebkitOverflowScrolling: 'touch' }}
               role="log"
               aria-live="polite"
               aria-relevant="additions"
@@ -1899,7 +1900,7 @@ function VideoCallContent() {
                 }}
               >
                 {/* Suggestions scroll container */}
-                <div className="flex-1 flex gap-2 overflow-x-auto scrollbar-hide">
+                <div className="flex-1 flex gap-2 overflow-x-auto overscroll-x-contain scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
                   {cyrano.suggestions.slice(0, 3).map((s) => (
                     <button
                       key={s.id}

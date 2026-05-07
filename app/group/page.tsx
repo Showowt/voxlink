@@ -66,7 +66,7 @@ export default function GroupLandingPage() {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-[#06060a] flex items-center justify-center p-4 overflow-y-auto">
+    <div className="min-h-[100dvh] bg-[#06060a] flex items-center justify-center p-4 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
       <div className="w-full max-w-md">
 
         {/* Back button */}

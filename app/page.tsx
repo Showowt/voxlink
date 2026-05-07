@@ -1329,7 +1329,7 @@ function HomeContent() {
   return (
     <AnimatedBackground
       variant="mesh"
-      className="flex flex-col py-3 px-3 sm:py-4 sm:px-4 sm:justify-center overflow-y-auto"
+      className="flex flex-col py-3 px-3 sm:py-4 sm:px-4 sm:justify-center overflow-y-auto overscroll-contain"
     >
       <div className="w-full max-w-md mx-auto flex-shrink-0">
         {/* Logo - Premium Animated */}
@@ -1385,7 +1385,7 @@ function HomeContent() {
             </div>
 
             {/* Sub: feature pills within selected category */}
-            <div className="flex gap-1.5 px-3 py-2.5 overflow-x-auto scrollbar-hide">
+            <div className="flex gap-1.5 px-3 py-2.5 overflow-x-auto overscroll-x-contain scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
               {currentFeatures.map(feat => {
                 const isActive = activeTab === feat.id;
                 return (
@@ -1409,7 +1409,7 @@ function HomeContent() {
             </div>
           </div>
 
-          <div className="p-3 sm:p-5 max-h-[calc(100dvh-260px)] sm:max-h-none overflow-y-auto overscroll-contain -webkit-overflow-scrolling-touch">
+          <div className="p-3 sm:p-5 max-h-[calc(100dvh-260px)] sm:max-h-none overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
             {/* VoxType Tab - Type & Verify Translation */}
             {activeTab === "voxtype" ? (
               <VoxTypeTab />

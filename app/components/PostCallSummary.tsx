@@ -94,10 +94,11 @@ export default function PostCallSummary({
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/80 backdrop-blur-sm">
       <div
-        className="w-full max-w-md max-h-[85vh] overflow-y-auto mx-4 mb-4 md:mb-0 rounded-2xl p-5"
+        className="w-full max-w-md max-h-[85vh] overflow-y-auto overscroll-contain mx-4 mb-4 md:mb-0 rounded-2xl p-5"
         style={{
           background: "linear-gradient(180deg, #111114 0%, #0a0a0e 100%)",
           border: "1px solid rgba(255,255,255,0.08)",
+          WebkitOverflowScrolling: 'touch',
         }}
       >
         {/* Header */}

@@ -1045,7 +1045,7 @@ function TalkContent() {
   }
 
   return (
-    <div className="h-screen bg-[#0a0a0f] flex flex-col overflow-hidden">
+    <div className="h-[100dvh] bg-[#0a0a0f] flex flex-col overflow-hidden">
       {/* Header */}
       <div className="bg-black/80 backdrop-blur-xl border-b border-white/10 px-4 py-3 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
@@ -1136,7 +1136,8 @@ function TalkContent() {
       <div className="flex-1 flex flex-col min-h-0 relative">
         {/* Transcript history */}
         <div
-          className="flex-1 overflow-y-auto p-4 space-y-3"
+          className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-3"
+          style={{ WebkitOverflowScrolling: 'touch' }}
           onClick={() => setShowEmojiPicker(null)}
         >
           {isRoomFull ? (
