@@ -17,11 +17,6 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import type {
-  SpeechRecognitionInstance,
-  SpeechRecognitionEvent,
-  SpeechRecognitionErrorEvent,
-} from "./speech-types";
 
 // ═══════════════════════════════════════════════════════════════════════
 // TYPES
@@ -61,6 +56,7 @@ export interface UseCyranoReturn {
   deactivate: () => void;
   setMode: (mode: CyranoMode) => void;
   addTheirLine: (text: string) => void; // For manual input or remote STT
+  addYourLine: (text: string) => void; // Feed user's speech from transcription system
   dismissSuggestions: () => void;
   clearTranscript: () => void;
   regenerateSuggestions: () => void; // Get fresh suggestions on the same context
@@ -354,22 +350,6 @@ const MODE_DEBOUNCE: Record<CyranoMode, number> = {
   sales: 900,
 };
 
-// BCP-47 language codes for speech recognition
-const SPEECH_LANG_MAP: Record<string, string> = {
-  en: "en-US",
-  es: "es-CO", // Colombian Spanish
-  "es-CO": "es-CO",
-  "es-MX": "es-MX",
-  "es-ES": "es-ES",
-  fr: "fr-FR",
-  de: "de-DE",
-  it: "it-IT",
-  pt: "pt-BR",
-  zh: "zh-CN",
-  ja: "ja-JP",
-  ko: "ko-KR",
-};
-
 export interface UseCyranoOptions {
   initialMode?: CyranoMode;
   userLanguage?: string;
@@ -386,15 +366,12 @@ export function useCyrano(options: UseCyranoOptions = {}): UseCyranoReturn {
   const [error, setError] = useState<string | null>(null);
   const [liveCaption, setLiveCaption] = useState("");
 
-  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const transcriptRef = useRef<TranscriptEntry[]>([]);
   const modeRef = useRef<CyranoMode>(initialMode);
   const isActiveRef = useRef(false); // Fix stale closure in callbacks
   const abortControllerRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
-  const userLanguageRef = useRef(userLanguage);
-
   // Keep refs in sync
   useEffect(() => {
     transcriptRef.current = transcript;
@@ -407,10 +384,6 @@ export function useCyrano(options: UseCyranoOptions = {}): UseCyranoReturn {
   useEffect(() => {
     isActiveRef.current = isActive;
   }, [isActive]);
-
-  useEffect(() => {
-    userLanguageRef.current = userLanguage;
-  }, [userLanguage]);
 
   // Track mounted state for async cleanup
   useEffect(() => {
@@ -505,90 +478,11 @@ export function useCyrano(options: UseCyranoOptions = {}): UseCyranoReturn {
     setLiveCaption("");
   }, []);
 
-  // Speech recognition for YOUR side + caption detection
-  const startListening = useCallback(() => {
-    const SpeechRecognitionAPI =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
-
-    if (!SpeechRecognitionAPI) {
-      setError("Speech recognition requires Chrome or Edge.");
-      return;
-    }
-
-    const recognition = new SpeechRecognitionAPI();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    // Use user's language for speech recognition
-    recognition.lang =
-      SPEECH_LANG_MAP[userLanguageRef.current] ||
-      SPEECH_LANG_MAP[userLanguageRef.current.split("-")[0]] ||
-      "en-US";
-
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let interim = "";
-      let final = "";
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        if (result.isFinal) {
-          final += result[0].transcript;
-        } else {
-          interim += result[0].transcript;
-        }
-      }
-
-      if (interim) setLiveCaption(interim);
-
-      if (final.trim()) {
-        setLiveCaption("");
-        const entry: TranscriptEntry = {
-          speaker: "you",
-          text: final.trim(),
-          timestamp: Date.now(),
-        };
-        setTranscript((prev) => [...prev, entry]);
-        // Clear stale suggestions when user speaks
-        setSuggestions([]);
-      }
-    };
-
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      if (event.error === "no-speech") return; // Normal, don't surface
-      if (event.error === "aborted") return;
-      setError(`Mic error: ${event.error}`);
-    };
-
-    recognition.onend = () => {
-      // Auto-restart if still active - use REF to avoid stale closure
-      if (recognitionRef.current === recognition && isActiveRef.current) {
-        try {
-          recognition.start();
-        } catch {
-          /* Already started */
-        }
-      }
-    };
-
-    try {
-      recognition.start();
-      recognitionRef.current = recognition;
-      setIsListening(true);
-    } catch {
-      setError("Could not access microphone.");
-    }
-  }, []); // No dependencies - uses refs
-
-  const stopListening = useCallback(() => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      recognitionRef.current = null;
-    }
-    setIsListening(false);
-    setLiveCaption("");
-  }, []);
+  // No own SpeechRecognition — receives speech from useTranscription via addYourLine/addTheirLine
 
   const activate = useCallback(() => {
     setIsActive(true);
+    setIsListening(true);
     setSuggestions([]);
     setTranscript([]);
     setError(null);
@@ -596,7 +490,7 @@ export function useCyrano(options: UseCyranoOptions = {}): UseCyranoReturn {
 
   const deactivate = useCallback(() => {
     setIsActive(false);
-    stopListening();
+    setIsListening(false);
     setSuggestions([]);
     setLiveCaption("");
 
@@ -609,7 +503,7 @@ export function useCyrano(options: UseCyranoOptions = {}): UseCyranoReturn {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
-  }, [stopListening]);
+  }, []);
 
   const setMode = useCallback((mode: CyranoMode) => {
     setCurrentMode(mode);
@@ -650,20 +544,9 @@ export function useCyrano(options: UseCyranoOptions = {}): UseCyranoReturn {
     }
   }, []);
 
-  // Start/stop listening when active state changes
-  useEffect(() => {
-    if (isActive) {
-      startListening();
-    } else {
-      stopListening();
-    }
-    return () => stopListening();
-  }, [isActive]); // eslint-disable-line
-
   // Cleanup on unmount - abort all pending operations
   useEffect(() => {
     return () => {
-      stopListening();
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
         debounceRef.current = null;
@@ -673,7 +556,7 @@ export function useCyrano(options: UseCyranoOptions = {}): UseCyranoReturn {
         abortControllerRef.current = null;
       }
     };
-  }, []); // eslint-disable-line
+  }, []);
 
   return {
     isActive,
@@ -688,6 +571,7 @@ export function useCyrano(options: UseCyranoOptions = {}): UseCyranoReturn {
     deactivate,
     setMode,
     addTheirLine,
+    addYourLine,
     dismissSuggestions,
     clearTranscript,
     regenerateSuggestions,

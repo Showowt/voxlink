@@ -705,6 +705,13 @@ function VideoCallContent() {
     }
   }, [transcription.localTranslated]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Feed user's finalized speech to Cyrano (no own SpeechRecognition needed)
+  useEffect(() => {
+    if (transcription.localFinal && cyrano.isActive) {
+      cyrano.addYourLine(transcription.localFinal);
+    }
+  }, [transcription.localFinal]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     setIsListening(transcription.isListening);
   }, [transcription.isListening]);
@@ -1856,7 +1863,11 @@ function VideoCallContent() {
             <CyranoPanel
               cyrano={cyrano}
               onSuggestionPick={(text) => setCyranoPhrase(text)}
-              onClose={() => setCyranoOpen(false)}
+              onClose={() => {
+                cyrano.deactivate();
+                setCyranoOpen(false);
+                setCyranoPhrase("");
+              }}
             />
           </div>
         )}
@@ -2076,7 +2087,17 @@ function VideoCallContent() {
 
           {/* Cyrano Mode Toggle */}
           <button
-            onClick={() => setCyranoOpen((v) => !v)}
+            onClick={() => {
+              if (cyrano.isActive && cyranoOpen) {
+                // Panel open + active → deactivate and close
+                cyrano.deactivate();
+                setCyranoOpen(false);
+                setCyranoPhrase("");
+              } else {
+                // Toggle panel open/closed
+                setCyranoOpen((v) => !v);
+              }
+            }}
             title="Cyrano Mode"
             className="w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center text-lg md:text-xl transition-all active:scale-95 relative"
             style={{
