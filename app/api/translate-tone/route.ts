@@ -15,6 +15,17 @@ function checkLimit(ip: string, max: number): boolean {
   return true;
 }
 
+const LANG_NAMES: Record<string, string> = {
+  en: "English", es: "Spanish", fr: "French", pt: "Portuguese",
+  de: "German", it: "Italian", zh: "Chinese", ja: "Japanese",
+  ko: "Korean", ar: "Arabic", ru: "Russian", hi: "Hindi",
+  nl: "Dutch", pl: "Polish", tr: "Turkish", vi: "Vietnamese",
+  th: "Thai", id: "Indonesian", uk: "Ukrainian", el: "Greek",
+  he: "Hebrew", sv: "Swedish", cs: "Czech", ro: "Romanian",
+  hu: "Hungarian", fi: "Finnish", lt: "Lithuanian", da: "Danish",
+  no: "Norwegian", ms: "Malay", tl: "Filipino",
+};
+
 type Tone = "formal" | "casual" | "romantic" | "professional";
 
 const TONE_PROMPTS: Record<Tone, string> = {
@@ -58,9 +69,9 @@ export async function POST(req: NextRequest) {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "claude-sonnet-4-20250514",
         max_tokens: 150,
-        system: `You are a translation engine. ${toneInstruction} Translate from ${from} to ${to}. Output ONLY the translation, nothing else.`,
+        system: `You are a real-time translation engine for a live conversation. ${toneInstruction} Translate from ${LANG_NAMES[from] || from} to ${LANG_NAMES[to] || to}. Output ONLY the translated text. No quotes, no explanation, no extra text.`,
         messages: [{ role: "user", content: text }],
       }),
       signal: AbortSignal.timeout(5000),

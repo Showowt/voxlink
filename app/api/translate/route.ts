@@ -283,6 +283,17 @@ for (const [phrase, translation] of Object.entries(PHRASES["en-es"])) {
 // CLAUDE AI TRANSLATION - Bulletproof fallback (never fails silently)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+const LANG_NAMES: Record<string, string> = {
+  en: "English", es: "Spanish", fr: "French", pt: "Portuguese",
+  de: "German", it: "Italian", zh: "Chinese", ja: "Japanese",
+  ko: "Korean", ar: "Arabic", ru: "Russian", hi: "Hindi",
+  nl: "Dutch", pl: "Polish", tr: "Turkish", vi: "Vietnamese",
+  th: "Thai", id: "Indonesian", uk: "Ukrainian", el: "Greek",
+  he: "Hebrew", sv: "Swedish", cs: "Czech", ro: "Romanian",
+  hu: "Hungarian", fi: "Finnish", lt: "Lithuanian", da: "Danish",
+  no: "Norwegian", ms: "Malay", tl: "Filipino",
+};
+
 async function translateClaude(
   text: string,
   from: string,
@@ -305,7 +316,7 @@ async function translateClaude(
         messages: [
           {
             role: "user",
-            content: `Translate the following text from ${from} to ${to}. Return ONLY the translation, nothing else. No quotes, no explanation.\n\nText: ${text}`,
+            content: `Translate the following text from ${LANG_NAMES[from] || from} to ${LANG_NAMES[to] || to}. This is from a live conversation. Return ONLY the translated text — no quotes, no explanation, no extra words.\n\nText: ${text}`,
           },
         ],
       }),

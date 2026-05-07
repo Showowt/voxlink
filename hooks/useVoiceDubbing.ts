@@ -322,7 +322,7 @@ export function useVoiceDubbing(
           body: JSON.stringify({
             text: text.trim(),
             voiceId: voiceIdRef.current,
-            targetLang: targetLangRef.current,
+            targetLang: targetLang || targetLangRef.current,
             skipTranslation: true,
           }),
         });

@@ -31,18 +31,12 @@ function rateLimit(ip: string, max = 30): boolean {
 
 // ─── Language code to Whisper language ────────────────────────────────────────
 const WHISPER_LANG_MAP: Record<string, string> = {
-  en: "en",
-  es: "es",
-  fr: "fr",
-  de: "de",
-  it: "it",
-  pt: "pt",
-  zh: "zh",
-  ja: "ja",
-  ko: "ko",
-  ar: "ar",
-  ru: "ru",
-  hi: "hi",
+  en: "en", es: "es", fr: "fr", de: "de", it: "it", pt: "pt",
+  zh: "zh", ja: "ja", ko: "ko", ar: "ar", ru: "ru", hi: "hi",
+  nl: "nl", pl: "pl", tr: "tr", vi: "vi", th: "th", id: "id",
+  uk: "uk", el: "el", he: "he", sv: "sv", cs: "cs", ro: "ro",
+  hu: "hu", fi: "fi", lt: "lt", da: "da", no: "no", ms: "ms",
+  tl: "tl",
 };
 
 export async function POST(req: NextRequest) {
@@ -89,7 +83,8 @@ export async function POST(req: NextRequest) {
     whisperForm.append("response_format", "json");
 
     // Set language if supported
-    const whisperLang = WHISPER_LANG_MAP[language];
+    const normalizedLang = language.toLowerCase().split("-")[0].split("_")[0];
+    const whisperLang = WHISPER_LANG_MAP[normalizedLang];
     if (whisperLang) {
       whisperForm.append("language", whisperLang);
     }
