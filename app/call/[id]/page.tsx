@@ -1159,7 +1159,8 @@ function VideoCallContent() {
       if (isTranslationMessage(parsed)) {
         const { text, original, from, isFinal } = parsed;
 
-        // Track partner's language
+        // Track partner's language (fall back to expected if missing)
+        const resolvedFrom = from || partnerLang || expectedPartnerLang;
         if (from) setPartnerLang(from);
 
         // Show only the latest segment (truncate long text)
@@ -1172,7 +1173,7 @@ function VideoCallContent() {
         if (isFinal) {
           if (dubbingEnabledRef.current && text) {
             // Voice dubbing: pass the ALREADY TRANSLATED text (skip re-translation for speed)
-            processDubRef.current(text, from || "en", userLang);
+            processDubRef.current(text, resolvedFrom, userLang);
           } else {
             // Fallback: browser TTS
             speakText(text, userLang);
@@ -1186,7 +1187,7 @@ function VideoCallContent() {
             partnerName || "Partner",
             original || text,
             text,
-            from || "en",
+            resolvedFrom,
           );
 
           // Feed to Cyrano
@@ -1401,7 +1402,7 @@ function VideoCallContent() {
           conversationId: roomCode,
           durationSeconds: callDuration,
         }),
-      }).catch(() => {});
+      }).catch((err) => console.error("[Call] Bridge sync failed:", err));
     }
 
     // Save contact (fire and forget)
@@ -1415,7 +1416,7 @@ function VideoCallContent() {
           displayName: partnerName,
           language: partnerLang || expectedPartnerLang,
         }),
-      }).catch(() => {});
+      }).catch((err) => console.error("[Call] Contact save failed:", err));
     }
 
     // Show post-call summary if we had any conversation

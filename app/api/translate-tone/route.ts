@@ -85,7 +85,8 @@ export async function POST(req: NextRequest) {
     const translated = data.content?.[0]?.text?.trim() || text;
 
     return NextResponse.json({ translated, tone, original: text });
-  } catch {
+  } catch (err) {
+    console.error("[TranslateTone] Error:", err);
     return NextResponse.json({ error: "Translation failed" }, { status: 500 });
   }
 }

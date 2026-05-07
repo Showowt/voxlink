@@ -382,6 +382,9 @@ async function translateMyMemory(
         translated.toUpperCase().includes("LIMIT")
       )
         return null;
+      // Reject if MyMemory returned the same text (unsupported language pair)
+      if (translated.trim().toLowerCase() === text.trim().toLowerCase())
+        return null;
       return translated;
     }
     return null;
@@ -631,6 +634,11 @@ export async function POST(req: NextRequest) {
     // 7. Final result
     const finalTranslation = translation || cleanText;
     const latency = Date.now() - startTime;
+
+    // Log when all providers failed — this should not happen often
+    if (!translation) {
+      console.warn(`[Translate] ALL providers failed for ${from}->${to}: "${cleanText.slice(0, 50)}..." (${latency}ms)`);
+    }
 
     // Cache successful translations
     if (translation) {

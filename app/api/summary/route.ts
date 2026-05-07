@@ -108,14 +108,18 @@ Max 5 keyPhrases, max 3 followUps. Focus on the most interesting/useful phrases 
     // Parse JSON from Claude response
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      return NextResponse.json({
-        overview: parsed.overview || "Conversation completed.",
-        keyPhrases: (parsed.keyPhrases || []).slice(0, 5),
-        followUps: (parsed.followUps || []).slice(0, 3),
-        mood: parsed.mood || "warm",
-        languages: languages || [],
-      });
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return NextResponse.json({
+          overview: parsed.overview || "Conversation completed.",
+          keyPhrases: (parsed.keyPhrases || []).slice(0, 5),
+          followUps: (parsed.followUps || []).slice(0, 3),
+          mood: parsed.mood || "warm",
+          languages: languages || [],
+        });
+      } catch (parseErr) {
+        console.error("[Summary] JSON parse failed:", parseErr, "Raw:", text.slice(0, 200));
+      }
     }
 
     return NextResponse.json({

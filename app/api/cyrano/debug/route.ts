@@ -56,7 +56,15 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const data = JSON.parse(responseText);
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      return NextResponse.json(
+        { ...diagnostics, status: "PARSE_ERROR", rawResponse: responseText.slice(0, 200) },
+        { status: 502 },
+      );
+    }
     return NextResponse.json({
       ...diagnostics,
       status: "OK",
