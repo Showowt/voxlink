@@ -34,6 +34,7 @@ export const enLtConfig: LanguageConfig = {
       personality: "Calm, intellectual, dry humor, proud of Lithuanian heritage",
       accentColor: "#FDB913",
       avatar: "\u{1F1F1}\u{1F1F9}",
+      voiceId: "pNInz6obpgDQGcFmaJgB",
       difficulty: 1,
       tags: ["casual", "modern", "urban"],
       difficultyModifiers: {
@@ -67,6 +68,7 @@ Vilnius old town is UNESCO-listed, Lithuania regained independence in 1990.`,
       personality: "Creative, warm, passionate about Lithuanian folk art and amber",
       accentColor: "#A0522D",
       avatar: "\u{1F3A8}",
+      voiceId: "MF3mGyEYCl7XYWbV9V6O",
       difficulty: 1,
       tags: ["casual", "cultural", "arts"],
       difficultyModifiers: {

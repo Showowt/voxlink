@@ -5,7 +5,6 @@ import { useParams, useRouter } from "next/navigation";
 import { getLanguageConfig } from "@/app/lib/language-os/engine";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { getLevelFromScore } from "@/app/lib/language-os/algorithms/fluency";
-import { LangTTS } from "@/app/lib/language-os/tts";
 import type { CorrectionResult, Persona, UserProgress, DEFAULT_PROGRESS } from "@/app/lib/language-os/types";
 
 interface SessionMessage {
@@ -48,15 +47,16 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [progress, setProgress] = useState<UserProgress | null>(null);
 
+  const [speakingId, setSpeakingId] = useState<number | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const ttsRef = useRef<LangTTS | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
   const userId = useRef<string>("");
 
   // Initialize
   useEffect(() => {
     userId.current = getDeviceId();
-    ttsRef.current = new LangTTS(config.targetLocale);
 
     // Load progress
     fetch(`/api/language-os/progress?userId=${userId.current}&languagePair=${langCode}`)
@@ -65,9 +65,9 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
       .catch(() => {});
 
     return () => {
-      ttsRef.current?.stop();
+      try { audioCtxRef.current?.close(); } catch { /* ignore */ }
     };
-  }, [config.targetLocale, langCode]);
+  }, [langCode]);
 
   // Auto-scroll messages
   useEffect(() => {
@@ -162,9 +162,46 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
     }
   }, [inputText, isThinking, messages, activePersona, langCode, progress, sessionId, showTranslations]);
 
-  const speakText = (text: string) => {
-    ttsRef.current?.speak(text);
-  };
+  const speakText = useCallback(async (text: string, voiceId: string, msgIndex?: number) => {
+    if (!text.trim()) return;
+
+    if (msgIndex !== undefined) setSpeakingId(msgIndex);
+
+    try {
+      const res = await fetch("/api/language-os/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, voiceId }),
+      });
+
+      const data = await res.json();
+      if (!data.audioBase64) throw new Error("No audio");
+
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+      const ctx = audioCtxRef.current;
+      if (ctx.state === "suspended") await ctx.resume();
+
+      const binary = atob(data.audioBase64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+      const audioBuffer = await ctx.decodeAudioData(bytes.buffer.slice(0));
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
+      source.start();
+      source.onended = () => setSpeakingId(null);
+    } catch {
+      // Fallback to browser SpeechSynthesis
+      setSpeakingId(null);
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = config.targetLocale;
+        utterance.rate = 0.9;
+        window.speechSynthesis.speak(utterance);
+      }
+    }
+  }, [config.targetLocale]);
 
   const startNewConversation = (persona: Persona) => {
     setActivePersona(persona);
@@ -312,10 +349,11 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
                     {/* TTS button for assistant messages */}
                     {msg.role === "assistant" && (
                       <button
-                        onClick={() => speakText(msg.content)}
-                        className="mt-1 text-white/20 hover:text-white/50 text-xs transition-colors"
+                        onClick={() => speakText(msg.content, activePersona.voiceId, i)}
+                        disabled={speakingId !== null}
+                        className={`mt-1 text-xs transition-colors ${speakingId === i ? "text-[#00C896] animate-pulse" : "text-white/20 hover:text-white/50"} disabled:opacity-40`}
                       >
-                        🔊
+                        {speakingId === i ? "..." : "\uD83D\uDD0A"}
                       </button>
                     )}
 
@@ -459,8 +497,8 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
                       <p className="text-white text-sm font-medium">{word.word}</p>
                       <p className="text-[#00C896] text-xs">{word.translation}</p>
                     </div>
-                    <button onClick={() => speakText(word.word)} className="text-white/20 hover:text-white/50 p-2">
-                      🔊
+                    <button onClick={() => speakText(word.word, activePersona.voiceId)} className="text-white/20 hover:text-white/50 p-2">
+                      {"\uD83D\uDD0A"}
                     </button>
                   </div>
                 ))}

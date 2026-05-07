@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
-import { LangTTS } from "@/app/lib/language-os/tts";
 import { getLanguageConfig } from "@/app/lib/language-os/engine";
 import type { SRSCard } from "@/app/lib/language-os/types";
 
@@ -20,8 +19,44 @@ export default function SRSReviewPage() {
   const [reviewed, setReviewed] = useState(0);
   const [done, setDone] = useState(false);
 
-  const ttsRef = useRef<LangTTS | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
   const userIdRef = useRef("");
+
+  // Get the first persona's voiceId for review card TTS
+  const defaultVoiceId = config?.personas[0]?.voiceId ?? "";
+
+  const speakCard = useCallback(async (text: string) => {
+    if (!text.trim() || !defaultVoiceId) return;
+    try {
+      const res = await fetch("/api/language-os/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, voiceId: defaultVoiceId }),
+      });
+      const data = await res.json();
+      if (!data.audioBase64) throw new Error("No audio");
+
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+      const ctx = audioCtxRef.current;
+      if (ctx.state === "suspended") await ctx.resume();
+
+      const binary = atob(data.audioBase64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const audioBuffer = await ctx.decodeAudioData(bytes.buffer.slice(0));
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
+      source.start();
+    } catch {
+      if (typeof window !== "undefined" && "speechSynthesis" in window && config) {
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = config.targetLocale;
+        u.rate = 0.9;
+        window.speechSynthesis.speak(u);
+      }
+    }
+  }, [defaultVoiceId, config]);
 
   useEffect(() => {
     if (!config) {
@@ -30,7 +65,6 @@ export default function SRSReviewPage() {
     }
 
     userIdRef.current = getDeviceId();
-    ttsRef.current = new LangTTS(config.targetLocale);
 
     fetch(`/api/language-os/srs?userId=${userIdRef.current}&languagePair=${lang}&limit=20`)
       .then((r) => r.json())
@@ -40,7 +74,7 @@ export default function SRSReviewPage() {
       })
       .catch(() => setLoading(false));
 
-    return () => { ttsRef.current?.stop(); };
+    return () => { try { audioCtxRef.current?.close(); } catch { /* ignore */ } };
   }, [lang, config, router]);
 
   const currentCard = cards[currentIndex];
@@ -185,7 +219,7 @@ export default function SRSReviewPage() {
                 <p className="text-white/40 text-xs mt-4 text-center italic leading-relaxed max-w-[240px]">{currentCard.exampleSentence}</p>
               )}
               <button
-                onClick={(e) => { e.stopPropagation(); ttsRef.current?.speak(currentCard?.audioText || currentCard?.front || ""); }}
+                onClick={(e) => { e.stopPropagation(); speakCard(currentCard?.audioText || currentCard?.front || ""); }}
                 className="mt-6 w-12 h-12 flex items-center justify-center bg-white/[0.06] hover:bg-white/[0.12] rounded-full text-white/50 hover:text-white transition-all active:scale-90 border border-white/[0.08]"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

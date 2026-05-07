@@ -44,6 +44,7 @@ export interface Persona {
   systemPrompt: string;
   accentColor: string;
   avatar: string;
+  voiceId: string;
   difficulty: 1 | 2 | 3;
   tags: string[];
   fallbackResponses: string[];
