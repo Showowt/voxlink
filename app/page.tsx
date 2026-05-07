@@ -1409,7 +1409,7 @@ function HomeContent() {
             </div>
           </div>
 
-          <div className="p-3 sm:p-5 max-h-[calc(100dvh-260px)] sm:max-h-none overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <div className="p-3 sm:p-5 sm:max-h-none overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
             {/* VoxType Tab - Type & Verify Translation */}
             {activeTab === "voxtype" ? (
               <VoxTypeTab />
