@@ -76,6 +76,13 @@ function TalkContent() {
 
   const roomId = params.id as string;
 
+  // Validate room ID format (alphanumeric, 4-8 characters)
+  useEffect(() => {
+    if (!/^[A-Za-z0-9]{4,8}$/.test(roomId)) {
+      router.replace("/");
+    }
+  }, [roomId, router]);
+
   // User configuration from URL params
   const isHost = searchParams.get("host") === "true";
   const userName = searchParams.get("name") || "User";

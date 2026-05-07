@@ -28,10 +28,23 @@ export async function GET(req: NextRequest) {
 // POST /api/contacts — upsert a contact after a call
 export async function POST(req: NextRequest) {
   try {
-    const { ownerDeviceId, contactDeviceId, displayName, language } = await req.json();
+    const body = await req.json();
+    const { ownerDeviceId, contactDeviceId, displayName, language } = body;
 
-    if (!ownerDeviceId || !contactDeviceId || ownerDeviceId === contactDeviceId) {
-      return NextResponse.json({ success: false, error: "Invalid params" }, { status: 400 });
+    if (!ownerDeviceId || typeof ownerDeviceId !== "string") {
+      return NextResponse.json({ success: false, error: "ownerDeviceId is required and must be a string" }, { status: 400 });
+    }
+    if (!contactDeviceId || typeof contactDeviceId !== "string") {
+      return NextResponse.json({ success: false, error: "contactDeviceId is required and must be a string" }, { status: 400 });
+    }
+    if (ownerDeviceId === contactDeviceId) {
+      return NextResponse.json({ success: false, error: "ownerDeviceId and contactDeviceId must be different" }, { status: 400 });
+    }
+    if (displayName !== undefined && typeof displayName !== "string") {
+      return NextResponse.json({ success: false, error: "displayName must be a string" }, { status: 400 });
+    }
+    if (language !== undefined && typeof language !== "string") {
+      return NextResponse.json({ success: false, error: "language must be a string" }, { status: 400 });
     }
 
     // Try to update existing contact (increment call count)
@@ -74,10 +87,14 @@ export async function POST(req: NextRequest) {
 // PATCH /api/contacts — toggle favorite
 export async function PATCH(req: NextRequest) {
   try {
-    const { ownerDeviceId, contactDeviceId, isFavorite } = await req.json();
+    const body = await req.json();
+    const { ownerDeviceId, contactDeviceId, isFavorite } = body;
 
-    if (!ownerDeviceId || !contactDeviceId) {
-      return NextResponse.json({ success: false }, { status: 400 });
+    if (!ownerDeviceId || typeof ownerDeviceId !== "string") {
+      return NextResponse.json({ success: false, error: "ownerDeviceId is required and must be a string" }, { status: 400 });
+    }
+    if (!contactDeviceId || typeof contactDeviceId !== "string") {
+      return NextResponse.json({ success: false, error: "contactDeviceId is required and must be a string" }, { status: 400 });
     }
 
     await supabase
@@ -96,10 +113,14 @@ export async function PATCH(req: NextRequest) {
 // DELETE /api/contacts — remove a contact
 export async function DELETE(req: NextRequest) {
   try {
-    const { ownerDeviceId, contactDeviceId } = await req.json();
+    const body = await req.json();
+    const { ownerDeviceId, contactDeviceId } = body;
 
-    if (!ownerDeviceId || !contactDeviceId) {
-      return NextResponse.json({ success: false }, { status: 400 });
+    if (!ownerDeviceId || typeof ownerDeviceId !== "string") {
+      return NextResponse.json({ success: false, error: "ownerDeviceId is required and must be a string" }, { status: 400 });
+    }
+    if (!contactDeviceId || typeof contactDeviceId !== "string") {
+      return NextResponse.json({ success: false, error: "contactDeviceId is required and must be a string" }, { status: 400 });
     }
 
     await supabase

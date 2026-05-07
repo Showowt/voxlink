@@ -8,6 +8,23 @@ import { z } from "zod";
 import { createServerClient } from "@/lib/supabase-auth";
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// RATE LIMITING
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const limiter = new Map<string, { count: number; reset: number }>();
+function checkLimit(ip: string, max: number): boolean {
+  const now = Date.now();
+  const e = limiter.get(ip);
+  if (!e || now > e.reset) {
+    limiter.set(ip, { count: 1, reset: now + 60000 });
+    return true;
+  }
+  if (e.count >= max) return false;
+  e.count++;
+  return true;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // VALIDATION SCHEMA
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -25,6 +42,11 @@ const signupSchema = z.object({
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export async function POST(request: NextRequest) {
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
+  if (!checkLimit(ip, 10)) {
+    return NextResponse.json({ error: "Rate limited" }, { status: 429 });
+  }
+
   try {
     // Parse and validate request body
     const body = await request.json();

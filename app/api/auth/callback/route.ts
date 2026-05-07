@@ -8,10 +8,32 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase-auth";
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// RATE LIMITING
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const limiter = new Map<string, { count: number; reset: number }>();
+function checkLimit(ip: string, max: number): boolean {
+  const now = Date.now();
+  const e = limiter.get(ip);
+  if (!e || now > e.reset) {
+    limiter.set(ip, { count: 1, reset: now + 60000 });
+    return true;
+  }
+  if (e.count >= max) return false;
+  e.count++;
+  return true;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // GET - Handle OAuth redirect and email confirmation
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export async function GET(request: NextRequest) {
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
+  if (!checkLimit(ip, 30)) {
+    return NextResponse.json({ error: "Rate limited" }, { status: 429 });
+  }
+
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
   const error = requestUrl.searchParams.get("error");

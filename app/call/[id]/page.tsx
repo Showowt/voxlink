@@ -571,6 +571,14 @@ function VideoCallContent() {
   const browserSupport = useBrowserSupport();
 
   const roomCode = params.id as string;
+
+  // Validate room ID format (alphanumeric, 4-8 characters)
+  useEffect(() => {
+    if (!/^[A-Za-z0-9]{4,8}$/.test(roomCode)) {
+      router.replace("/");
+    }
+  }, [roomCode, router]);
+
   const isHost = searchParams.get("host") === "true";
   const userName = searchParams.get("name") || "User";
   const initialUserLang = searchParams.get("lang") || "en";
@@ -1031,7 +1039,7 @@ function VideoCallContent() {
         if (localStreamRef.current) {
           stopCamera(localStreamRef.current);
         }
-      }, 100);
+      }, 500);
     };
   }, [roomCode, isHost, userName, inLobby, lobbyStream]);
 

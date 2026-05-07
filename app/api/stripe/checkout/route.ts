@@ -8,7 +8,27 @@ import { createServerClient } from "@/lib/supabase-auth";
 // Returns: { url: string } for redirect to Stripe
 // ═══════════════════════════════════════════════════════════════════════════════
 
+const VALID_PLANS = ["pro", "enterprise"] as const;
+type ValidPlan = (typeof VALID_PLANS)[number];
+
+const limiter = new Map<string, { count: number; reset: number }>();
+function checkLimit(ip: string): boolean {
+  const now = Date.now();
+  const e = limiter.get(ip);
+  if (!e || now > e.reset) {
+    limiter.set(ip, { count: 1, reset: now + 60000 });
+    return true;
+  }
+  if (e.count >= 20) return false;
+  e.count++;
+  return true;
+}
+
 export async function POST(req: NextRequest) {
+  const ip = req.headers.get("x-forwarded-for") ?? req.ip ?? "unknown";
+  if (!checkLimit(ip)) {
+    return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
+  }
   const supabase = await createServerClient();
   if (!supabase) {
     return NextResponse.json({ error: "Auth not configured" }, { status: 500 });
@@ -52,7 +72,15 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const plan = body.plan as "pro" | "enterprise";
+  const plan = body.plan;
+
+  if (!plan || typeof plan !== "string" || !VALID_PLANS.includes(plan as ValidPlan)) {
+    return NextResponse.json(
+      { error: "Invalid plan. Must be one of: " + VALID_PLANS.join(", ") },
+      { status: 400 },
+    );
+  }
+
   const priceId = plan === "pro" ? STRIPE_PRICES.PRO_MONTHLY : null;
 
   if (!priceId) {

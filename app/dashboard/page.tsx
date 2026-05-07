@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useAnalytics } from "@/hooks/useAnalytics";
@@ -137,7 +137,7 @@ function UsageBar({
   );
 }
 
-export default function DashboardPage() {
+function DashboardContent() {
   const {
     profile,
     limits,
@@ -352,5 +352,13 @@ export default function DashboardPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#06060a]" />}>
+      <DashboardContent />
+    </Suspense>
   );
 }

@@ -8,7 +8,24 @@ import { createServerClient } from "@/lib/supabase-auth";
 // Returns: { url: string } for redirect to Stripe portal
 // ═══════════════════════════════════════════════════════════════════════════════
 
+const limiter = new Map<string, { count: number; reset: number }>();
+function checkLimit(ip: string): boolean {
+  const now = Date.now();
+  const e = limiter.get(ip);
+  if (!e || now > e.reset) {
+    limiter.set(ip, { count: 1, reset: now + 60000 });
+    return true;
+  }
+  if (e.count >= 20) return false;
+  e.count++;
+  return true;
+}
+
 export async function POST(req: NextRequest) {
+  const ip = req.headers.get("x-forwarded-for") ?? req.ip ?? "unknown";
+  if (!checkLimit(ip)) {
+    return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
+  }
   const supabase = await createServerClient();
   if (!supabase) {
     return NextResponse.json({ error: "Auth not configured" }, { status: 500 });

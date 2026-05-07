@@ -38,11 +38,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
-  const { audioBase64, mimeType = "audio/webm", sessionKey } = body;
+  const { audioBase64, mimeType, sessionKey } = body;
 
-  if (!audioBase64 || audioBase64.length < 1000) {
+  if (typeof audioBase64 !== "string" || audioBase64.length < 1000) {
     return NextResponse.json(
       { error: "Audio sample too short" },
+      { status: 400 },
+    );
+  }
+
+  const ALLOWED_MIME_TYPES = [
+    "audio/webm",
+    "audio/webm;codecs=opus",
+    "audio/mp4",
+    "audio/mpeg",
+  ] as const;
+
+  if (!mimeType || !ALLOWED_MIME_TYPES.includes(mimeType as typeof ALLOWED_MIME_TYPES[number])) {
+    return NextResponse.json(
+      { error: "Invalid or missing audio mimeType" },
       { status: 400 },
     );
   }

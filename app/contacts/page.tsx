@@ -44,6 +44,7 @@ export default function ContactsPage() {
   const router = useRouter();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
   const [deviceId, setDeviceId] = useState('');
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
 
@@ -53,7 +54,7 @@ export default function ContactsPage() {
     fetch(`/api/contacts?deviceId=${encodeURIComponent(id)}`)
       .then(r => r.json())
       .then(d => setContacts(d.contacts ?? []))
-      .catch(() => {})
+      .catch(() => { setFetchError(true); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -112,21 +113,43 @@ export default function ContactsPage() {
 
         {!loading && contacts.length === 0 && (
           <div className="text-center py-16">
-            <div className="w-16 h-16 mx-auto rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center mb-4">
-              <svg className="w-7 h-7 text-white/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-            </div>
-            <p className="text-white font-medium text-base mb-2">No contacts yet</p>
-            <p className="text-white/40 text-sm leading-relaxed max-w-[260px] mx-auto">
-              People you call will appear here automatically. Star them to pin as favorites.
-            </p>
-            <button
-              onClick={() => router.push('/')}
-              className="mt-6 px-5 py-2.5 rounded-xl text-sm font-medium bg-[#00C896]/10 text-[#00C896] border border-[#00C896]/20 hover:bg-[#00C896]/15 transition-all active:scale-95"
-            >
-              Start a call
-            </button>
+            {fetchError ? (
+              <>
+                <div className="w-16 h-16 mx-auto rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-4">
+                  <svg className="w-7 h-7 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <p className="text-white font-medium text-base mb-2">Failed to load contacts</p>
+                <p className="text-white/40 text-sm leading-relaxed max-w-[260px] mx-auto">
+                  Something went wrong. Check your connection and try again.
+                </p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="mt-6 px-5 py-2.5 rounded-xl text-sm font-medium bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/15 transition-all active:scale-95"
+                >
+                  Retry
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="w-16 h-16 mx-auto rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center mb-4">
+                  <svg className="w-7 h-7 text-white/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+                <p className="text-white font-medium text-base mb-2">No contacts yet</p>
+                <p className="text-white/40 text-sm leading-relaxed max-w-[260px] mx-auto">
+                  People you call will appear here automatically. Star them to pin as favorites.
+                </p>
+                <button
+                  onClick={() => router.push('/')}
+                  className="mt-6 px-5 py-2.5 rounded-xl text-sm font-medium bg-[#00C896]/10 text-[#00C896] border border-[#00C896]/20 hover:bg-[#00C896]/15 transition-all active:scale-95"
+                >
+                  Start a call
+                </button>
+              </>
+            )}
           </div>
         )}
 
