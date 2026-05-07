@@ -2,10 +2,28 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
+const limiter = new Map<string, { count: number; reset: number }>();
+function checkLimit(ip: string, max: number): boolean {
+  const now = Date.now();
+  const e = limiter.get(ip);
+  if (!e || now > e.reset) {
+    limiter.set(ip, { count: 1, reset: now + 60000 });
+    return true;
+  }
+  if (e.count >= max) return false;
+  e.count++;
+  return true;
+}
+
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ code: string }> }
 ) {
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
+  if (!checkLimit(ip, 30)) {
+    return NextResponse.json({ error: "Rate limited" }, { status: 429 });
+  }
+
   const { code: rawCode } = await params;
   const code = rawCode?.toUpperCase();
   if (!code || code.length !== 6) {

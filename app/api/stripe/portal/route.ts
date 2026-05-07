@@ -59,13 +59,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL || "https://www.entrevoz.co";
-
-  const session = await stripeClient.billingPortal.sessions.create({
-    customer: profile.stripe_customer_id,
-    return_url: `${appUrl}/dashboard`,
-  });
-
-  return NextResponse.json({ url: session.url });
+  try {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://www.entrevoz.co";
+    const session = await stripeClient.billingPortal.sessions.create({
+      customer: profile.stripe_customer_id,
+      return_url: `${appUrl}/dashboard`,
+    });
+    return NextResponse.json({ url: session.url });
+  } catch (err) {
+    console.error("[Stripe Portal]", err);
+    return NextResponse.json({ error: "Portal session failed" }, { status: 500 });
+  }
 }

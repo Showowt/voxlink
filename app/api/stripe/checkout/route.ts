@@ -55,55 +55,60 @@ export async function POST(req: NextRequest) {
     .eq("id", user.id)
     .single();
 
-  let customerId = profile?.stripe_customer_id;
+  try {
+    let customerId = profile?.stripe_customer_id;
 
-  if (!customerId) {
-    const customer = await stripeClient.customers.create({
-      email: profile?.email ?? user.email,
-      name: profile?.display_name ?? undefined,
-      metadata: { supabase_user_id: user.id },
-    });
-    customerId = customer.id;
+    if (!customerId) {
+      const customer = await stripeClient.customers.create({
+        email: profile?.email ?? user.email,
+        name: profile?.display_name ?? undefined,
+        metadata: { supabase_user_id: user.id },
+      });
+      customerId = customer.id;
 
-    await supabase
-      .from("profiles")
-      .update({ stripe_customer_id: customerId })
-      .eq("id", user.id);
-  }
+      await supabase
+        .from("profiles")
+        .update({ stripe_customer_id: customerId })
+        .eq("id", user.id);
+    }
 
-  const body = await req.json();
-  const plan = body.plan;
+    const body = await req.json();
+    const plan = body.plan;
 
-  if (!plan || typeof plan !== "string" || !VALID_PLANS.includes(plan as ValidPlan)) {
-    return NextResponse.json(
-      { error: "Invalid plan. Must be one of: " + VALID_PLANS.join(", ") },
-      { status: 400 },
-    );
-  }
+    if (!plan || typeof plan !== "string" || !VALID_PLANS.includes(plan as ValidPlan)) {
+      return NextResponse.json(
+        { error: "Invalid plan. Must be one of: " + VALID_PLANS.join(", ") },
+        { status: 400 },
+      );
+    }
 
-  const priceId = plan === "pro" ? STRIPE_PRICES.PRO_MONTHLY : null;
+    const priceId = plan === "pro" ? STRIPE_PRICES.PRO_MONTHLY : null;
 
-  if (!priceId) {
-    return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
-  }
+    if (!priceId) {
+      return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
+    }
 
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL || "https://www.entrevoz.co";
+    const appUrl =
+      process.env.NEXT_PUBLIC_APP_URL || "https://www.entrevoz.co";
 
-  const session = await stripeClient.checkout.sessions.create({
-    customer: customerId,
-    mode: "subscription",
-    payment_method_types: ["card"],
-    line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `${appUrl}/dashboard?upgraded=true`,
-    cancel_url: `${appUrl}/pricing`,
-    subscription_data: {
-      trial_period_days: 7,
+    const session = await stripeClient.checkout.sessions.create({
+      customer: customerId,
+      mode: "subscription",
+      payment_method_types: ["card"],
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${appUrl}/dashboard?upgraded=true`,
+      cancel_url: `${appUrl}/pricing`,
+      subscription_data: {
+        trial_period_days: 7,
+        metadata: { supabase_user_id: user.id, plan },
+      },
       metadata: { supabase_user_id: user.id, plan },
-    },
-    metadata: { supabase_user_id: user.id, plan },
-    allow_promotion_codes: true,
-  });
+      allow_promotion_codes: true,
+    });
 
-  return NextResponse.json({ url: session.url });
+    return NextResponse.json({ url: session.url });
+  } catch (err) {
+    console.error("[Stripe Checkout]", err);
+    return NextResponse.json({ error: "Checkout failed" }, { status: 500 });
+  }
 }

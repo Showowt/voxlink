@@ -12,6 +12,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+export const maxDuration = 30;
+
 // ─── Rate limiter (30 req/min per IP - transcription is expensive) ────────────
 const rl = new Map<string, { n: number; resetAt: number }>();
 function rateLimit(ip: string, max = 30): boolean {
@@ -100,6 +103,7 @@ export async function POST(req: NextRequest) {
           Authorization: `Bearer ${apiKey}`,
         },
         body: whisperForm,
+        signal: AbortSignal.timeout(30000),
       },
     );
 
@@ -107,7 +111,7 @@ export async function POST(req: NextRequest) {
       const errorText = await response.text();
       console.error("[Whisper] API error:", response.status, errorText);
       return NextResponse.json(
-        { error: "Transcription failed", details: errorText },
+        { error: "Transcription failed" },
         { status: 502 },
       );
     }

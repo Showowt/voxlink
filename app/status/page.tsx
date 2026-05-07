@@ -108,7 +108,7 @@ export default function StatusPage() {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-zinc-950 text-white">
+    <div className="min-h-[100dvh] bg-zinc-950 text-white safe-top safe-bottom">
       {/* Header */}
       <header className="border-b border-zinc-800">
         <div className="max-w-4xl mx-auto px-4 py-6">

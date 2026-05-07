@@ -5,6 +5,19 @@ import { supabase } from "@/lib/supabase";
 // Force dynamic rendering
 export const dynamic = "force-dynamic";
 
+const limiter = new Map<string, { count: number; reset: number }>();
+function checkLimit(ip: string, max: number): boolean {
+  const now = Date.now();
+  const e = limiter.get(ip);
+  if (!e || now > e.reset) {
+    limiter.set(ip, { count: 1, reset: now + 60000 });
+    return true;
+  }
+  if (e.count >= max) return false;
+  e.count++;
+  return true;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // POST /api/proximity/request - Send connection request to another user
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -16,6 +29,11 @@ const RequestSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
+  if (!checkLimit(ip, 30)) {
+    return NextResponse.json({ error: "Rate limited" }, { status: 429 });
+  }
+
   try {
     // Parse and validate request body
     const body = await request.json();
@@ -123,6 +141,11 @@ const GetRequestsSchema = z.object({
 });
 
 export async function GET(request: NextRequest) {
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
+  if (!checkLimit(ip, 30)) {
+    return NextResponse.json({ error: "Rate limited" }, { status: 429 });
+  }
+
   try {
     // Parse query parameters
     const searchParams = Object.fromEntries(request.nextUrl.searchParams);

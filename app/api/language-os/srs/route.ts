@@ -3,9 +3,27 @@ import { losClient } from "@/app/lib/language-os/supabase-client";
 import { calculateSM2 } from "@/app/lib/language-os/algorithms/sm2";
 import type { SRSCard } from "@/app/lib/language-os/types";
 
+const limiter = new Map<string, { count: number; reset: number }>();
+function checkLimit(ip: string, max: number): boolean {
+  const now = Date.now();
+  const e = limiter.get(ip);
+  if (!e || now > e.reset) {
+    limiter.set(ip, { count: 1, reset: now + 60000 });
+    return true;
+  }
+  if (e.count >= max) return false;
+  e.count++;
+  return true;
+}
+
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
+  if (!checkLimit(ip, 60)) {
+    return NextResponse.json({ error: "Rate limited" }, { status: 429 });
+  }
+
   const userId = req.nextUrl.searchParams.get("userId");
   const languagePair = req.nextUrl.searchParams.get("languagePair");
   const limit = parseInt(req.nextUrl.searchParams.get("limit") || "10");
@@ -68,6 +86,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
+  if (!checkLimit(ip, 60)) {
+    return NextResponse.json({ error: "Rate limited" }, { status: 429 });
+  }
+
   try {
     const { cardId, quality, userId } = await req.json();
 

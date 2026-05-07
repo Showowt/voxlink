@@ -35,13 +35,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing signature" }, { status: 400 });
   }
 
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    return NextResponse.json({ error: "Webhook not configured" }, { status: 500 });
+  }
+
   let event: Stripe.Event;
 
   try {
     event = stripeClient.webhooks.constructEvent(
       body,
       sig,
-      process.env.STRIPE_WEBHOOK_SECRET!,
+      webhookSecret,
     );
   } catch (err) {
     console.error("[Webhook] Invalid signature:", err);
@@ -78,13 +83,17 @@ export async function POST(req: NextRequest) {
       );
       const expiresAt = new Date(sub.current_period_end * 1000).toISOString();
 
-      await supabase
+      const { error: updateErr } = await supabase
         .from("profiles")
         .update({
           plan,
           plan_expires_at: expiresAt,
         })
         .eq("id", userId);
+      if (updateErr) {
+        console.error("[Webhook] Profile update failed:", updateErr);
+        return NextResponse.json({ error: "Profile update failed" }, { status: 500 });
+      }
 
       console.log(`[Webhook] Plan ${plan} activated for ${userId}`);
       break;
@@ -99,13 +108,17 @@ export async function POST(req: NextRequest) {
       const expiresAt = new Date(sub.current_period_end * 1000).toISOString();
       const isActive = ["active", "trialing"].includes(sub.status);
 
-      await supabase
+      const { error: updateErr2 } = await supabase
         .from("profiles")
         .update({
           plan: isActive ? (plan ?? "pro") : "free",
           plan_expires_at: isActive ? expiresAt : null,
         })
         .eq("id", userId);
+      if (updateErr2) {
+        console.error("[Webhook] Profile update failed:", updateErr2);
+        return NextResponse.json({ error: "Profile update failed" }, { status: 500 });
+      }
 
       break;
     }
@@ -115,13 +128,17 @@ export async function POST(req: NextRequest) {
       const userId = sub.metadata?.supabase_user_id;
       if (!userId) break;
 
-      await supabase
+      const { error: updateErr3 } = await supabase
         .from("profiles")
         .update({
           plan: "free",
           plan_expires_at: null,
         })
         .eq("id", userId);
+      if (updateErr3) {
+        console.error("[Webhook] Profile update failed:", updateErr3);
+        return NextResponse.json({ error: "Profile update failed" }, { status: 500 });
+      }
 
       console.log(`[Webhook] Subscription cancelled for ${userId}`);
       break;

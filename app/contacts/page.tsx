@@ -240,7 +240,7 @@ function ContactCard({
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <button
             onClick={(e) => { e.stopPropagation(); onCall('video'); }}
-            className="w-9 h-9 rounded-xl bg-[#00C896]/10 border border-[#00C896]/20 flex items-center justify-center text-[#00C896] hover:bg-[#00C896]/20 transition-all active:scale-90"
+            className="w-11 h-11 rounded-xl bg-[#00C896]/10 border border-[#00C896]/20 flex items-center justify-center text-[#00C896] hover:bg-[#00C896]/20 transition-all active:scale-90"
             title="Video call"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -249,7 +249,7 @@ function ContactCard({
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onCall('audio'); }}
-            className="w-9 h-9 rounded-xl bg-white/[0.06] border border-white/[0.1] flex items-center justify-center text-white/60 hover:bg-white/[0.1] transition-all active:scale-90"
+            className="w-11 h-11 rounded-xl bg-white/[0.06] border border-white/[0.1] flex items-center justify-center text-white/60 hover:bg-white/[0.1] transition-all active:scale-90"
             title="Audio call"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -258,7 +258,7 @@ function ContactCard({
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === c.id ? null : c.id); }}
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-white/30 hover:text-white/60 hover:bg-white/[0.06] transition-all"
+            className="w-11 h-11 rounded-xl flex items-center justify-center text-white/30 hover:text-white/60 hover:bg-white/[0.06] transition-all"
           >
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
               <path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z" />

@@ -2,6 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { losClient } from "@/app/lib/language-os/supabase-client";
 import { getInitialCard } from "@/app/lib/language-os/algorithms/sm2";
 
+const limiter = new Map<string, { count: number; reset: number }>();
+function checkLimit(ip: string, max: number): boolean {
+  const now = Date.now();
+  const e = limiter.get(ip);
+  if (!e || now > e.reset) {
+    limiter.set(ip, { count: 1, reset: now + 60000 });
+    return true;
+  }
+  if (e.count >= max) return false;
+  e.count++;
+  return true;
+}
+
 export const dynamic = "force-dynamic";
 
 // Common stop words to filter out
@@ -14,6 +27,11 @@ const STOP_WORDS = new Set([
 ]);
 
 export async function POST(req: NextRequest) {
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
+  if (!checkLimit(ip, 30)) {
+    return NextResponse.json({ error: "Rate limited" }, { status: 429 });
+  }
+
   try {
     const { userId, languagePair, transcript, conversationId, durationSeconds } = await req.json();
 

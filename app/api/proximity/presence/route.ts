@@ -5,6 +5,19 @@ import { supabase } from "@/lib/supabase";
 // Force dynamic rendering
 export const dynamic = "force-dynamic";
 
+const limiter = new Map<string, { count: number; reset: number }>();
+function checkLimit(ip: string, max: number): boolean {
+  const now = Date.now();
+  const e = limiter.get(ip);
+  if (!e || now > e.reset) {
+    limiter.set(ip, { count: 1, reset: now + 60000 });
+    return true;
+  }
+  if (e.count >= max) return false;
+  e.count++;
+  return true;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // DELETE /api/proximity/presence - Remove user presence on app close
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -14,6 +27,11 @@ const DeletePresenceSchema = z.object({
 });
 
 export async function DELETE(request: NextRequest) {
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
+  if (!checkLimit(ip, 60)) {
+    return NextResponse.json({ error: "Rate limited" }, { status: 429 });
+  }
+
   try {
     // Parse query parameters
     const searchParams = Object.fromEntries(request.nextUrl.searchParams);
@@ -78,6 +96,11 @@ const GetPresenceSchema = z.object({
 });
 
 export async function GET(request: NextRequest) {
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
+  if (!checkLimit(ip, 60)) {
+    return NextResponse.json({ error: "Rate limited" }, { status: 429 });
+  }
+
   try {
     // Parse query parameters
     const searchParams = Object.fromEntries(request.nextUrl.searchParams);
@@ -150,6 +173,11 @@ const UpdatePresenceSchema = z.object({
 });
 
 export async function PATCH(request: NextRequest) {
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
+  if (!checkLimit(ip, 60)) {
+    return NextResponse.json({ error: "Rate limited" }, { status: 429 });
+  }
+
   try {
     // Parse and validate request body
     const body = await request.json();

@@ -3,8 +3,26 @@ import { supabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
+const limiter = new Map<string, { count: number; reset: number }>();
+function checkLimit(ip: string, max: number): boolean {
+  const now = Date.now();
+  const e = limiter.get(ip);
+  if (!e || now > e.reset) {
+    limiter.set(ip, { count: 1, reset: now + 60000 });
+    return true;
+  }
+  if (e.count >= max) return false;
+  e.count++;
+  return true;
+}
+
 // GET /api/contacts?deviceId=xxx
 export async function GET(req: NextRequest) {
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
+  if (!checkLimit(ip, 60)) {
+    return NextResponse.json({ error: "Rate limited" }, { status: 429 });
+  }
+
   const deviceId = req.nextUrl.searchParams.get("deviceId");
   if (!deviceId) {
     return NextResponse.json({ contacts: [] });
@@ -27,6 +45,11 @@ export async function GET(req: NextRequest) {
 
 // POST /api/contacts — upsert a contact after a call
 export async function POST(req: NextRequest) {
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
+  if (!checkLimit(ip, 60)) {
+    return NextResponse.json({ error: "Rate limited" }, { status: 429 });
+  }
+
   try {
     const body = await req.json();
     const { ownerDeviceId, contactDeviceId, displayName, language } = body;
@@ -86,6 +109,11 @@ export async function POST(req: NextRequest) {
 
 // PATCH /api/contacts — toggle favorite
 export async function PATCH(req: NextRequest) {
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
+  if (!checkLimit(ip, 60)) {
+    return NextResponse.json({ error: "Rate limited" }, { status: 429 });
+  }
+
   try {
     const body = await req.json();
     const { ownerDeviceId, contactDeviceId, isFavorite } = body;
@@ -112,6 +140,11 @@ export async function PATCH(req: NextRequest) {
 
 // DELETE /api/contacts — remove a contact
 export async function DELETE(req: NextRequest) {
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
+  if (!checkLimit(ip, 60)) {
+    return NextResponse.json({ error: "Rate limited" }, { status: 429 });
+  }
+
   try {
     const body = await req.json();
     const { ownerDeviceId, contactDeviceId } = body;
