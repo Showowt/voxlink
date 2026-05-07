@@ -465,7 +465,7 @@ export function useCyrano(options: UseCyranoOptions = {}): UseCyranoReturn {
 
   // Add user's line (clear stale suggestions when user speaks)
   const addYourLine = useCallback((text: string) => {
-    if (!text.trim()) return;
+    if (!text.trim() || !isActiveRef.current) return;
 
     const entry: TranscriptEntry = {
       speaker: "you",
