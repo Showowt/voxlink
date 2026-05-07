@@ -705,7 +705,7 @@ export default function WingmanPage() {
           ) : null}
 
           {/* ── Transcript ── */}
-          <div className="flex-1 overflow-y-auto px-5 pb-2 min-h-0">
+          <div className="flex-1 overflow-y-auto overscroll-contain px-5 pb-2 min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
             {wingman.transcript.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center gap-3 pb-8">
                 <div className="text-4xl opacity-30">🎧</div>

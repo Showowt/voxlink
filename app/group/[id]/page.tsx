@@ -376,7 +376,7 @@ export default function GroupCallPage() {
 
       {/* Subtitles */}
       {showSubtitles && gc.subtitles.length > 0 && (
-        <div className="flex-shrink-0 px-3 py-2 max-h-28 overflow-y-auto border-t border-white/5 bg-black/30">
+        <div className="flex-shrink-0 px-3 py-2 max-h-28 overflow-y-auto overscroll-contain border-t border-white/5 bg-black/30" style={{ WebkitOverflowScrolling: 'touch' }}>
           {gc.subtitles.slice(-4).map(sub => {
             const isMe = sub.speakerSlot === gc.mySlotIndex;
             const lang = LANGUAGES.find(l => l.code === sub.speakerLanguage);

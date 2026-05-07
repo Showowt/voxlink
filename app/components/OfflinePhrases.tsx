@@ -176,7 +176,7 @@ export default function OfflinePhrases({
         </div>
 
         {/* Category tabs */}
-        <div className="flex gap-1 px-3 py-2 overflow-x-auto border-b border-white/5">
+        <div className="flex gap-1 px-3 py-2 overflow-x-auto overscroll-x-contain border-b border-white/5" style={{ WebkitOverflowScrolling: 'touch' }}>
           {categories.map((cat) => (
             <button
               key={cat.id}
@@ -194,7 +194,7 @@ export default function OfflinePhrases({
         </div>
 
         {/* Phrases list */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        <div className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-2" style={{ WebkitOverflowScrolling: 'touch' }}>
           {category.phrases.map((phrase, i) => {
             const id = `${category.id}-${i}`;
             const isSpoken = spokenId === id;

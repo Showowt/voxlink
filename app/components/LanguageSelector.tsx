@@ -81,12 +81,13 @@ export function LanguageSelector({
 
       {isOpen && (
         <div
-          className="absolute z-50 top-full left-0 right-0 mt-1 backdrop-blur-xl bg-void-elevated/95 border border-white/[0.12] rounded-xl shadow-2xl max-h-64 overflow-y-auto"
+          className="absolute z-50 top-full left-0 right-0 mt-1 backdrop-blur-xl bg-void-elevated/95 border border-white/[0.12] rounded-xl shadow-2xl max-h-64 overflow-y-auto overscroll-contain"
           role="listbox"
           aria-label="Available languages"
           style={{
             boxShadow:
               "0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.06)",
+            WebkitOverflowScrolling: 'touch',
           }}
         >
           {availableLanguages.map((lang) => (

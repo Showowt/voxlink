@@ -46,13 +46,14 @@ const PillTabs: FC<PillTabsProps> = ({
   return (
     <div
       className={`
-        relative flex items-center overflow-x-auto scrollbar-hide
+        relative flex items-center overflow-x-auto scrollbar-hide overscroll-x-contain
         bg-white/[0.04] backdrop-blur-md
         border border-white/[0.08]
         rounded-xl sm:rounded-2xl
         ${containerStyles[variant]}
         ${className}
       `}
+      style={{ WebkitOverflowScrolling: 'touch' }}
     >
       {tabs.map((tab) => {
         const isActive = tab.id === activeTab;

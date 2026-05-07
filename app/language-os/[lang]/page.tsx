@@ -262,7 +262,7 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
         {activeTab === "talk" && (
           <div className="flex-1 flex flex-col">
             {/* Persona selector */}
-            <div className="flex gap-2 p-3 overflow-x-auto border-b border-white/[0.06] scrollbar-hide">
+            <div className="flex gap-2 p-3 overflow-x-auto overscroll-x-contain border-b border-white/[0.06] scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
               {config.personas.map((p) => (
                 <button
                   key={p.id}
@@ -285,7 +285,7 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
               {messages.length === 0 && (
                 <div className="text-center py-10">
                   <div className="w-20 h-20 mx-auto rounded-2xl flex items-center justify-center mb-4" style={{ background: `${activePersona.accentColor}10`, border: `1px solid ${activePersona.accentColor}20` }}>

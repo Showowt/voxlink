@@ -120,7 +120,7 @@ export default function LearningMode({
                 ✕
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            <div className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-2" style={{ WebkitOverflowScrolling: 'touch' }}>
               {words.length === 0 ? (
                 <p className="text-white/40 text-xs text-center py-8">
                   Tap words during a call to save them here

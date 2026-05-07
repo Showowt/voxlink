@@ -659,7 +659,7 @@ function ProximityContent() {
                     Nearby Users
                   </h3>
                 </div>
-                <div className="divide-y divide-gray-800 max-h-48 overflow-y-auto">
+                <div className="divide-y divide-gray-800 max-h-48 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
                   {nearbyUsers.map((user) => (
                     <button
                       key={user.id}

@@ -653,13 +653,14 @@ export default function CyranoOverlay({
         {/* ── TRANSCRIPT DRAWER ────────────────────────────────────── */}
         {isActive && showTranscript && transcript.length > 0 && (
           <div
-            className="mt-2 rounded-2xl p-3 flex flex-col gap-2 max-h-[200px] overflow-y-auto"
+            className="mt-2 rounded-2xl p-3 flex flex-col gap-2 max-h-[200px] overflow-y-auto overscroll-contain"
             ref={transcriptRef}
             style={{
               background: "rgba(8, 8, 12, 0.88)",
               backdropFilter: "blur(20px)",
               border: "1px solid rgba(255,255,255,0.06)",
               animation: "slideUp 0.2s ease",
+              WebkitOverflowScrolling: 'touch',
             }}
           >
             <p className="text-white/70 text-xs font-semibold tracking-widest uppercase">
