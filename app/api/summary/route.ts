@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "claude-sonnet-4-20250514",
         max_tokens: 500,
         system: `You are summarizing a translated conversation between two people. Be concise. Output ONLY valid JSON with this exact structure:
 {
