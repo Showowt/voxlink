@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
           body: JSON.stringify({
             model: "claude-sonnet-4-6",
             max_tokens: 200,
-            system: "Translate the following Spanish text to English. Output ONLY the translation.",
+            system: `Translate the following ${config.targetLanguage} text to ${config.sourceLanguage}. Output ONLY the translation.`,
             messages: [{ role: "user", content: reply }],
           }),
           signal: AbortSignal.timeout(5000),
