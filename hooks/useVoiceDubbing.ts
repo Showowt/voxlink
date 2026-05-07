@@ -335,7 +335,7 @@ export function useVoiceDubbing(
 
         if (data.audioBase64 && !data.fallback) {
           if (isPlayingRef.current) {
-            if (audioQueueRef.current.length < 2) {
+            if (audioQueueRef.current.length < 5) {
               audioQueueRef.current.push(data.audioBase64);
             }
           } else {

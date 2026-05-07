@@ -94,6 +94,7 @@ export async function POST(req: NextRequest) {
           Accept: "audio/mpeg",
         },
         body: JSON.stringify(ttsPayload),
+        signal: AbortSignal.timeout(8000),
       },
     );
 

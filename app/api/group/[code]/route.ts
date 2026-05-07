@@ -39,7 +39,8 @@ export async function GET(
       exists: true,
       isFull: active >= (data.max_participants ?? 4),
     });
-  } catch {
+  } catch (e) {
+    console.error('[GroupCall] Room lookup error:', e);
     return NextResponse.json({ roomCode: code, status: 'waiting', callType: 'video', participantCount: 0, maxParticipants: 4, exists: false });
   }
 }

@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
   if (METERED_API_KEY) {
     try {
       const meteredUrl = `https://${METERED_DOMAIN}/api/v1/turn/credentials?apiKey=${METERED_API_KEY}`;
-      const res = await fetch(meteredUrl, { next: { revalidate: 3600 } });
+      const res = await fetch(meteredUrl, { next: { revalidate: 3600 }, signal: AbortSignal.timeout(8000) });
 
       if (res.ok) {
         const turnServers = (await res.json()) as RTCIceServer[];

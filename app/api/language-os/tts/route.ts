@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
             use_speaker_boost: true,
           },
         }),
+        signal: AbortSignal.timeout(8000),
       },
     );
 
