@@ -37,6 +37,7 @@ import CulturalWhisper from "../../components/CulturalWhisper";
 // BackTranslationBadge removed from live captions (available in history panel)
 import { useConversationMemory } from "@/hooks/useConversationMemory";
 import { useVoiceDubbing } from "@/hooks/useVoiceDubbing";
+import { useRemoteTranscription } from "@/hooks/useRemoteTranscription";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
 
 // Text-to-Speech helper — loud and fast
@@ -747,6 +748,33 @@ function VideoCallContent() {
     }
   }, [isDubPlaying]);
 
+  // ── Remote audio fallback transcription (activates if partner's STT fails) ──
+  const remoteTranscription = useRemoteTranscription({
+    remoteStream: remoteStreamRef.current,
+    partnerLang: partnerLang || expectedPartnerLang,
+    myLang: userLang,
+    isActive: status === "connected" && hasPartner && !inLobby && translationEnabled,
+  });
+  const onPartnerMessageRef = useRef(remoteTranscription.onPartnerMessage);
+  useEffect(() => {
+    onPartnerMessageRef.current = remoteTranscription.onPartnerMessage;
+  }, [remoteTranscription.onPartnerMessage]);
+
+  // Show fallback remote transcription when active
+  useEffect(() => {
+    if (remoteTranscription.isFallbackActive && remoteTranscription.remoteText) {
+      setTheirLiveText(remoteTranscription.remoteText.slice(-150));
+    }
+  }, [remoteTranscription.remoteText, remoteTranscription.isFallbackActive]);
+
+  useEffect(() => {
+    if (remoteTranscription.isFallbackActive && remoteTranscription.remoteTranslation) {
+      setTheirLiveTranslation(remoteTranscription.remoteTranslation.slice(-150));
+      // Speak the translation
+      speakText(remoteTranscription.remoteTranslation, userLang);
+    }
+  }, [remoteTranscription.remoteTranslation, remoteTranscription.isFallbackActive]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Ref so handleDataMessage can access dubbing without stale closure
   const processDubRef = useRef(processDub);
   const dubbingEnabledRef = useRef(dubbingState.isEnabled);
@@ -1118,6 +1146,9 @@ function VideoCallContent() {
           return;
         }
       }
+
+      // Signal remote transcription fallback that partner is sending messages
+      onPartnerMessageRef.current();
 
       // Clear existing timeout
       if (theirCaptionTimeoutRef.current) {
