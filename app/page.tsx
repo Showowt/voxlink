@@ -1356,7 +1356,7 @@ function HomeContent() {
         <GlassCard
           variant="elevated"
           padding="none"
-          className="overflow-hidden"
+          className="overflow-x-hidden"
         >
           {/* Category Navigation */}
           <div className="border-b border-white/[0.06]">
@@ -1409,7 +1409,7 @@ function HomeContent() {
             </div>
           </div>
 
-          <div className="p-3 sm:p-5 sm:max-h-none overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <div className="p-3 sm:p-5">
             {/* VoxType Tab - Type & Verify Translation */}
             {activeTab === "voxtype" ? (
               <VoxTypeTab />

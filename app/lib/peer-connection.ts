@@ -136,6 +136,7 @@ export class PeerConnection {
   private _status: ConnectionStatus = "initializing";
   private callbacks: PeerCallbacks = {};
   private isDestroyed: boolean = false;
+  private pendingMessages: unknown[] = [];
   private helloAcknowledged: boolean = false;
   private connectionAttempts: number = 0;
   private maxConnectionAttempts: number = 30; // Increased from 5
@@ -710,6 +711,15 @@ export class PeerConnection {
       this.connectionAttempts = 0;
       this.videoRetryAttempts = 0;
       this.lastPongTime = Date.now();
+
+      // Flush any queued messages
+      if (this.pendingMessages.length > 0) {
+        console.log(`[Entrevoz Video] Flushing ${this.pendingMessages.length} queued messages`);
+        const queued = this.pendingMessages.splice(0);
+        for (const msg of queued) {
+          try { conn.send(msg); } catch { /* skip stale */ }
+        }
+      }
 
       // Send hello
       this.send({ type: "hello", name: this.userName, deviceId: this.deviceId, lang: this.lang });
@@ -1448,7 +1458,13 @@ export class PeerConnection {
   // ═══════════════════════════════════════════════════════════════════════════
 
   send(data: unknown): boolean {
-    if (!this.dataConnection?.open || this.isDestroyed) {
+    if (this.isDestroyed) return false;
+
+    if (!this.dataConnection?.open) {
+      // Queue message for delivery when channel reopens (max 50 to prevent memory leak)
+      if (this.pendingMessages.length < 50) {
+        this.pendingMessages.push(data);
+      }
       return false;
     }
 
@@ -1457,6 +1473,9 @@ export class PeerConnection {
       return true;
     } catch (err) {
       console.error("[Entrevoz Video] Send error:", err);
+      if (this.pendingMessages.length < 50) {
+        this.pendingMessages.push(data);
+      }
       return false;
     }
   }
@@ -1464,6 +1483,7 @@ export class PeerConnection {
   disconnect(): void {
     console.log("[Entrevoz Video] Disconnecting...");
     this.isDestroyed = true;
+    this.pendingMessages.length = 0;
 
     this.stopKeepAlive();
     this.stopStatsMonitoring();

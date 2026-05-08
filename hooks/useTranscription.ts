@@ -256,7 +256,7 @@ export function useTranscription({
       }
 
       // Always broadcast raw text immediately (partner sees live typing)
-      sendMessage(
+      const rawSent = sendMessage(
         JSON.stringify({
           type: "transcription",
           text: trimmed,
@@ -264,6 +264,9 @@ export function useTranscription({
           isFinal,
         }),
       );
+      if (!rawSent && isFinal) {
+        console.warn("[STT] DataChannel send failed for transcription — message queued");
+      }
 
       // 1. Try instant dictionary (0ms)
       const instant = instantTranslate(trimmed, my, their);

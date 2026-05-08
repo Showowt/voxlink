@@ -1304,7 +1304,7 @@ function VideoCallContent() {
         }
       }
     },
-    [partnerName, userLang, cyrano],
+    [partnerName, userLang, partnerLang, expectedPartnerLang, cyrano],
   );
 
   // Keep ref in sync for stale-closure-proof PeerConnection callback
@@ -1792,7 +1792,7 @@ function VideoCallContent() {
         )}
 
         {/* LIVE CAPTIONS - Compact subtitle style, max 3 lines */}
-        <div className="absolute bottom-20 md:bottom-24 inset-x-0 px-2 md:px-4 space-y-1.5 pointer-events-none">
+        <div className="absolute bottom-20 md:bottom-24 inset-x-0 px-2 md:px-4 space-y-1.5 pointer-events-none z-20">
           {/* Partner's speech */}
           {theirLiveText && (
             <div className="flex justify-start caption-slide-in">
