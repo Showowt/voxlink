@@ -668,8 +668,11 @@ function VideoCallContent() {
     try {
       // Parse and send as object (PeerConnection expects objects)
       const parsed = JSON.parse(message);
-      peerRef.current.send(parsed);
-      return true;
+      const sent = peerRef.current.send(parsed);
+      if (!sent && parsed.isFinal) {
+        console.warn("[Call] DataChannel send failed — channel not open");
+      }
+      return sent;
     } catch {
       return false;
     }
@@ -794,6 +797,8 @@ function VideoCallContent() {
   const isListeningRef = useRef(false);
   const mountedRef = useRef(true);
   const theirCaptionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Ref for handleDataMessage to avoid stale closure in PeerConnection callback
+  const handleDataMessageRef = useRef<(data: unknown) => void>(() => {});
 
   useEffect(() => {
     isListeningRef.current = isListening;
@@ -978,7 +983,7 @@ function VideoCallContent() {
           },
           onDataMessage: (data: unknown) => {
             if (!mountedRef.current) return;
-            handleDataMessage(data as CaptionData | Record<string, unknown>);
+            handleDataMessageRef.current(data);
           },
           onPartnerJoined: (name) => {
             if (!mountedRef.current) return;
@@ -1301,6 +1306,12 @@ function VideoCallContent() {
     },
     [partnerName, userLang, cyrano],
   );
+
+  // Keep ref in sync for stale-closure-proof PeerConnection callback
+  useEffect(() => {
+    handleDataMessageRef.current = (data: unknown) =>
+      handleDataMessage(data as CaptionData | Record<string, unknown>);
+  }, [handleDataMessage]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // SPEECH RECOGNITION & TRANSLATION

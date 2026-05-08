@@ -1329,7 +1329,7 @@ function HomeContent() {
   return (
     <AnimatedBackground
       variant="mesh"
-      className="flex flex-col py-3 px-3 sm:py-4 sm:px-4 sm:justify-center overflow-y-auto overscroll-contain"
+      className="flex flex-col py-3 px-3 sm:py-4 sm:px-4 sm:justify-center overflow-y-auto overscroll-contain max-h-[100dvh]"
     >
       <div className="w-full max-w-md mx-auto flex-shrink-0">
         {/* Logo - Premium Animated */}
