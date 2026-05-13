@@ -55,6 +55,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'This room has ended' }, { status: 410 });
     }
 
+    // Check if room expired (grace period passed)
+    if (room.expires_at && new Date(room.expires_at) < new Date()) {
+      await supabase.from('group_rooms').update({
+        status: 'ended',
+        ended_at: new Date().toISOString(),
+      }).eq('room_code', roomCode);
+      return NextResponse.json({ error: 'This room has expired' }, { status: 410 });
+    }
+
     const slots: (unknown | null)[] = Array.isArray(room.participant_slots)
       ? room.participant_slots
       : [null, null, null, null];
@@ -84,6 +93,7 @@ export async function POST(req: NextRequest) {
         participant_slots: slots,
         status: 'active',
         started_at: room.started_at ?? new Date().toISOString(),
+        expires_at: null,
         updated_at: new Date().toISOString(),
       })
       .eq('room_code', roomCode);

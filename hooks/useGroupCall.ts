@@ -532,6 +532,23 @@ export function useGroupCall(): UseGroupCallReturn {
       const myPeerId = `entrevoz-group-${roomCode.toUpperCase()}-slot${mySlot}`;
       myPeerIdRef.current = myPeerId;
 
+      // Fetch TURN servers for NAT traversal (critical for mobile/firewall)
+      let iceServers: RTCIceServer[] = [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+      ];
+      try {
+        const turnRes = await fetch('/api/turn');
+        if (turnRes.ok) {
+          const turnData = await turnRes.json();
+          if (turnData.iceServers?.length) {
+            iceServers = turnData.iceServers;
+          }
+        }
+      } catch {
+        console.warn('[GroupCall] Could not fetch TURN servers, using STUN only');
+      }
+
       let connected = false;
       for (let i = 0; i < PEERJS_SERVERS.length && !connected; i++) {
         const server = PEERJS_SERVERS[i];
@@ -541,12 +558,7 @@ export function useGroupCall(): UseGroupCallReturn {
             port: server.port,
             secure: server.secure,
             path: server.path,
-            config: {
-              iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-              ],
-            },
+            config: { iceServers },
           });
 
           await new Promise<void>((resolve, reject) => {

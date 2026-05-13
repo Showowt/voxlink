@@ -57,12 +57,14 @@ export async function POST(req: NextRequest) {
 
     const activeCount = slots.filter(s => s !== null).length;
 
+    const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+
     await supabase
       .from('group_rooms')
       .update({
         participant_slots: slots,
-        status: activeCount === 0 ? 'ended' : 'active',
-        ended_at: activeCount === 0 ? new Date().toISOString() : null,
+        status: activeCount === 0 ? 'waiting' : 'active',
+        expires_at: activeCount === 0 ? new Date(Date.now() + TWO_HOURS_MS).toISOString() : null,
         updated_at: new Date().toISOString(),
       })
       .eq('room_code', roomCode);
