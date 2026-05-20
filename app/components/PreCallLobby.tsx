@@ -57,6 +57,7 @@ export default function PreCallLobby({
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationRef = useRef<number | null>(null);
   const streamHandedOffRef = useRef(false); // Track if stream was passed to parent
@@ -135,16 +136,20 @@ export default function PreCallLobby({
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
-      // Only close AudioContext if stream was NOT handed off to call.
-      // iOS Safari: closing AudioContext kills the audio session,
-      // which disables mic tracks still in use by WebRTC.
-      if (audioContextRef.current && !streamHandedOffRef.current) {
-        audioContextRef.current.close();
+      // Disconnect source node and stop cloned tracks
+      if (sourceNodeRef.current) {
+        try { sourceNodeRef.current.disconnect(); } catch { /* ignore */ }
+      }
+      // Safe to always close — we used cloned tracks for the monitor,
+      // so closing this AudioContext won't affect the original stream's tracks
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(() => {});
       }
     };
   }, []);
 
-  // Mic level monitoring
+  // Mic level monitoring — uses CLONED audio tracks so iOS Safari
+  // doesn't route the original tracks into the Web Audio dead-end
   const startMicLevelMonitor = useCallback((stream: MediaStream) => {
     try {
       // Close existing context to prevent duplicates and memory leaks
@@ -152,16 +157,27 @@ export default function PreCallLobby({
         audioContextRef.current &&
         audioContextRef.current.state !== "closed"
       ) {
-        audioContextRef.current.close().catch(() => {
-          // Ignore close errors - context may already be closing
-        });
+        audioContextRef.current.close().catch(() => {});
       }
 
-      const audioContext = new AudioContext();
-      audioContextRef.current = audioContext; // Store IMMEDIATELY to prevent race condition
+      const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const audioContext = new AC();
+      audioContextRef.current = audioContext;
+
+      // iOS Safari: AudioContext starts suspended, must resume
+      if (audioContext.state === "suspended") {
+        audioContext.resume().catch(() => {});
+      }
 
       const analyser = audioContext.createAnalyser();
-      const source = audioContext.createMediaStreamSource(stream);
+
+      // CRITICAL: Clone audio tracks for the monitor so the original
+      // tracks remain free for WebRTC. On iOS Safari, createMediaStreamSource
+      // can capture the track routing, preventing WebRTC from transmitting it.
+      const clonedTracks = stream.getAudioTracks().map((t) => t.clone());
+      const monitorStream = new MediaStream(clonedTracks);
+      const source = audioContext.createMediaStreamSource(monitorStream);
+      sourceNodeRef.current = source;
 
       analyser.fftSize = 256;
       source.connect(analyser);

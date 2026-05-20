@@ -41,19 +41,21 @@ import { useRemoteTranscription } from "@/hooks/useRemoteTranscription";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
 
 // Text-to-Speech helper — loud and fast
+// iOS Safari: cancel() immediately before speak() silently drops the utterance.
+// A short delay lets the audio session reset before the new utterance starts.
 const speakText = (text: string, lang: string) => {
   if (!text.trim() || typeof window === "undefined") return;
 
-  // Cancel any ongoing speech
   window.speechSynthesis.cancel();
 
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = getSpeechCode(lang);
-  utterance.rate = 1.1; // Slightly faster for real-time feel
-  utterance.pitch = 1;
-  utterance.volume = 1; // Max browser TTS volume
-
-  window.speechSynthesis.speak(utterance);
+  setTimeout(() => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = getSpeechCode(lang);
+    utterance.rate = 1.1;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    window.speechSynthesis.speak(utterance);
+  }, 100);
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════

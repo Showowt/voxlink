@@ -1556,8 +1556,8 @@ export async function getCamera(
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
-        sampleRate: 48000,
-        channelCount: 1, // Mono — less bandwidth, better for speech
+        // sampleRate and channelCount removed — iOS Safari doesn't support
+        // these constraints reliably and can produce silent audio tracks
       },
     },
     // Lower quality fallback
