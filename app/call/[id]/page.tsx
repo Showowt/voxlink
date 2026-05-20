@@ -976,6 +976,8 @@ function VideoCallContent() {
             remoteStreamRef.current = stream;
             if (remoteVideoRef.current) {
               remoteVideoRef.current.srcObject = stream;
+              // Explicit play() for iOS Safari — autoPlay alone can fail for non-muted media
+              remoteVideoRef.current.play().catch(() => {});
             }
             // Mark that we have a remote stream - enables mic even if hello wasn't received
             setHasRemoteStream(true);

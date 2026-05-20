@@ -135,7 +135,10 @@ export default function PreCallLobby({
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
-      if (audioContextRef.current) {
+      // Only close AudioContext if stream was NOT handed off to call.
+      // iOS Safari: closing AudioContext kills the audio session,
+      // which disables mic tracks still in use by WebRTC.
+      if (audioContextRef.current && !streamHandedOffRef.current) {
         audioContextRef.current.close();
       }
     };
