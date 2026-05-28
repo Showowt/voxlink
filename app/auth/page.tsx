@@ -58,7 +58,7 @@ function AuthContent() {
       <div className="relative w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="text-2xl font-black text-white tracking-tight mb-1">
-            Voxxo
+            Entrevoz
           </div>
           <p className="text-white/40 text-sm">
             {mode === "signin" ? "Welcome back" : "Start your free 7-day trial"}
@@ -177,7 +177,7 @@ function AuthContent() {
 
         <p className="text-center text-white/25 text-sm mt-6">
           <a href="/" className="hover:text-white/50 transition-colors">
-            ← Back to Voxxo
+            ← Back to Entrevoz
           </a>
         </p>
       </div>

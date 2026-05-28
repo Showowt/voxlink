@@ -535,6 +535,7 @@ export async function POST(req: NextRequest) {
         malay: "ms",
         filipino: "tl",
         tagalog: "tl",
+        auto: "auto",
       };
       return aliases[code] || code;
     };

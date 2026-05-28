@@ -200,7 +200,11 @@ export function useGroupCall(): UseGroupCallReturn {
       audioCtxRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
     }
     const ctx = audioCtxRef.current;
-    const src = ctx.createMediaStreamSource(stream);
+    // Clone audio tracks before connecting to AudioContext — using the
+    // original stream directly can steal the mic from WebRTC on iOS Safari.
+    const clonedTracks = stream.getAudioTracks().map(t => t.clone());
+    const monitorStream = new MediaStream(clonedTracks);
+    const src = ctx.createMediaStreamSource(monitorStream);
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 512;
     analyser.smoothingTimeConstant = 0.8;

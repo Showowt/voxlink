@@ -91,6 +91,13 @@ export function useVoiceDubbing(
   const sessionKeyRef = useRef(`session-${Date.now()}`);
   const enabledRef = useRef(false);
   const processingRef = useRef(false);
+  const remoteStreamRef = useRef<MediaStream | null>(remoteStream);
+  const queueRef = useRef<Array<{text: string; sourceLang: string; targetLang: string}>>([]);
+
+  // Keep remoteStream ref in sync (arrives later than hook mount)
+  useEffect(() => {
+    remoteStreamRef.current = remoteStream;
+  }, [remoteStream]);
 
   // Keep targetLang ref in sync
   useEffect(() => {
@@ -100,8 +107,10 @@ export function useVoiceDubbing(
   // ─── Audio playback ──────────────────────────────────────────────────────
 
   const playAudioBase64 = useCallback(async (base64: string) => {
+    // Fallback: create AudioContext here only if enable() didn't create one
     if (!audioContextRef.current) {
-      audioContextRef.current = new AudioContext();
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      audioContextRef.current = new AudioCtx();
     }
     const ctx = audioContextRef.current;
 
@@ -112,7 +121,42 @@ export function useVoiceDubbing(
       const bytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
 
-      const audioBuffer = await ctx.decodeAudioData(bytes.buffer.slice(0));
+      let audioBuffer: AudioBuffer;
+      try {
+        audioBuffer = await ctx.decodeAudioData(bytes.buffer.slice(0));
+      } catch {
+        // decodeAudioData failed (common on iOS) — fall back to <audio> element
+        console.warn("[VoiceDub] decodeAudioData failed, falling back to <audio> element");
+        const blob = new Blob([bytes], { type: "audio/mpeg" });
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audio.volume = Math.min(DUB_GAIN / 3, 1); // Normalize for HTML audio (0-1 range)
+
+        setState((s) => ({ ...s, isPlaying: true }));
+        isPlayingRef.current = true;
+
+        audio.onended = () => {
+          URL.revokeObjectURL(url);
+          isPlayingRef.current = false;
+          setState((s) => ({ ...s, isPlaying: false }));
+          if (audioQueueRef.current.length > 0) {
+            const next = audioQueueRef.current.shift()!;
+            playAudioBase64(next);
+          }
+        };
+        audio.onerror = () => {
+          URL.revokeObjectURL(url);
+          isPlayingRef.current = false;
+          setState((s) => ({ ...s, isPlaying: false }));
+        };
+        await audio.play().catch(() => {
+          URL.revokeObjectURL(url);
+          isPlayingRef.current = false;
+          setState((s) => ({ ...s, isPlaying: false }));
+        });
+        return;
+      }
+
       const source = ctx.createBufferSource();
 
       if (!gainNodeRef.current) {
@@ -311,7 +355,14 @@ export function useVoiceDubbing(
       if (!voiceIdRef.current) return;
       if (!text?.trim() || text.length < MIN_TEXT_LENGTH) return;
       if (text.length > MAX_TEXT_LENGTH) return;
-      if (processingRef.current) return;
+
+      // If already processing, queue the transcript instead of dropping it
+      if (processingRef.current) {
+        if (queueRef.current.length < 10) {
+          queueRef.current.push({ text, sourceLang, targetLang });
+        }
+        return;
+      }
 
       processingRef.current = true;
 
@@ -346,6 +397,12 @@ export function useVoiceDubbing(
         console.warn("[VoiceDub] Dub request failed:", e);
       } finally {
         processingRef.current = false;
+
+        // Process next queued transcript if any
+        const next = queueRef.current.shift();
+        if (next) {
+          processTranscript(next.text, next.sourceLang, next.targetLang);
+        }
       }
     },
     [playAudioBase64],
@@ -357,8 +414,17 @@ export function useVoiceDubbing(
     enabledRef.current = true;
     setState((s) => ({ ...s, isEnabled: true }));
 
-    if (remoteStream && remoteStream.getAudioTracks().length) {
-      startSampling(remoteStream);
+    // Create AudioContext NOW — inside user gesture (button click) so iOS won't block it
+    if (!audioContextRef.current) {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      audioContextRef.current = new AudioCtx();
+    }
+    audioContextRef.current.resume();
+
+    // Use ref instead of stale closure prop — remoteStream may arrive after hook mounts
+    const stream = remoteStreamRef.current;
+    if (stream && stream.getAudioTracks().length) {
+      startSampling(stream);
     } else {
       // No remote audio yet — use default voice immediately
       console.log("[VoiceDub] No remote stream, using default voice");
@@ -366,7 +432,7 @@ export function useVoiceDubbing(
       voiceIdRef.current = defaultVoice;
       setState((s) => ({ ...s, phase: "ready", voiceId: defaultVoice, samplingProgress: 100 }));
     }
-  }, [remoteStream, startSampling]);
+  }, [startSampling]);
 
   const disable = useCallback(() => {
     enabledRef.current = false;
@@ -379,6 +445,7 @@ export function useVoiceDubbing(
     if (progressTimerRef.current) clearInterval(progressTimerRef.current);
 
     audioQueueRef.current = [];
+    queueRef.current = [];
 
     setState((s) => ({
       ...s,

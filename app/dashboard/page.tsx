@@ -17,7 +17,7 @@ const MODES = [
   },
   {
     id: "video",
-    href: "/call",
+    href: "/",
     icon: "📹",
     label: "Video Call",
     desc: "Live translated video calls",
@@ -193,7 +193,7 @@ function DashboardContent() {
 
       <div className="relative z-10 max-w-2xl mx-auto px-4 py-8 safe-top safe-bottom">
         <div className="mb-4">
-          <BackButton href="/" label="Back to Voxxo" />
+          <BackButton href="/" label="Back to Entrevoz" />
         </div>
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -347,7 +347,7 @@ function DashboardContent() {
             href="/"
             className="text-white/25 text-sm hover:text-white/50 transition-colors"
           >
-            ← Back to Voxxo
+            ← Back to Entrevoz
           </a>
         </div>
       </div>

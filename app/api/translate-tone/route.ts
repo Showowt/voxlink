@@ -78,7 +78,12 @@ export async function POST(req: NextRequest) {
     });
 
     if (!response.ok) {
-      return NextResponse.json({ translated: text, tone });
+      const errText = await response.text().catch(() => "Unknown error");
+      console.error("[TranslateTone] Claude API error:", response.status, errText);
+      return NextResponse.json(
+        { error: "Translation provider failed", detail: response.status },
+        { status: 502 },
+      );
     }
 
     const data = await response.json();

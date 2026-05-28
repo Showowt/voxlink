@@ -71,7 +71,7 @@ export default function TextInputFallback({
       const res = await fetch("/api/translate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: trimmed, from: sourceLang, to: targetLang }),
+        body: JSON.stringify({ text: trimmed, sourceLang, targetLang }),
       });
 
       if (!res.ok) throw new Error("Translation failed");

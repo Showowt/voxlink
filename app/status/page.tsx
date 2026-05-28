@@ -118,7 +118,7 @@ export default function StatusPage() {
                 V
               </div>
               <div>
-                <h1 className="text-xl font-bold">Voxxo Status</h1>
+                <h1 className="text-xl font-bold">Entrevoz Status</h1>
                 <p className="text-sm text-zinc-400">Real-time system status</p>
               </div>
             </div>
@@ -267,7 +267,7 @@ export default function StatusPage() {
       <footer className="border-t border-zinc-800 mt-12">
         <div className="max-w-4xl mx-auto px-4 py-6 text-center text-sm text-zinc-500">
           <a href="/" className="text-blue-400 hover:underline">
-            ← Back to Voxxo
+            ← Back to Entrevoz
           </a>
           <span className="mx-3">•</span>
           <a href="/api/health" className="text-zinc-400 hover:text-white">

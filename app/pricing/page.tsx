@@ -6,16 +6,16 @@ import PricingContent from "./PricingContent";
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const metadata: Metadata = {
-  title: "Pricing — Voxxo",
+  title: "Pricing — Entrevoz",
   description: "Choose your plan. Free forever or unlock unlimited power.",
   openGraph: {
-    title: "Pricing — Voxxo",
+    title: "Pricing — Entrevoz",
     description: "Choose your plan. Free forever or unlock unlimited power.",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Pricing — Voxxo",
+    title: "Pricing — Entrevoz",
     description: "Choose your plan. Free forever or unlock unlimited power.",
   },
 };

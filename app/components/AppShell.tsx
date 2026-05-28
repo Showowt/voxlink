@@ -20,7 +20,7 @@ export default function AppShell({ children }: AppShellProps) {
     import("../lib/self-healing")
       .then(({ selfHealing }) => {
         if (selfHealing) {
-          console.log("🛡️ Self-healing system active");
+          // Self-healing system active
 
           // Log health status periodically
           healthInterval = setInterval(() => {
@@ -45,16 +45,16 @@ export default function AppShell({ children }: AppShellProps) {
 
     // Listen for recovery events
     const handleReconnect = () => {
-      console.log("🔄 Reconnection triggered");
+      // Reconnection triggered
     };
 
     const handleHardRecovery = () => {
-      console.log("🔄 Hard recovery triggered - reloading...");
+      // Hard recovery triggered - reloading
       setTimeout(() => window.location.reload(), 1000);
     };
 
     const handleNetworkRestored = () => {
-      console.log("🌐 Network restored");
+      // Network restored
     };
 
     window.addEventListener("entrevoz-reconnect", handleReconnect);

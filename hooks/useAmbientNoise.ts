@@ -131,7 +131,11 @@ export function useAmbientNoise({
       analyzer.fftSize = 256; // 128 data points
       analyzer.smoothingTimeConstant = 0.6; // smooth out spikes
 
-      const source = ctx.createMediaStreamSource(stream);
+      // Clone audio tracks before connecting to AudioContext — using the
+      // original stream directly can steal the mic from WebRTC on iOS Safari.
+      const clonedTracks = stream.getAudioTracks().map(t => t.clone());
+      const monitorStream = new MediaStream(clonedTracks);
+      const source = ctx.createMediaStreamSource(monitorStream);
       source.connect(analyzer);
 
       ctxRef.current = ctx;

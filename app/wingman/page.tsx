@@ -577,7 +577,7 @@ export default function WingmanPage() {
           </div>
 
           <button
-            onClick={isRunning ? handleStop : wingman.start}
+            onClick={isRunning ? handleStop : () => { setIsRunning(true); wingman.start(); }}
             className="text-white/60 hover:text-white text-xs border border-white/15 rounded-lg px-3 py-1.5 transition-all min-h-[44px] flex items-center"
           >
             {isRunning ? "Pause" : "Resume"}

@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
     // Prepare form data for OpenAI — use correct extension for the mime type
     // iOS Safari records audio/mp4, others record audio/webm
     const mimeType = audioFile.type || "audio/webm";
-    const ext = mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm";
+    const ext = mimeType.includes("mp4") ? "mp4" : mimeType.includes("m4a") ? "m4a" : mimeType.includes("aac") ? "aac" : mimeType.includes("caf") ? "caf" : mimeType.includes("ogg") ? "ogg" : "webm";
     const whisperForm = new FormData();
     whisperForm.append("file", audioFile, `audio.${ext}`);
     whisperForm.append("model", "whisper-1");

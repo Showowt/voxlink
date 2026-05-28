@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (existing) {
-      await supabase
+      const { error: updateError } = await supabase
         .from("contacts")
         .update({
           call_count: (existing.call_count || 0) + 1,
@@ -89,8 +89,13 @@ export async function POST(req: NextRequest) {
           updated_at: new Date().toISOString(),
         })
         .eq("id", existing.id);
+
+      if (updateError) {
+        console.error("[Contacts POST] Update error:", updateError);
+        return NextResponse.json({ success: false, error: updateError.message }, { status: 500 });
+      }
     } else {
-      await supabase.from("contacts").insert({
+      const { error: insertError } = await supabase.from("contacts").insert({
         owner_device_id: ownerDeviceId,
         contact_device_id: contactDeviceId,
         display_name: displayName || "Unknown",
@@ -98,6 +103,11 @@ export async function POST(req: NextRequest) {
         call_count: 1,
         last_called_at: new Date().toISOString(),
       });
+
+      if (insertError) {
+        console.error("[Contacts POST] Insert error:", insertError);
+        return NextResponse.json({ success: false, error: insertError.message }, { status: 500 });
+      }
     }
 
     return NextResponse.json({ success: true });
@@ -125,11 +135,16 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ success: false, error: "contactDeviceId is required and must be a string" }, { status: 400 });
     }
 
-    await supabase
+    const { error: updateError } = await supabase
       .from("contacts")
       .update({ is_favorite: isFavorite, updated_at: new Date().toISOString() })
       .eq("owner_device_id", ownerDeviceId)
       .eq("contact_device_id", contactDeviceId);
+
+    if (updateError) {
+      console.error("[Contacts PATCH] Update error:", updateError);
+      return NextResponse.json({ success: false, error: updateError.message }, { status: 500 });
+    }
 
     return NextResponse.json({ success: true });
   } catch (err) {
@@ -156,11 +171,16 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ success: false, error: "contactDeviceId is required and must be a string" }, { status: 400 });
     }
 
-    await supabase
+    const { error: deleteError } = await supabase
       .from("contacts")
       .delete()
       .eq("owner_device_id", ownerDeviceId)
       .eq("contact_device_id", contactDeviceId);
+
+    if (deleteError) {
+      console.error("[Contacts DELETE] Delete error:", deleteError);
+      return NextResponse.json({ success: false, error: deleteError.message }, { status: 500 });
+    }
 
     return NextResponse.json({ success: true });
   } catch (err) {

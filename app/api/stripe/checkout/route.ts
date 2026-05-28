@@ -56,6 +56,16 @@ export async function POST(req: NextRequest) {
     .single();
 
   try {
+    const body = await req.json();
+    const plan = body.plan;
+
+    if (!plan || typeof plan !== "string" || !VALID_PLANS.includes(plan as ValidPlan)) {
+      return NextResponse.json(
+        { error: "Invalid plan. Must be one of: " + VALID_PLANS.join(", ") },
+        { status: 400 },
+      );
+    }
+
     let customerId = profile?.stripe_customer_id;
 
     if (!customerId) {
@@ -70,16 +80,6 @@ export async function POST(req: NextRequest) {
         .from("profiles")
         .update({ stripe_customer_id: customerId })
         .eq("id", user.id);
-    }
-
-    const body = await req.json();
-    const plan = body.plan;
-
-    if (!plan || typeof plan !== "string" || !VALID_PLANS.includes(plan as ValidPlan)) {
-      return NextResponse.json(
-        { error: "Invalid plan. Must be one of: " + VALID_PLANS.join(", ") },
-        { status: 400 },
-      );
     }
 
     const priceId = plan === "pro" ? STRIPE_PRICES.PRO_MONTHLY : null;

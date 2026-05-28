@@ -50,7 +50,7 @@ export async function middleware(request: NextRequest) {
       }
       response.headers.set(
         "Access-Control-Allow-Methods",
-        "GET, POST, OPTIONS",
+        "GET, POST, PUT, PATCH, DELETE, OPTIONS",
       );
       response.headers.set(
         "Access-Control-Allow-Headers",

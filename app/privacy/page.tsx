@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | Voxxo - MachineMind",
+  title: "Privacy Policy | Entrevoz - MachineMind",
   description:
-    "Privacy Policy for Voxxo real-time voice translation app. Learn how we handle your data, microphone access, and third-party services.",
+    "Privacy Policy for Entrevoz real-time voice translation app. Learn how we handle your data, microphone access, and third-party services.",
 };
 
 export default function PrivacyPage() {
@@ -32,7 +32,7 @@ export default function PrivacyPage() {
                 d="M15 19l-7-7 7-7"
               />
             </svg>
-            Back to Voxxo
+            Back to Entrevoz
           </Link>
           <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2">
             Privacy Policy
@@ -49,7 +49,7 @@ export default function PrivacyPage() {
             </h2>
             <p className="text-gray-300 leading-relaxed">
               MachineMind (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;)
-              operates Voxxo, a real-time voice translation application. This
+              operates Entrevoz, a real-time voice translation application. This
               Privacy Policy explains how we collect, use, disclose, and
               safeguard your information when you use our service. We are
               committed to protecting your privacy and complying with applicable
@@ -96,7 +96,7 @@ export default function PrivacyPage() {
             </h2>
             <div className="space-y-4 text-gray-300">
               <p>
-                Voxxo requires access to your device&apos;s microphone and
+                Entrevoz requires access to your device&apos;s microphone and
                 camera to provide translation services:
               </p>
               <div>
@@ -137,7 +137,7 @@ export default function PrivacyPage() {
             </h2>
             <div className="space-y-4 text-gray-300">
               <p>
-                Voxxo uses the following third-party services to provide
+                Entrevoz uses the following third-party services to provide
                 translation functionality:
               </p>
               <div className="space-y-3">
@@ -273,7 +273,7 @@ export default function PrivacyPage() {
               8. Children&apos;s Privacy
             </h2>
             <p className="text-gray-300 leading-relaxed">
-              Voxxo is not intended for children under 13 years of age. We do
+              Entrevoz is not intended for children under 13 years of age. We do
               not knowingly collect personal information from children under 13.
               If you believe we have collected information from a child under
               13, please contact us immediately.

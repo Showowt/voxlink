@@ -552,11 +552,26 @@ export class PeerConnection {
         return;
       }
 
-      // Answer with our stream
+      // Answer with our stream — CRITICAL: answering without a stream
+      // produces one-way audio on iOS Safari. Wait for the stream if missing.
       if (this.localStream) {
         call.answer(this.localStream);
       } else {
-        call.answer();
+        console.error("[Entrevoz Video] Incoming call but no localStream — waiting up to 5s for media...");
+        const waitForStream = async () => {
+          for (let i = 0; i < 50; i++) {
+            if (this.localStream) {
+              call.answer(this.localStream);
+              console.log("[Entrevoz Video] localStream acquired — answered call");
+              return;
+            }
+            await new Promise(r => setTimeout(r, 100));
+          }
+          // Last resort: answer without stream rather than dropping the call entirely
+          console.error("[Entrevoz Video] Timeout waiting for localStream — answering without stream (one-way audio likely)");
+          call.answer();
+        };
+        waitForStream();
       }
 
       this.handleMediaConnection(call);
@@ -1109,28 +1124,45 @@ export class PeerConnection {
     });
 
     // Apply bandwidth limits to prevent overloading poor connections
+    // CRITICAL: setParameters() before ICE negotiation completes can break
+    // audio on iOS Safari. Defer until the peer connection reaches 'connected'.
     const pc = (call as unknown as { peerConnection: RTCPeerConnection })
       .peerConnection;
     if (pc) {
-      // Limit video bandwidth to 500kbps and audio to 64kbps
-      try {
-        const senders = pc.getSenders();
-        for (const sender of senders) {
-          if (!sender.track) continue;
-          const params = sender.getParameters();
-          if (!params.encodings || params.encodings.length === 0) {
-            params.encodings = [{}];
+      const applyBandwidthLimits = () => {
+        try {
+          const senders = pc.getSenders();
+          for (const sender of senders) {
+            if (!sender.track) continue;
+            const params = sender.getParameters();
+            if (!params.encodings || params.encodings.length === 0) {
+              params.encodings = [{}];
+            }
+            if (params.encodings.length === 0) continue; // Defensive: skip if still empty
+            if (sender.track.kind === "video") {
+              params.encodings[0].maxBitrate = 500000; // 500kbps max video
+              params.encodings[0].scaleResolutionDownBy = 1;
+            } else if (sender.track.kind === "audio") {
+              params.encodings[0].maxBitrate = 64000; // 64kbps audio (Opus is great here)
+            }
+            sender.setParameters(params).catch(() => { /* ignore on older browsers */ });
           }
-          if (sender.track.kind === "video") {
-            params.encodings[0].maxBitrate = 500000; // 500kbps max video
-            params.encodings[0].scaleResolutionDownBy = 1;
-          } else if (sender.track.kind === "audio") {
-            params.encodings[0].maxBitrate = 64000; // 64kbps audio (Opus is great here)
-          }
-          sender.setParameters(params).catch(() => { /* ignore on older browsers */ });
+        } catch {
+          // setParameters not supported — bandwidth will be uncapped
         }
-      } catch {
-        // setParameters not supported — bandwidth will be uncapped
+      };
+
+      // Wait for ICE to connect before applying params (iOS Safari safety)
+      if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+        applyBandwidthLimits();
+      } else {
+        const onIceConnected = () => {
+          if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+            applyBandwidthLimits();
+            pc.removeEventListener("iceconnectionstatechange", onIceConnected);
+          }
+        };
+        pc.addEventListener("iceconnectionstatechange", onIceConnected);
       }
 
       // Monitor ICE state for connection health
@@ -1499,11 +1531,10 @@ export class PeerConnection {
       this.roomSignal = null;
     }
 
-    // Stop local media tracks (camera/microphone)
-    if (this.localStream) {
-      this.localStream.getTracks().forEach((track) => track.stop());
-      this.localStream = null;
-    }
+    // Release reference to local stream — but do NOT stop tracks here.
+    // Track cleanup is the caller's responsibility (the page component
+    // manages the stream lifecycle and may reuse it for other consumers).
+    this.localStream = null;
 
     try {
       this.mediaConnection?.close();

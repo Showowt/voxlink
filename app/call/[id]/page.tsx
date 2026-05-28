@@ -41,21 +41,44 @@ import { useRemoteTranscription } from "@/hooks/useRemoteTranscription";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
 
 // Text-to-Speech helper — loud and fast
-// iOS Safari: cancel() immediately before speak() silently drops the utterance.
-// A short delay lets the audio session reset before the new utterance starts.
+// iOS Safari: voices load asynchronously; we must wait for them before speaking.
 const speakText = (text: string, lang: string) => {
   if (!text.trim() || typeof window === "undefined") return;
 
   window.speechSynthesis.cancel();
 
-  setTimeout(() => {
+  const doSpeak = () => {
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = getSpeechCode(lang);
+    const speechCode = getSpeechCode(lang);
+    utterance.lang = speechCode;
     utterance.rate = 1.1;
     utterance.pitch = 1;
     utterance.volume = 1;
-    window.speechSynthesis.speak(utterance);
-  }, 100);
+
+    // Explicitly assign a voice matching the target language
+    const voices = window.speechSynthesis.getVoices();
+    const match = voices.find((v) => v.lang.startsWith(speechCode.split("-")[0]));
+    if (match) utterance.voice = match;
+
+    // iOS Safari: small delay after cancel() prevents silent drops
+    setTimeout(() => window.speechSynthesis.speak(utterance), 100);
+  };
+
+  // If voices aren't loaded yet (common on iOS Safari), wait for them
+  if (window.speechSynthesis.getVoices().length > 0) {
+    doSpeak();
+  } else {
+    const onVoicesReady = () => {
+      window.speechSynthesis.removeEventListener("voiceschanged", onVoicesReady);
+      doSpeak();
+    };
+    window.speechSynthesis.addEventListener("voiceschanged", onVoicesReady);
+    // Safety timeout — don't wait forever if voiceschanged never fires
+    setTimeout(() => {
+      window.speechSynthesis.removeEventListener("voiceschanged", onVoicesReady);
+      doSpeak();
+    }, 2000);
+  }
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -644,6 +667,9 @@ function VideoCallContent() {
   // Offline Phrases state
   const [showOfflinePhrases, setShowOfflinePhrases] = useState(false);
 
+  // iOS Safari autoplay workaround — shows "Tap to hear audio" overlay
+  const [needsAudioUnmute, setNeedsAudioUnmute] = useState(false);
+
   // Learning Mode state
   const [learningMode, setLearningMode] = useState(false);
 
@@ -748,9 +774,16 @@ function VideoCallContent() {
 
   // Mute partner's raw voice when dub is playing (no overlapping voices)
   useEffect(() => {
-    if (remoteVideoRef.current) {
-      remoteVideoRef.current.muted = isDubPlaying;
+    const video = remoteVideoRef.current;
+    if (video) {
+      video.muted = isDubPlaying;
     }
+    return () => {
+      // Ensure remote video is unmuted when dubbing stops or component unmounts
+      if (video) {
+        video.muted = false;
+      }
+    };
   }, [isDubPlaying]);
 
   // ── Remote audio fallback transcription (activates if partner's STT fails) ──
@@ -951,7 +984,7 @@ function VideoCallContent() {
         const peer = new PeerConnection({
           onStatusChange: (peerStatus, message) => {
             if (!mountedRef.current) return;
-            console.log("📞 Status:", peerStatus, message);
+            // Peer status update
 
             if (peerStatus === "waiting") {
               setStatus("waiting");
@@ -974,12 +1007,16 @@ function VideoCallContent() {
           },
           onRemoteStream: (stream) => {
             if (!mountedRef.current) return;
-            console.log("📺 Got remote stream!");
+            // Got remote stream
             remoteStreamRef.current = stream;
             if (remoteVideoRef.current) {
               remoteVideoRef.current.srcObject = stream;
-              // Explicit play() for iOS Safari — autoPlay alone can fail for non-muted media
-              remoteVideoRef.current.play().catch(() => {});
+              // Explicit play() for iOS Safari — autoPlay alone can fail for non-muted media.
+              // If autoplay is blocked, show a tap-to-hear overlay instead of silently failing.
+              remoteVideoRef.current.play().catch((err) => {
+                console.error("[Entrevoz Video] Autoplay blocked:", err?.message || err);
+                setNeedsAudioUnmute(true);
+              });
             }
             // Mark that we have a remote stream - enables mic even if hello wasn't received
             setHasRemoteStream(true);
@@ -991,7 +1028,7 @@ function VideoCallContent() {
           },
           onPartnerJoined: (name) => {
             if (!mountedRef.current) return;
-            console.log("👋 Partner joined:", name);
+            // Partner joined
             setPartnerName(name);
             setHasPartner(true);
           },
@@ -1002,7 +1039,7 @@ function VideoCallContent() {
           },
           onPartnerLeft: () => {
             if (!mountedRef.current) return;
-            console.log("👋 Partner left");
+            // Partner left
             setHasPartner(false);
             setHasRemoteStream(false);
             setPartnerName("");
@@ -1015,7 +1052,7 @@ function VideoCallContent() {
           },
           onIceStateChange: (state) => {
             if (!mountedRef.current) return;
-            console.log("🧊 ICE state:", state);
+            // ICE state change
             setIceState(state);
           },
           onQualityUpdate: (qualityData) => {
@@ -1551,6 +1588,30 @@ function VideoCallContent() {
           playsInline
           className="absolute inset-0 w-full h-full object-cover"
         />
+
+        {/* iOS Safari autoplay blocked — tap to enable audio */}
+        {needsAudioUnmute && (
+          <button
+            onClick={() => {
+              if (remoteVideoRef.current) {
+                remoteVideoRef.current.play().then(() => {
+                  setNeedsAudioUnmute(false);
+                }).catch(() => {});
+              }
+            }}
+            className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            aria-label="Tap to enable audio"
+          >
+            <div className="flex flex-col items-center gap-3 px-6 py-4 rounded-2xl bg-white/10 border border-white/20">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+              </svg>
+              <span className="text-white text-sm font-medium">Tap to hear audio</span>
+            </div>
+          </button>
+        )}
 
         {/* Cyrano Teleprompter Bar */}
         {cyranoPhrase && (

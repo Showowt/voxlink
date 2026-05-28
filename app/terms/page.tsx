@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Terms of Service | Voxxo - MachineMind",
+  title: "Terms of Service | Entrevoz - MachineMind",
   description:
-    "Terms of Service for Voxxo real-time voice translation app. Understand your rights and responsibilities when using our service.",
+    "Terms of Service for Entrevoz real-time voice translation app. Understand your rights and responsibilities when using our service.",
 };
 
 export default function TermsPage() {
@@ -32,7 +32,7 @@ export default function TermsPage() {
                 d="M15 19l-7-7 7-7"
               />
             </svg>
-            Back to Voxxo
+            Back to Entrevoz
           </Link>
           <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2">
             Terms of Service
@@ -48,11 +48,11 @@ export default function TermsPage() {
               1. Agreement to Terms
             </h2>
             <p className="text-gray-300 leading-relaxed">
-              By accessing or using Voxxo, a service provided by MachineMind
+              By accessing or using Entrevoz, a service provided by MachineMind
               (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;), you agree to
               be bound by these Terms of Service. If you do not agree to these
               terms, please do not use our service. These terms apply to all
-              users of Voxxo, including without limitation users who are
+              users of Entrevoz, including without limitation users who are
               browsers, vendors, customers, merchants, and contributors of
               content.
             </p>
@@ -65,7 +65,7 @@ export default function TermsPage() {
             </h2>
             <div className="space-y-3 text-gray-300">
               <p>
-                Voxxo is a real-time voice translation application that
+                Entrevoz is a real-time voice translation application that
                 provides:
               </p>
               <ul className="list-disc list-inside space-y-2 ml-2">
@@ -89,7 +89,7 @@ export default function TermsPage() {
               3. User Responsibilities
             </h2>
             <div className="space-y-4 text-gray-300">
-              <p>By using Voxxo, you agree to:</p>
+              <p>By using Entrevoz, you agree to:</p>
               <ul className="list-disc list-inside space-y-2 ml-2">
                 <li>Provide accurate information when required</li>
                 <li>Use the service only for lawful purposes</li>
@@ -120,7 +120,7 @@ export default function TermsPage() {
             </h2>
             <div className="space-y-4 text-gray-300">
               <p>
-                Voxxo requires access to your device&apos;s microphone and
+                Entrevoz requires access to your device&apos;s microphone and
                 camera to function properly. By granting these permissions, you:
               </p>
               <ul className="list-disc list-inside space-y-2 ml-2">
@@ -142,7 +142,7 @@ export default function TermsPage() {
                 <p className="text-yellow-100 text-sm">
                   You can revoke these permissions at any time through your
                   browser settings. Revoking permissions will limit the
-                  functionality of Voxxo.
+                  functionality of Entrevoz.
                 </p>
               </div>
             </div>
@@ -155,7 +155,7 @@ export default function TermsPage() {
             </h2>
             <div className="space-y-3 text-gray-300">
               <p>
-                Voxxo uses automated translation services. While we strive for
+                Entrevoz uses automated translation services. While we strive for
                 accuracy:
               </p>
               <ul className="list-disc list-inside space-y-2 ml-2">
@@ -176,7 +176,7 @@ export default function TermsPage() {
               </ul>
               <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
                 <p className="text-red-100 text-sm font-medium">
-                  Do not rely solely on Voxxo for critical communications,
+                  Do not rely solely on Entrevoz for critical communications,
                   including medical, legal, financial, or emergency situations.
                 </p>
               </div>
@@ -190,14 +190,14 @@ export default function TermsPage() {
             </h2>
             <div className="space-y-3 text-gray-300">
               <p>
-                Voxxo and its original content, features, and functionality are
+                Entrevoz and its original content, features, and functionality are
                 owned by MachineMind and are protected by international
                 copyright, trademark, patent, trade secret, and other
                 intellectual property laws.
               </p>
               <p>
                 You retain ownership of any content you create or transmit using
-                Voxxo. By using the service, you grant us a limited license to
+                Entrevoz. By using the service, you grant us a limited license to
                 process your content for the purpose of providing translation
                 services.
               </p>
@@ -211,7 +211,7 @@ export default function TermsPage() {
             </h2>
             <div className="space-y-3 text-gray-300">
               <p>
-                Voxxo integrates with third-party services including translation
+                Entrevoz integrates with third-party services including translation
                 APIs and WebRTC infrastructure. These services have their own
                 terms and privacy policies:
               </p>
@@ -280,7 +280,7 @@ export default function TermsPage() {
               You agree to defend, indemnify, and hold harmless MachineMind, its
               officers, directors, employees, and agents from any claims,
               damages, obligations, losses, liabilities, costs, or expenses
-              arising from your use of Voxxo, your violation of these Terms, or
+              arising from your use of Entrevoz, your violation of these Terms, or
               your violation of any third-party rights.
             </p>
           </section>
@@ -315,7 +315,7 @@ export default function TermsPage() {
               11. Termination
             </h2>
             <p className="text-gray-300 leading-relaxed">
-              We may terminate or suspend your access to Voxxo immediately,
+              We may terminate or suspend your access to Entrevoz immediately,
               without prior notice or liability, for any reason, including
               breach of these Terms. Upon termination, your right to use the
               service will cease immediately.
@@ -345,7 +345,7 @@ export default function TermsPage() {
               We reserve the right to modify these Terms at any time. We will
               notify users of material changes by posting the updated Terms on
               this page and updating the &quot;Last updated&quot; date.
-              Continued use of Voxxo after changes constitutes acceptance of the
+              Continued use of Entrevoz after changes constitutes acceptance of the
               new Terms.
             </p>
           </section>

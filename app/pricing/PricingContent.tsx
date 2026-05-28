@@ -260,7 +260,7 @@ export default function PricingContent() {
       <div className="max-w-4xl mx-auto">
         {/* Back to Home */}
         <div className="mb-8">
-          <BackButton href="/" label="Back to Voxxo" />
+          <BackButton href="/" label="Back to Entrevoz" />
         </div>
 
         {/* Logo */}

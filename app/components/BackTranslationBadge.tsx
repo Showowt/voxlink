@@ -46,8 +46,8 @@ export default function BackTranslationBadge({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             text: translatedText,
-            from: targetLang,
-            to: sourceLang,
+            sourceLang: targetLang,
+            targetLang: sourceLang,
           }),
         });
 

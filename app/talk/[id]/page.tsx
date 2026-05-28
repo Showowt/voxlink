@@ -227,7 +227,6 @@ function TalkContent() {
 
       // Same language - no translation needed
       if (fromLang === toLang) {
-        console.log(`[Translation] Same language (${fromLang}), skipping`);
         return text;
       }
 
@@ -236,7 +235,6 @@ function TalkContent() {
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
           if (attempt > 0) {
-            console.log(`[Translation] Retry attempt ${attempt}...`);
             await new Promise((r) => setTimeout(r, 200 * attempt));
           }
 
@@ -259,9 +257,6 @@ function TalkContent() {
 
           // Verify we got a real translation
           if (result && result.toLowerCase() !== text.toLowerCase()) {
-            console.log(
-              `[Translation] ${fromLang}→${toLang}: "${text.slice(0, 15)}..." → "${result.slice(0, 15)}..."`,
-            );
             return result;
           }
 
@@ -361,10 +356,6 @@ function TalkContent() {
             timestamp: Number(data.timestamp) || Date.now(),
           };
 
-          console.log(
-            `[Message] Partner (${partnerSourceLang}) → me (${userLang}): "${payload.original.slice(0, 30)}..."`,
-          );
-
           // IMMEDIATELY clear live preview - prevents confusion
           setPartnerLiveText("");
           setPartnerLiveTranslation("");
@@ -377,8 +368,6 @@ function TalkContent() {
           );
 
           if (!mountedRef.current) return;
-
-          console.log(`[Message] Result: "${translatedForUs.slice(0, 30)}..."`);
 
           addToTranscript({
             id: payload.id,
@@ -460,9 +449,6 @@ function TalkContent() {
         setPartnerName(name);
         // Set partner's language immediately on connect
         if (lang) {
-          console.log(
-            `[Connection] Partner connected: ${name}, language: ${lang}`,
-          );
           setPartnerLang(lang);
           partnerLangRef.current = lang;
         }
@@ -594,10 +580,6 @@ function TalkContent() {
           // Get fresh target language (may have updated)
           const currentTargetLang = partnerLangRef.current || defaultTargetLang;
 
-          console.log(
-            `[MyLive] "${displayText.slice(0, 20)}..." (${userLang}) → preview in ${currentTargetLang}`,
-          );
-
           // Translate for our own preview (shows what partner will see)
           const translated = await translate(
             displayText.trim(),
@@ -626,10 +608,6 @@ function TalkContent() {
 
         // Get fresh target language
         const currentTargetLang = partnerLangRef.current || defaultTargetLang;
-
-        console.log(
-          `[MyFinal] "${finalizedText.slice(0, 20)}..." (${userLang}) → ${currentTargetLang}`,
-        );
 
         const translated = await translate(
           finalizedText.trim(),
@@ -700,10 +678,6 @@ function TalkContent() {
       if (!isHandsFreeRef.current && newFinal.trim()) {
         // Get fresh target language
         const currentTargetLang = partnerLangRef.current || defaultTargetLang;
-
-        console.log(
-          `[MySend] "${newFinal.slice(0, 20)}..." (${userLang}) → ${currentTargetLang}`,
-        );
 
         const translated = await translate(
           newFinal.trim(),
@@ -925,7 +899,6 @@ function TalkContent() {
 
       // Returning to foreground — restart STT if it was active
       if (isListeningRef.current && mountedRef.current) {
-        console.log("[Talk] Returning from background — restarting STT");
         // Kill existing recognition and restart fresh
         if (recognitionRef.current) {
           try { recognitionRef.current.abort(); } catch { /* ignore */ }
