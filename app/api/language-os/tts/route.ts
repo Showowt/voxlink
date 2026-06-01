@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 10;
+export const maxDuration = 15;
 
 // Rate limit: 120 TTS requests per minute per IP
 const limiter = new Map<string, { count: number; reset: number }>();

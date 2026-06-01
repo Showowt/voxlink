@@ -108,6 +108,11 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      if (cardsCreated === 0 && uniqueWords.length > 0) {
+        console.error('[LangOS Entrevoz Bridge] All SRS card insertions failed');
+        return NextResponse.json({ error: 'All card insertions failed', wordsImported: 0, cardsCreated: 0, sampleWords: [] }, { status: 500 });
+      }
+
       // Record the import
       await losClient.from("los_entrevoz_imports").insert({
         user_id: userId,

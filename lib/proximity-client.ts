@@ -258,19 +258,57 @@ export class ProximityClient {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// TYPE ALIASES — match what proximity page expects
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export type NearbyUser = ProximityUser;
+export type ProximityRequest = ConnectionRequest;
+export interface GeoPosition {
+  lat: number;
+  lng: number;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// LANGUAGE HELPERS — re-exported for proximity page
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const FLAGS: Record<string, string> = {
+  en: "🇺🇸", es: "🇪🇸", fr: "🇫🇷", de: "🇩🇪", it: "🇮🇹", pt: "🇧🇷",
+  ja: "🇯🇵", ko: "🇰🇷", zh: "🇨🇳", ar: "🇸🇦", hi: "🇮🇳", ru: "🇷🇺",
+  nl: "🇳🇱", sv: "🇸🇪", pl: "🇵🇱", tr: "🇹🇷", th: "🇹🇭", vi: "🇻🇳",
+  id: "🇮🇩", ms: "🇲🇾", tl: "🇵🇭", uk: "🇺🇦", cs: "🇨🇿", ro: "🇷🇴",
+  hu: "🇭🇺", el: "🇬🇷", he: "🇮🇱", da: "🇩🇰", fi: "🇫🇮", no: "🇳🇴",
+  lt: "🇱🇹",
+};
+
+const NAMES: Record<string, string> = {
+  en: "English", es: "Spanish", fr: "French", de: "German", it: "Italian",
+  pt: "Portuguese", ja: "Japanese", ko: "Korean", zh: "Chinese", ar: "Arabic",
+  hi: "Hindi", ru: "Russian", nl: "Dutch", sv: "Swedish", pl: "Polish",
+  tr: "Turkish", th: "Thai", vi: "Vietnamese", id: "Indonesian", ms: "Malay",
+  tl: "Filipino", uk: "Ukrainian", cs: "Czech", ro: "Romanian", hu: "Hungarian",
+  el: "Greek", he: "Hebrew", da: "Danish", fi: "Finnish", no: "Norwegian",
+  lt: "Lithuanian",
+};
+
+export function getLanguageFlag(code: string): string {
+  return FLAGS[code] || "🌐";
+}
+
+export function getLanguageName(code: string): string {
+  return NAMES[code] || code.toUpperCase();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // HELPER FUNCTIONS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/**
- * Generate a random session ID
- */
+/** Generate a random session ID */
 export function generateSessionId(): string {
   return `session_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
 }
 
-/**
- * Format distance for display
- */
+/** Format distance for display */
 export function formatDistance(meters: number): string {
   if (meters < 1000) {
     return `${Math.round(meters)}m`;
@@ -278,23 +316,18 @@ export function formatDistance(meters: number): string {
   return `${(meters / 1000).toFixed(1)}km`;
 }
 
-/**
- * Check if browser supports geolocation
- */
+/** Check if browser supports geolocation */
 export function supportsGeolocation(): boolean {
   return "geolocation" in navigator;
 }
 
-/**
- * Get current location (returns promise)
- */
-export function getCurrentLocation(): Promise<{ lat: number; lng: number }> {
+/** Get current position (promise-based) */
+export function getCurrentPosition(): Promise<GeoPosition> {
   return new Promise((resolve, reject) => {
     if (!supportsGeolocation()) {
       reject(new Error("Geolocation not supported"));
       return;
     }
-
     navigator.geolocation.getCurrentPosition(
       (position) => {
         resolve({
@@ -302,14 +335,132 @@ export function getCurrentLocation(): Promise<{ lat: number; lng: number }> {
           lng: position.coords.longitude,
         });
       },
-      (error) => {
-        reject(error);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 5000,
-        maximumAge: 0,
-      },
+      (error) => reject(error),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
     );
   });
+}
+
+/** Watch position changes — returns cleanup ID */
+export function watchPosition(
+  callback: (pos: GeoPosition) => void,
+  errorCallback?: (err: GeolocationPositionError) => void,
+): number {
+  return navigator.geolocation.watchPosition(
+    (position) => {
+      callback({
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+      });
+    },
+    errorCallback,
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 },
+  );
+}
+
+// Keep legacy alias
+export const getCurrentLocation = getCurrentPosition;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STANDALONE FUNCTIONS — Wrappers around ProximityClient for page usage
+// Each creates/reuses a client instance keyed by sessionId.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const clients = new Map<string, ProximityClient>();
+function getClient(sessionId: string): ProximityClient {
+  let client = clients.get(sessionId);
+  if (!client) {
+    client = new ProximityClient(sessionId);
+    clients.set(sessionId, client);
+  }
+  return client;
+}
+
+/** Register presence at location */
+export async function registerPresence(
+  sessionId: string,
+  language: string,
+  lat: number,
+  lng: number,
+  status: "available" | "busy" | "in_call" = "available",
+): Promise<RegisterResponse> {
+  return getClient(sessionId).register(language, lat, lng, status);
+}
+
+/** Update presence status */
+export async function updatePresenceStatus(
+  sessionId: string,
+  status: "available" | "busy" | "in_call",
+): Promise<{ success: boolean; error?: string }> {
+  return getClient(sessionId).updateStatus(status);
+}
+
+/** Remove presence */
+export async function removePresence(
+  sessionId: string,
+): Promise<{ success: boolean; error?: string }> {
+  return getClient(sessionId).removePresence();
+}
+
+/** Find nearby users */
+export async function findNearbyUsers(
+  sessionId: string,
+  lat: number,
+  lng: number,
+  radius?: number,
+): Promise<NearbyResponse> {
+  return getClient(sessionId).getNearby(lat, lng, radius);
+}
+
+/** Send connection request */
+export async function sendConnectionRequest(
+  sessionId: string,
+  targetId: string,
+  message?: string,
+): Promise<RequestResponse> {
+  return getClient(sessionId).sendRequest(targetId, message);
+}
+
+/** Get pending requests */
+export async function getPendingRequests(
+  sessionId: string,
+): Promise<{ success: boolean; requests: ConnectionRequest[]; error?: string }> {
+  return getClient(sessionId).getPendingRequests();
+}
+
+/** Respond to a connection request */
+export async function respondToRequest(
+  sessionId: string,
+  requestId: string,
+  accept: boolean,
+): Promise<RespondResponse> {
+  return getClient(sessionId).respondToRequest(requestId, accept);
+}
+
+/** Subscribe to incoming requests (polling-based, returns cleanup function) */
+export function subscribeToRequests(
+  sessionId: string,
+  onRequest: (request: ConnectionRequest) => void,
+  onAccepted?: (roomCode: string) => void,
+): () => void {
+  const seen = new Set<string>();
+  const interval = setInterval(async () => {
+    try {
+      const result = await getPendingRequests(sessionId);
+      if (result.success && result.requests.length > 0) {
+        for (const req of result.requests) {
+          if (!seen.has(req.id)) {
+            seen.add(req.id);
+            if (req.status === "pending") {
+              onRequest(req);
+            }
+          }
+        }
+      }
+    } catch {
+      // Silent retry on next interval
+    }
+  }, 2000);
+
+  return () => clearInterval(interval);
 }

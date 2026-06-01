@@ -40,14 +40,19 @@ export async function POST(req: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     );
-    await supabase.from('group_rooms').insert({
+    const { error: dbError } = await supabase.from('group_rooms').insert({
       room_code: roomCode,
       host_device_id: deviceId,
       call_type: callType,
       status: 'waiting',
     });
+    if (dbError) {
+      console.error('[GroupCall] DB insert error:', dbError);
+      return NextResponse.json({ error: 'Failed to create room' }, { status: 500 });
+    }
   } catch (e) {
-    console.error('[GroupCall] DB create error (non-fatal):', e);
+    console.error('[GroupCall] DB create error:', e);
+    return NextResponse.json({ error: 'Failed to create room' }, { status: 500 });
   }
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://entrevoz.co';

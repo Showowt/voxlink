@@ -139,6 +139,7 @@ function UsageBar({
 
 function DashboardContent() {
   const {
+    user,
     profile,
     limits,
     isPro,
@@ -154,13 +155,19 @@ function DashboardContent() {
   const [showUpgradeToast, setShowUpgradeToast] = useState(false);
 
   useEffect(() => {
+    if (!loading && !user) {
+      router.replace("/auth?next=/dashboard");
+    }
+  }, [loading, user, router]);
+
+  useEffect(() => {
     if (params.get("upgraded") === "true") {
       setShowUpgradeToast(true);
       setTimeout(() => setShowUpgradeToast(false), 5000);
     }
   }, [params]);
 
-  if (loading) {
+  if (loading || !user) {
     return (
       <div className="min-h-[100dvh] bg-[#030507] flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-[#00E5A0] border-t-transparent rounded-full animate-spin" />

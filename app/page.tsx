@@ -1058,6 +1058,16 @@ function HomeContent() {
   const joinType = searchParams.get("join");
   const joinId = searchParams.get("id");
 
+  // Toast notification state
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  useEffect(() => {
+    if (toast) {
+      const t = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [toast]);
+
   // Form state
   const [name, setName] = useState("");
   // Detect browser language for better default
@@ -1131,21 +1141,30 @@ function HomeContent() {
   }, [name, language]);
 
   // Generate cryptographically secure room code
-  const generateCode = () => {
+  const generateCode = useCallback(() => {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // No O/0/I/1 for clarity
     const array = new Uint8Array(6);
     crypto.getRandomValues(array);
     return Array.from(array, (byte) => chars[byte % chars.length]).join("");
-  };
+  }, []);
+
+  // Persistent room code — generated once, reused across Copy/Share
+  const [roomCode, setRoomCode] = useState(() => "");
+  useEffect(() => {
+    setRoomCode(generateCode());
+  }, [generateCode]);
+
+  // Dynamic origin for share links
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://entrevoz.co';
 
   // WhatsApp Call
   const [linkCopied, setLinkCopied] = useState(false);
 
   const startWhatsAppCall = () => {
-    if (!name.trim()) { alert("Please enter your name"); return; }
+    if (!name.trim()) { setToast({ message: "Please enter your name", type: "error" }); return; }
     const code = generateCode();
     const targetLang = language === "en" ? "es" : "en";
-    const link = `https://entrevoz.co/call/${code}?lang=${targetLang}`;
+    const link = `${origin}/call/${code}?lang=${targetLang}`;
     const hostLink = `/call/${code}?host=true&name=${encodeURIComponent(name)}&lang=${language}`;
     const msg = encodeURIComponent(`Hey, I want to talk with live translation \u2014 tap to join our call \ud83c\udfa4\n${link}\n(No download needed \u2014 opens in your browser)`);
     window.open(`https://wa.me/?text=${msg}`, "_blank");
@@ -1153,11 +1172,10 @@ function HomeContent() {
   };
 
   const shareCallLink = async () => {
-    if (!name.trim()) { alert("Please enter your name"); return; }
-    const code = generateCode();
+    if (!name.trim()) { setToast({ message: "Please enter your name", type: "error" }); return; }
     const targetLang = language === "en" ? "es" : "en";
-    const link = `https://entrevoz.co/call/${code}?lang=${targetLang}`;
-    const hostLink = `/call/${code}?host=true&name=${encodeURIComponent(name)}&lang=${language}`;
+    const link = `${origin}/call/${roomCode}?lang=${targetLang}`;
+    const hostLink = `/call/${roomCode}?host=true&name=${encodeURIComponent(name)}&lang=${language}`;
     if (navigator.share) {
       try {
         await navigator.share({ title: "Entrevoz", text: `Join my translated call: ${link}`, url: link });
@@ -1173,7 +1191,7 @@ function HomeContent() {
   // Start Video Call
   const startVideoCall = () => {
     if (!name.trim()) {
-      alert("Please enter your name");
+      setToast({ message: "Please enter your name", type: "error" });
       return;
     }
     const code = generateCode();
@@ -1185,11 +1203,11 @@ function HomeContent() {
   // Join Video Call
   const joinVideoCall = () => {
     if (!name.trim()) {
-      alert("Please enter your name");
+      setToast({ message: "Please enter your name", type: "error" });
       return;
     }
-    if (!joinCode.trim() || joinCode.length < 4) {
-      alert("Please enter a valid code");
+    if (!joinCode.trim() || joinCode.length !== 6) {
+      setToast({ message: "Enter a 6-character room code", type: "error" });
       return;
     }
     router.push(
@@ -1200,7 +1218,7 @@ function HomeContent() {
   // Start Talk Mode
   const startTalkMode = () => {
     if (!name.trim()) {
-      alert("Please enter your name");
+      setToast({ message: "Please enter your name", type: "error" });
       return;
     }
     const code = generateCode();
@@ -1212,11 +1230,11 @@ function HomeContent() {
   // Join Talk Mode
   const joinTalkMode = () => {
     if (!name.trim()) {
-      alert("Please enter your name");
+      setToast({ message: "Please enter your name", type: "error" });
       return;
     }
-    if (!joinCode.trim() || joinCode.length < 4) {
-      alert("Please enter a valid code");
+    if (!joinCode.trim() || joinCode.length !== 6) {
+      setToast({ message: "Enter a 6-character room code", type: "error" });
       return;
     }
     router.push(
@@ -1331,6 +1349,17 @@ function HomeContent() {
       variant="mesh"
       className="flex flex-col py-3 px-3 sm:py-4 sm:px-4 sm:justify-center overflow-y-auto overscroll-contain max-h-[100dvh]"
     >
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-3 rounded-xl text-sm font-medium shadow-lg backdrop-blur-sm border max-w-[90vw] text-center transition-all animate-in fade-in slide-in-from-top-2 ${
+          toast.type === 'error' ? 'bg-red-500/20 border-red-500/30 text-red-300' :
+          toast.type === 'success' ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300' :
+          'bg-blue-500/20 border-blue-500/30 text-blue-300'
+        }`}>
+          {toast.message}
+        </div>
+      )}
+
       <div className="w-full max-w-md mx-auto flex-shrink-0">
         {/* Logo - Premium Animated */}
         <div className="mb-4 sm:mb-6">
@@ -1640,7 +1669,7 @@ function HomeContent() {
             ) : (
               <>
                 {/* True Face-to-Face Mode Button */}
-                {activeTab === "talk" && (
+                {(activeTab === "talk" || activeTab === "video") && (
                   <div className="mb-4">
                     <GlowButton
                       onClick={() => router.push("/face-to-face")}
@@ -1674,8 +1703,23 @@ function HomeContent() {
                       <button onClick={shareCallLink} className="flex-1 py-3 rounded-xl border border-white/10 bg-white/5 text-voxxo-400 font-semibold text-sm hover:bg-white/10 transition-all">
                         Share Link
                       </button>
-                      <button onClick={() => { const link = `https://entrevoz.co/call/${generateCode()}?lang=${language === "en" ? "es" : "en"}`; navigator.clipboard.writeText(link); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 3000); }} className="flex-1 py-3 rounded-xl border border-white/10 bg-white/5 text-voxxo-400 font-semibold text-sm hover:bg-white/10 transition-all">
+                      <button onClick={() => { const link = `${origin}/call/${roomCode}?lang=${language === "en" ? "es" : "en"}`; navigator.clipboard.writeText(link); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 3000); }} className="flex-1 py-3 rounded-xl border border-white/10 bg-white/5 text-voxxo-400 font-semibold text-sm hover:bg-white/10 transition-all">
                         {linkCopied ? "Copied!" : "Copy Link"}
+                      </button>
+                    </div>
+                    {/* Room Code Display */}
+                    <div className="flex items-center justify-center gap-2">
+                      <span className="text-white/40 text-xs">Room:</span>
+                      <span className="font-mono text-voxxo-400 text-sm font-semibold tracking-widest">{roomCode}</span>
+                      <button
+                        onClick={() => setRoomCode(generateCode())}
+                        className="text-white/40 hover:text-white/70 transition-colors p-1 rounded-md hover:bg-white/5"
+                        aria-label="Generate new room code"
+                        title="New code"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
                       </button>
                     </div>
                     <GlassCard variant="subtle" padding="sm">

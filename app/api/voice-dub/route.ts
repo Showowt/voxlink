@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
           sourceLang: "auto",
           targetLang,
         }),
+        signal: AbortSignal.timeout(5000),
       });
       if (translateRes.ok) {
         const td = await translateRes.json();

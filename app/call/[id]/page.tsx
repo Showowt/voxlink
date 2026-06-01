@@ -82,7 +82,7 @@ const speakText = (text: string, lang: string) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// VOXLINK VIDEO CALL - PeerJS P2P with Live Translation
+// VOXLINK VIDEO CALL - Raw WebRTC P2P with Supabase Signaling
 // Mobile-optimized, no external API dependencies
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -942,7 +942,7 @@ function VideoCallContent() {
   }, [hasPartner, status]);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // PEERJS SETUP - Only runs after leaving lobby
+  // WEBRTC CONNECTION SETUP - Only runs after leaving lobby
   // ═══════════════════════════════════════════════════════════════════════════
 
   useEffect(() => {
@@ -980,7 +980,7 @@ function VideoCallContent() {
 
         setStatusMessage(isHost ? "Creating room..." : "Joining room...");
 
-        // Create PeerJS connection
+        // Create WebRTC connection
         const peer = new PeerConnection({
           onStatusChange: (peerStatus, message) => {
             if (!mountedRef.current) return;

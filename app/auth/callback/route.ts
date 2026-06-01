@@ -12,8 +12,14 @@ export async function GET(req: NextRequest) {
       const { error } = await supabase.auth.exchangeCodeForSession(code);
 
       if (!error) {
-        return NextResponse.redirect(`${origin}${next}`);
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          return NextResponse.redirect(`${origin}${next}`);
+        }
+        return NextResponse.redirect(`${origin}/auth?error=session_missing`);
       }
+
+      return NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent(error.message)}`);
     }
   }
 
