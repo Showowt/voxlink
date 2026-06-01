@@ -66,6 +66,10 @@ export default function RecordingsPage() {
         video.autoplay = true;
         video.style.cssText = "max-width:100%;max-height:100vh;";
         w.document.body.appendChild(video);
+        // Revoke object URL after video loads to prevent memory leak
+        video.onloadeddata = () => setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } else {
+        URL.revokeObjectURL(url);
       }
     } catch (err) {
       console.error("[Recordings] Playback failed:", err);
