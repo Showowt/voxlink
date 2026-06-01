@@ -323,6 +323,12 @@ export default function PrivacyPage() {
               Terms of Service
             </Link>
             <Link
+              href="/account"
+              className="text-gray-400 hover:text-cyan-400 transition"
+            >
+              Account & Privacy
+            </Link>
+            <Link
               href="/"
               className="text-gray-400 hover:text-cyan-400 transition"
             >

@@ -25,6 +25,8 @@ interface PostCallSummaryProps {
   languages: string[];
   onClose: () => void;
   onNewCall: () => void;
+  hasRecording?: boolean;
+  onDownloadRecording?: () => void;
 }
 
 export default function PostCallSummary({
@@ -34,6 +36,8 @@ export default function PostCallSummary({
   languages,
   onClose,
   onNewCall,
+  hasRecording,
+  onDownloadRecording,
 }: PostCallSummaryProps) {
   const [summary, setSummary] = useState<SummaryData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -210,6 +214,32 @@ export default function PostCallSummary({
             >
               {copied ? "Copied to clipboard!" : "Copy summary"}
             </button>
+          </div>
+        )}
+
+        {/* Recording Download */}
+        {hasRecording && onDownloadRecording && (
+          <div className="mb-3 pt-2 border-t border-white/5">
+            <button
+              onClick={onDownloadRecording}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-medium transition-all"
+              style={{
+                background: "rgba(239, 68, 68, 0.08)",
+                border: "1px solid rgba(239, 68, 68, 0.2)",
+                color: "#ef4444",
+              }}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Download Recording
+            </button>
+            <a
+              href="/recordings"
+              className="block text-center text-xs text-white/30 hover:text-white/50 transition-colors mt-2"
+            >
+              View all recordings
+            </a>
           </div>
         )}
 

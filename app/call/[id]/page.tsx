@@ -39,6 +39,9 @@ import { useConversationMemory } from "@/hooks/useConversationMemory";
 import { useVoiceDubbing } from "@/hooks/useVoiceDubbing";
 import { useRemoteTranscription } from "@/hooks/useRemoteTranscription";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
+import { useCallRecording } from "@/hooks/useCallRecording";
+import RecordingIndicator from "../../components/RecordingIndicator";
+import { saveRecording } from "@/app/lib/recording-storage";
 
 // Text-to-Speech helper — loud and fast
 // iOS Safari: voices load asynchronously; we must wait for them before speaking.
@@ -786,6 +789,9 @@ function VideoCallContent() {
     };
   }, [isDubPlaying]);
 
+  // ── Call Recording ───────────────────────────────────────────────────────
+  const callRecording = useCallRecording();
+
   // ── Remote audio fallback transcription (activates if partner's STT fails) ──
   const remoteTranscription = useRemoteTranscription({
     remoteStream: remoteStreamRef.current,
@@ -1418,12 +1424,27 @@ function VideoCallContent() {
     }
   };
 
-  const endCall = () => {
+  const endCall = async () => {
     stopListening();
     cleanupDubbing();
     cyrano.deactivate();
     setCyranoOpen(false);
     setCyranoPhrase("");
+
+    // Stop recording and save if active
+    if (callRecording.isRecording) {
+      const blob = await callRecording.stopRecording();
+      if (blob && blob.size > 0) {
+        const langPairStr = `${userLang} / ${partnerLang || expectedPartnerLang}`;
+        saveRecording(blob, {
+          date: new Date().toISOString(),
+          partnerName: partnerName || "Unknown",
+          durationSeconds: callRecording.recordingDuration,
+          languagePair: langPairStr,
+        }).catch((err) => console.error("[Call] Failed to save recording:", err));
+      }
+    }
+
     if (localStreamRef.current) {
       stopCamera(localStreamRef.current);
     }
@@ -1742,6 +1763,11 @@ function VideoCallContent() {
                 {formatDuration(callDuration)}
               </span>
             </div>
+          )}
+
+          {/* Recording Indicator */}
+          {callRecording.isRecording && (
+            <RecordingIndicator durationSeconds={callRecording.recordingDuration} />
           )}
 
           {/* Connection Quality Indicator */}
@@ -2202,6 +2228,48 @@ function VideoCallContent() {
             </svg>
           </button>
 
+          {/* Record Call */}
+          {isConnected && (
+            <button
+              onClick={() => {
+                if (callRecording.isRecording) {
+                  callRecording.stopRecording().then((blob) => {
+                    if (blob && blob.size > 0) {
+                      const langPairStr = `${userLang} / ${partnerLang || expectedPartnerLang}`;
+                      saveRecording(blob, {
+                        date: new Date().toISOString(),
+                        partnerName: partnerName || "Unknown",
+                        durationSeconds: callRecording.recordingDuration,
+                        languagePair: langPairStr,
+                      }).catch((err) => console.error("[Call] Failed to save recording:", err));
+                    }
+                  });
+                } else if (remoteStreamRef.current) {
+                  callRecording.startRecording(remoteStreamRef.current);
+                }
+              }}
+              title={callRecording.isRecording ? "Stop Recording" : "Record Call"}
+              className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center text-lg md:text-xl transition-all relative ${
+                callRecording.isRecording
+                  ? "bg-red-500/20 text-red-400 border-[1.5px] border-red-500/50"
+                  : "bg-white/10 text-white hover:bg-white/20"
+              }`}
+              style={callRecording.isRecording ? { boxShadow: "0 0 16px rgba(239,68,68,0.2)" } : undefined}
+            >
+              {callRecording.isRecording ? (
+                <div className="w-4 h-4 rounded-sm bg-red-500" />
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10" strokeWidth={1.5} />
+                  <circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none" />
+                </svg>
+              )}
+              {callRecording.isRecording && (
+                <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-red-500 animate-pulse" />
+              )}
+            </button>
+          )}
+
           {/* Cyrano Mode Toggle */}
           <button
             onClick={() => {
@@ -2364,6 +2432,8 @@ function VideoCallContent() {
           setShowPostCall(false);
           window.location.href = "/";
         }}
+        hasRecording={callRecording.recordingBlob !== null}
+        onDownloadRecording={callRecording.downloadRecording}
       />
 
       <style jsx>{`
