@@ -65,26 +65,35 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Fallback to public OpenRelay if Metered didn't provide TURN servers
+  // Fallback TURN servers when Metered is not configured
+  // OpenRelay (openrelay.metered.ca) is DEAD as of June 2026 — removed.
+  // Use env-based static TURN credentials as fallback.
   if (provider !== "metered") {
-    console.warn("[TURN] Using public OpenRelay fallback");
-    iceServers.push(
-      {
-        urls: "turn:openrelay.metered.ca:80",
-        username: "openrelayproject",
-        credential: "openrelayproject",
-      },
-      {
-        urls: "turn:openrelay.metered.ca:443",
-        username: "openrelayproject",
-        credential: "openrelayproject",
-      },
-      {
-        urls: "turn:openrelay.metered.ca:443?transport=tcp",
-        username: "openrelayproject",
-        credential: "openrelayproject",
-      },
-    );
+    const turnUsername = process.env.TURN_USERNAME;
+    const turnCredential = process.env.TURN_CREDENTIAL;
+    const turnServer = process.env.TURN_SERVER;
+
+    if (turnUsername && turnCredential && turnServer) {
+      console.warn("[TURN] Using static TURN credentials fallback");
+      iceServers.push(
+        {
+          urls: `turn:${turnServer}:443`,
+          username: turnUsername,
+          credential: turnCredential,
+        },
+        {
+          urls: `turn:${turnServer}:443?transport=tcp`,
+          username: turnUsername,
+          credential: turnCredential,
+        },
+      );
+      provider = "static";
+    } else {
+      console.error(
+        "[TURN] No TURN servers available! Set METERED_API_KEY or TURN_USERNAME/TURN_CREDENTIAL/TURN_SERVER. " +
+        "Calls behind symmetric NATs (most mobile networks) WILL fail.",
+      );
+    }
   }
 
   return NextResponse.json(
