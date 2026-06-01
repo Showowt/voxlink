@@ -2,22 +2,14 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { LANGUAGES as MASTER_LANGUAGES } from '../lib/languages';
 
-const LANGUAGES = [
-  { code: 'en', name: 'English', flag: '\u{1F1FA}\u{1F1F8}' },
-  { code: 'es', name: 'Spanish', flag: '\u{1F1EA}\u{1F1F8}' },
-  { code: 'fr', name: 'French', flag: '\u{1F1EB}\u{1F1F7}' },
-  { code: 'de', name: 'German', flag: '\u{1F1E9}\u{1F1EA}' },
-  { code: 'it', name: 'Italian', flag: '\u{1F1EE}\u{1F1F9}' },
-  { code: 'pt', name: 'Portuguese', flag: '\u{1F1E7}\u{1F1F7}' },
-  { code: 'zh', name: 'Mandarin', flag: '\u{1F1E8}\u{1F1F3}' },
-  { code: 'ja', name: 'Japanese', flag: '\u{1F1EF}\u{1F1F5}' },
-  { code: 'ko', name: 'Korean', flag: '\u{1F1F0}\u{1F1F7}' },
-  { code: 'ar', name: 'Arabic', flag: '\u{1F1F8}\u{1F1E6}' },
-  { code: 'ru', name: 'Russian', flag: '\u{1F1F7}\u{1F1FA}' },
-  { code: 'hi', name: 'Hindi', flag: '\u{1F1EE}\u{1F1F3}' },
-  { code: 'lt', name: 'Lithuanian', flag: '\u{1F1F1}\u{1F1F9}' },
-];
+// Use master language list — all 31 languages
+const LANGUAGES = MASTER_LANGUAGES.map((l) => ({
+  code: l.code,
+  name: l.name,
+  flag: l.flag,
+}));
 
 function getDeviceId(): string {
   try {

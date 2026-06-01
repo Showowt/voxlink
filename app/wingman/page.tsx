@@ -73,17 +73,13 @@ const OUTPUT_MODES: {
   },
 ];
 
-const LANGUAGES = [
-  { code: "en", label: "English", flag: "🇺🇸" },
-  { code: "es", label: "Spanish", flag: "🇪🇸" },
-  { code: "fr", label: "French", flag: "🇫🇷" },
-  { code: "de", label: "German", flag: "🇩🇪" },
-  { code: "pt", label: "Portuguese", flag: "🇧🇷" },
-  { code: "it", label: "Italian", flag: "🇮🇹" },
-  { code: "zh", label: "Chinese", flag: "🇨🇳" },
-  { code: "ja", label: "Japanese", flag: "🇯🇵" },
-  { code: "lt", label: "Lithuanian", flag: "🇱🇹" },
-];
+// Use master language list — all 31 languages
+import { LANGUAGES as MASTER_LANGUAGES } from "../lib/languages";
+const LANGUAGES = MASTER_LANGUAGES.map((l) => ({
+  code: l.code,
+  label: l.name,
+  flag: l.flag,
+}));
 
 const TONE_COLORS = {
   bold: {

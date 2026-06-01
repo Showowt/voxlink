@@ -475,7 +475,7 @@ function ProximityContent() {
                 You speak
               </label>
               <div className="grid grid-cols-4 gap-2">
-                {LANGUAGES.slice(0, 8).map((lang) => (
+                {LANGUAGES.map((lang) => (
                   <button
                     key={lang.code}
                     onClick={() => setLanguage(lang.code)}
