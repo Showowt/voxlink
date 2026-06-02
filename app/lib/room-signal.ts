@@ -136,7 +136,27 @@ export class RoomSignal {
         }
       });
 
-      await this.channel.subscribe();
+      // Wait for explicit SUBSCRIBED confirmation from Supabase
+      const subscribed = await new Promise<boolean>((resolve) => {
+        const timeout = setTimeout(() => resolve(false), 10000);
+        this.channel!.subscribe((status) => {
+          if (status === "SUBSCRIBED") {
+            clearTimeout(timeout);
+            resolve(true);
+          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            clearTimeout(timeout);
+            resolve(false);
+          }
+        });
+      });
+
+      if (!subscribed) {
+        console.error("[RoomSignal] Channel subscription failed or timed out");
+        return false;
+      }
+
+      // Brief delay to ensure the other side also has time to subscribe
+      await new Promise((r) => setTimeout(r, 500));
 
       // Broadcast presence immediately + heartbeat every 3s
       this.broadcastPresence();
@@ -146,7 +166,7 @@ export class RoomSignal {
         if (this.currentPeerId) this.broadcastPeerId();
       }, 3000);
 
-      console.log(`[RoomSignal] Active on channel ${channelName} as ${role}`);
+      console.log(`[RoomSignal] Active on channel ${channelName} as ${role} (confirmed SUBSCRIBED)`);
       return true;
     } catch (err) {
       console.error("[RoomSignal] Failed to start:", err);

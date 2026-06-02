@@ -271,11 +271,19 @@ export class PeerConnection {
           onPeerPresent: (role) => {
             if (this.isDestroyed) return;
             console.log(`[Entrevoz] Peer present: ${role}`);
+            const wasPresent = this.peerPresent;
             this.peerPresent = true;
 
-            // Guest: host showed up — start or re-kick connection attempts
+            // Guest: host showed up — immediately send offer if we have one
             if (!this.isHost && this._status !== "connected") {
-              this.startConnectionAttempts();
+              if (this.currentOffer && this.roomSignal?.isActive) {
+                // Re-broadcast existing offer immediately (host just subscribed)
+                console.log("[Entrevoz] Host detected — re-broadcasting offer");
+                this.roomSignal.sendOffer(this.currentOffer);
+              } else if (!wasPresent) {
+                // First time seeing host — start connection attempts
+                this.startConnectionAttempts();
+              }
             }
           },
 
