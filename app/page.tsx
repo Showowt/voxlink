@@ -1923,6 +1923,13 @@ function HomeContent() {
             </a>
             {" "}•{" "}
             <a
+              href="/test"
+              className="text-voxxo-500 hover:text-voxxo-400 transition"
+            >
+              Test
+            </a>
+            {" "}·{" "}
+            <a
               href="/status"
               className="text-voxxo-500 hover:text-voxxo-400 transition"
             >
