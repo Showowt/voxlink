@@ -115,6 +115,7 @@ export class PeerConnection {
   private connectionAttempts = 0;
   private maxConnectionAttempts = 30;
   private connectionAttemptTimeout: NodeJS.Timeout | null = null;
+  private guestFirstTimeoutId: NodeJS.Timeout | null = null;
 
   // Keep-alive
   private keepAliveInterval: NodeJS.Timeout | null = null;
@@ -323,11 +324,10 @@ export class PeerConnection {
         // Wait for host's presence heartbeat (proof host channel is active),
         // then onPeerPresent callback will trigger startConnectionAttempts().
         // Safety net: if host presence not detected in 15s, start anyway.
-        setTimeout(() => {
-          if (!this.isDestroyed && !this.peerPresent && this._status !== "connected") {
-            console.log("[Entrevoz] No host presence after 15s — starting offers anyway");
-            this.startConnectionAttempts();
-          }
+        this.guestFirstTimeoutId = setTimeout(() => {
+          if (this.isDestroyed || this.peerPresent || this._status === "connected") return;
+          console.log("[Entrevoz] No host presence after 15s — starting offers anyway");
+          this.startConnectionAttempts();
         }, 15000);
       }
 
@@ -558,6 +558,10 @@ export class PeerConnection {
       clearTimeout(this.connectionAttemptTimeout);
       this.connectionAttemptTimeout = null;
     }
+    if (this.guestFirstTimeoutId) {
+      clearTimeout(this.guestFirstTimeoutId);
+      this.guestFirstTimeoutId = null;
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -573,8 +577,10 @@ export class PeerConnection {
       return;
     }
 
-    // Tear down any existing connection
+    // Tear down any existing connection + clear stale timeouts
     this.closePeerConnection();
+    this.clearStreamTimeout();
+    this.clearVideoRetryTimeout();
     this.remoteDescSet = false;
     this.pendingCandidates = [];
     this.streamReceived = false;
@@ -636,8 +642,10 @@ export class PeerConnection {
 
     console.log("[Entrevoz] Host received offer — creating answer");
 
-    // Tear down existing connection
+    // Tear down existing connection + clear stale timeouts
     this.closePeerConnection();
+    this.clearStreamTimeout();
+    this.clearVideoRetryTimeout();
     this.remoteDescSet = false;
     this.pendingCandidates = [];
     this.streamReceived = false;
@@ -711,6 +719,16 @@ export class PeerConnection {
     try {
       await this.pc.setRemoteDescription(new RTCSessionDescription(sdp));
       this.remoteDescSet = true;
+
+      // Answer received — reset stream timeout to shorter window
+      // (signaling succeeded, now just waiting for media to flow)
+      this.clearStreamTimeout();
+      const mediaTimeout = Math.min(this.getStreamTimeout(), 12000);
+      this.streamTimeoutId = setTimeout(() => {
+        if (this.isDestroyed || this.streamReceived || this.remoteStream) return;
+        console.warn(`[Entrevoz] Media timeout ${mediaTimeout}ms after answer received`);
+        this.handleConnectionError("Media stream not received after signaling succeeded");
+      }, mediaTimeout);
 
       // Flush queued ICE candidates
       for (const candidate of this.pendingCandidates) {
