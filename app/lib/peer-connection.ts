@@ -1,3 +1,4 @@
+import Peer, { MediaConnection, DataConnection } from "peerjs";
 import { RoomSignal } from "./room-signal";
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -19,9 +20,8 @@ interface NavigatorWithConnection extends Navigator {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ENTREVOZ VIDEO CONNECTION v3.0 — Pure WebRTC + Supabase Realtime Signaling
-// Eliminated PeerJS cloud server (0.peerjs.com) — single point of failure.
-// All signaling now goes through Supabase Realtime (production-grade).
+// VOXLINK VIDEO CONNECTION v2.0 - Bulletproof Video Calls
+// Fixed: Connection reliability, retry logic, ICE handling
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export type ConnectionMode = "video" | "talk";
@@ -45,11 +45,17 @@ export type IceConnectionState =
 
 // Connection quality metrics
 export interface ConnectionQuality {
+  // Quality score: 'excellent' | 'good' | 'fair' | 'poor'
   quality: "excellent" | "good" | "fair" | "poor";
+  // Packet loss percentage (0-100)
   packetLoss: number;
+  // Round trip time in ms
   rtt: number;
+  // Jitter in ms
   jitter: number;
+  // Estimated bandwidth in kbps
   bandwidth: number;
+  // Timestamp of measurement
   timestamp: number;
 }
 
@@ -71,12 +77,31 @@ export interface PeerCallbacks {
   onQualityUpdate?: (quality: ConnectionQuality) => void;
 }
 
-// Default ICE servers (STUN only — TURN fetched from API)
+// Default ICE servers (STUN only - TURN fetched from API)
 const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
   { urls: "stun:global.stun.twilio.com:3478" },
 ];
+
+// PeerJS signaling servers with fallback
+interface PeerJSServer {
+  host: string;
+  port: number;
+  secure: boolean;
+  path: string;
+}
+
+const PEERJS_SERVERS: PeerJSServer[] = [
+  { host: "0.peerjs.com", port: 443, secure: true, path: "/" },
+];
+
+// Video constraints — optimized for real-time translation calls, not beauty streams
+const VIDEO_CONSTRAINTS: MediaTrackConstraints = {
+  width: { ideal: 640, max: 1280 },
+  height: { ideal: 480, max: 720 },
+  frameRate: { ideal: 24, max: 30 },
+};
 
 // Fetch ICE servers from secure API (includes TURN credentials)
 async function getIceServers(): Promise<RTCIceServer[]> {
@@ -93,38 +118,36 @@ async function getIceServers(): Promise<RTCIceServer[]> {
 }
 
 export class PeerConnection {
-  private pc: RTCPeerConnection | null = null;
-  private dataChannel: RTCDataChannel | null = null;
+  private peer: Peer | null = null;
+  private dataConnection: DataConnection | null = null;
+  private mediaConnection: MediaConnection | null = null;
   private localStream: MediaStream | null = null;
   private remoteStream: MediaStream | null = null;
 
-  private roomId = "";
-  private isHost = false;
-  private userName = "";
-  private deviceId = "";
-  private lang = "";
-  private iceServers: RTCIceServer[] = [];
+  private mode: ConnectionMode = "video";
+  private roomId: string = "";
+  private isHost: boolean = false;
+  private userName: string = "";
+  private deviceId: string = "";
+  private lang: string = "";
+  private myPeerId: string = "";
+  private hostPeerId: string = "";
 
   private _status: ConnectionStatus = "initializing";
   private callbacks: PeerCallbacks = {};
-  private isDestroyed = false;
+  private isDestroyed: boolean = false;
   private pendingMessages: unknown[] = [];
-  private helloAcknowledged = false;
-
-  // Retry logic
-  private connectionAttempts = 0;
-  private maxConnectionAttempts = 30;
-  private connectionAttemptTimeout: NodeJS.Timeout | null = null;
-  private guestFirstTimeoutId: NodeJS.Timeout | null = null;
-
-  // Keep-alive
+  private helloAcknowledged: boolean = false;
+  private connectionAttempts: number = 0;
+  private maxConnectionAttempts: number = 30; // Increased from 5
+  private connectionAttemptInterval: NodeJS.Timeout | null = null;
   private keepAliveInterval: NodeJS.Timeout | null = null;
-  private lastPongTime = Date.now();
-  private missedPongs = 0;
-  private static readonly MAX_MISSED_PONGS = 2;
-
-  // Quality monitoring
   private statsInterval: NodeJS.Timeout | null = null;
+  private videoRetryTimeout: NodeJS.Timeout | null = null;
+  private videoRetryAttempts: number = 0;
+  private static readonly MAX_VIDEO_RETRIES = 6;
+  private static readonly VIDEO_RETRY_DELAY = 2000; // 2 seconds
+  private lastPongTime: number = Date.now();
   private previousStats: {
     packetsReceived: number;
     packetsLost: number;
@@ -132,31 +155,17 @@ export class PeerConnection {
     timestamp: number;
   } | null = null;
 
-  // Video retry
-  private videoRetryTimeout: NodeJS.Timeout | null = null;
-  private videoRetryAttempts = 0;
-  private static readonly MAX_VIDEO_RETRIES = 6;
-  private streamTimeoutId: NodeJS.Timeout | null = null;
-  private streamReceived = false;
-  private static readonly DEFAULT_STREAM_TIMEOUT = 8000;
-
-  // Supabase signaling
+  // Supabase room signaling — peer discovery without PeerJS signaling server
   private roomSignal: RoomSignal | null = null;
-  private peerPresent = false;
-
-  // ICE candidate queue (candidates arriving before remote description is set)
-  private pendingCandidates: RTCIceCandidateInit[] = [];
-  private remoteDescSet = false;
-
-  // Cached offer — reuse on retries instead of creating new PC each time
-  private currentOffer: RTCSessionDescriptionInit | null = null;
+  private hasSupabaseSignaling: boolean = false;
+  private signalingHealthCheck: NodeJS.Timeout | null = null;
 
   // Network change detection
   private networkChangeHandler: (() => void) | null = null;
   private onlineHandler: (() => void) | null = null;
   private offlineHandler: (() => void) | null = null;
   private lastNetworkType: string | null = null;
-  private isOffline = false;
+  private isOffline: boolean = false;
 
   constructor(callbacks: PeerCallbacks) {
     this.callbacks = callbacks;
@@ -164,22 +173,25 @@ export class PeerConnection {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // NETWORK CHANGE DETECTION — Proactive ICE restart on network switch
+  // NETWORK CHANGE DETECTION - Proactive ICE restart on network switch
   // ═══════════════════════════════════════════════════════════════════════════
 
   private setupNetworkListeners(): void {
     if (typeof window === "undefined") return;
 
+    // Online/offline detection
     this.onlineHandler = () => {
-      console.log("[Entrevoz] Network: Back online");
+      console.log("[Entrevoz Video] Network: Back online");
       this.isOffline = false;
+
+      // If we were connected, trigger ICE restart
       if (this._status === "connected" || this._status === "reconnecting") {
         this.triggerIceRestart();
       }
     };
 
     this.offlineHandler = () => {
-      console.log("[Entrevoz] Network: Went offline");
+      console.log("[Entrevoz Video] Network: Went offline");
       this.isOffline = true;
       if (this._status === "connected") {
         this.setStatus("reconnecting", "Network offline...");
@@ -189,25 +201,43 @@ export class PeerConnection {
     window.addEventListener("online", this.onlineHandler);
     window.addEventListener("offline", this.offlineHandler);
 
+    // Network Information API (for WiFi ↔ cellular detection)
     const connection = (navigator as NavigatorWithConnection).connection;
     if (connection) {
-      this.lastNetworkType = connection.type || connection.effectiveType || null;
+      this.lastNetworkType =
+        connection.type || connection.effectiveType || null;
+
       this.networkChangeHandler = () => {
         const newType = connection.type || connection.effectiveType || null;
-        console.log(`[Entrevoz] Network type changed: ${this.lastNetworkType} → ${newType}`);
+        console.log(
+          `[Entrevoz Video] Network type changed: ${this.lastNetworkType} → ${newType}`,
+        );
+
+        // If type changed and we're connected, trigger ICE restart
         if (newType !== this.lastNetworkType && this._status === "connected") {
+          console.log(
+            "[Entrevoz Video] Triggering ICE restart due to network change",
+          );
           this.triggerIceRestart();
         }
+
         this.lastNetworkType = newType;
       };
+
       connection.addEventListener("change", this.networkChangeHandler);
     }
   }
 
   private removeNetworkListeners(): void {
     if (typeof window === "undefined") return;
-    if (this.onlineHandler) window.removeEventListener("online", this.onlineHandler);
-    if (this.offlineHandler) window.removeEventListener("offline", this.offlineHandler);
+
+    if (this.onlineHandler) {
+      window.removeEventListener("online", this.onlineHandler);
+    }
+    if (this.offlineHandler) {
+      window.removeEventListener("offline", this.offlineHandler);
+    }
+
     const connection = (navigator as NavigatorWithConnection).connection;
     if (connection && this.networkChangeHandler) {
       connection.removeEventListener("change", this.networkChangeHandler);
@@ -215,14 +245,21 @@ export class PeerConnection {
   }
 
   private triggerIceRestart(): void {
-    if (!this.pc || this.isDestroyed) return;
+    if (!this.mediaConnection || this.isDestroyed) return;
+
     try {
-      if (this.pc.iceConnectionState !== "closed") {
-        console.log("[Entrevoz] Restarting ICE...");
-        this.pc.restartIce?.();
+      const pc = (
+        this.mediaConnection as unknown as {
+          peerConnection?: RTCPeerConnection;
+        }
+      ).peerConnection;
+
+      if (pc && pc.iceConnectionState !== "closed") {
+        console.log("[Entrevoz Video] Restarting ICE...");
+        pc.restartIce?.();
       }
     } catch (err) {
-      console.warn("[Entrevoz] ICE restart failed:", err);
+      console.warn("[Entrevoz Video] ICE restart failed:", err);
     }
   }
 
@@ -246,270 +283,357 @@ export class PeerConnection {
     localStream?: MediaStream,
     options?: { deviceId?: string; lang?: string },
   ): Promise<boolean> {
-    this.roomId = roomId.toUpperCase();
+    this.roomId = roomId.toUpperCase(); // Normalize to uppercase
     this.isHost = isHost;
     this.userName = userName;
     this.deviceId = options?.deviceId || "";
     this.lang = options?.lang || "";
+    this.mode = mode;
     this.localStream = localStream || null;
     this.isDestroyed = false;
     this.connectionAttempts = 0;
-    this.peerPresent = false;
+
+    // Deterministic host ID (fast path for fresh rooms)
+    this.hostPeerId = `entrevoz-video-${this.roomId}-host`;
+
+    if (isHost) {
+      this.myPeerId = this.hostPeerId;
+    } else {
+      const uniqueId = Math.random().toString(36).substring(2, 8);
+      this.myPeerId = `entrevoz-video-${this.roomId}-guest-${uniqueId}`;
+    }
 
     this.setStatus("initializing", "Connecting...");
 
     try {
       // Fetch ICE servers (TURN credentials from server)
-      this.iceServers = await getIceServers();
-      console.log(`[Entrevoz] ICE servers fetched: ${this.iceServers.length} servers`);
+      const iceServers = await getIceServers();
 
-      // Start Supabase Realtime signaling — this is the ONLY signaling channel
+      // ── PHASE 1: Register on PeerJS ──────────────────────────────────────
+      // Host tries deterministic ID first (fast), then random ID (always works).
+      // Guest always uses random ID (no stale-ID risk).
+      let connected = false;
+      let lastError: Error | null = null;
+      const maxIdRetries = isHost ? 3 : 1; // Fewer retries — random fallback catches the rest
+
+      for (let idAttempt = 0; idAttempt < maxIdRetries && !connected; idAttempt++) {
+        if (idAttempt > 0) {
+          console.log(`[Entrevoz Video] Host ID taken, waiting 2s before retry ${idAttempt + 1}/${maxIdRetries}...`);
+          this.setStatus("initializing", "Reconnecting to server...");
+          await new Promise((r) => setTimeout(r, 2000));
+          if (this.isDestroyed) return false;
+        }
+
+        for (let i = 0; i < PEERJS_SERVERS.length && !connected; i++) {
+          const server = PEERJS_SERVERS[i];
+          console.log(
+            `[Entrevoz Video] Trying ${server.host} as: ${this.myPeerId}`,
+          );
+
+          try {
+            this.peer = new Peer(this.myPeerId, {
+              host: server.host,
+              port: server.port,
+              secure: server.secure,
+              path: server.path,
+              config: {
+                iceServers,
+                iceCandidatePoolSize: 10,
+                iceTransportPolicy: "all",
+                bundlePolicy: "max-bundle",
+                rtcpMuxPolicy: "require",
+              },
+              debug: 1,
+            });
+
+            await this.waitForPeerOpen();
+            console.log(
+              `[Entrevoz Video] Connected via ${server.host} as:`,
+              this.myPeerId,
+            );
+            connected = true;
+          } catch (err) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            const errType = (err as { type?: string })?.type;
+            console.warn(
+              `[Entrevoz Video] Server ${server.host} failed:`,
+              errMsg,
+            );
+            lastError = err instanceof Error ? err : new Error(String(err));
+
+            if (this.peer) {
+              try { this.peer.destroy(); } catch { /* ignore */ }
+              this.peer = null;
+            }
+
+            if (isHost && (errType === "unavailable-id" || errMsg.includes("already in use"))) {
+              break;
+            }
+          }
+        }
+      }
+
+      // ── HOST FALLBACK: Random ID if deterministic ID was stale ──────────
+      if (!connected && isHost) {
+        const randomId = Math.random().toString(36).substring(2, 8);
+        this.myPeerId = `ev-${this.roomId}-h-${randomId}`;
+        console.log("[Entrevoz Video] Stale ID — switching to random:", this.myPeerId);
+        this.setStatus("initializing", "Reconnecting...");
+
+        for (let i = 0; i < PEERJS_SERVERS.length && !connected; i++) {
+          const server = PEERJS_SERVERS[i];
+          try {
+            this.peer = new Peer(this.myPeerId, {
+              host: server.host,
+              port: server.port,
+              secure: server.secure,
+              path: server.path,
+              config: {
+                iceServers,
+                iceCandidatePoolSize: 10,
+                iceTransportPolicy: "all",
+                bundlePolicy: "max-bundle",
+                rtcpMuxPolicy: "require",
+              },
+              debug: 1,
+            });
+            await this.waitForPeerOpen();
+            console.log("[Entrevoz Video] Connected with random ID:", this.myPeerId);
+            connected = true;
+          } catch (err) {
+            lastError = err instanceof Error ? err : new Error(String(err));
+            if (this.peer) {
+              try { this.peer.destroy(); } catch { /* ignore */ }
+              this.peer = null;
+            }
+          }
+        }
+      }
+
+      if (!connected) {
+        throw lastError || new Error("All signaling servers failed");
+      }
+
+      this.setupPeerListeners();
+
+      // ── PHASE 2: Supabase room signaling ─────────────────────────────────
+      // Broadcast our peer ID via Supabase so the other side can find us
+      // even if PeerJS signaling is slow or dropped our registration.
       this.roomSignal = new RoomSignal();
-      const signalingOk = await this.roomSignal.start(
+      this.hasSupabaseSignaling = await this.roomSignal.start(
         this.roomId,
         isHost ? "host" : "guest",
+        this.myPeerId,
         {
-          onPeerPresent: (role) => {
-            if (this.isDestroyed) return;
-            console.log(`[Entrevoz] Peer present: ${role}`);
-            const wasPresent = this.peerPresent;
-            this.peerPresent = true;
-
-            // Guest: host showed up — immediately send offer if we have one
-            if (!this.isHost && this._status !== "connected") {
-              if (this.currentOffer && this.roomSignal?.isActive) {
-                // Re-broadcast existing offer immediately (host just subscribed)
-                console.log("[Entrevoz] Host detected — re-broadcasting offer");
-                this.roomSignal.sendOffer(this.currentOffer);
-              } else if (!wasPresent) {
-                // First time seeing host — start connection attempts
-                this.startConnectionAttempts();
-              }
+          onHostPeerId: (peerId) => {
+            if (this.isHost || this.isDestroyed) return;
+            // Guest discovered host's actual peer ID
+            if (peerId !== this.hostPeerId) {
+              console.log("[Entrevoz Video] Supabase: host peer ID updated:", peerId);
+              this.hostPeerId = peerId;
+              this.connectionAttempts = 0; // Reset counter for new target
+            }
+            // Start or re-kick connection attempts
+            if (this._status !== "connected") {
+              this.startConnectionAttempts();
             }
           },
-
-          onOffer: (sdp) => {
-            if (this.isDestroyed) return;
-            this.handleRemoteOffer(sdp);
-          },
-
-          onAnswer: (sdp) => {
-            if (this.isDestroyed) return;
-            this.handleRemoteAnswer(sdp);
-          },
-
-          onCandidate: (candidate) => {
-            if (this.isDestroyed) return;
-            this.handleRemoteCandidate(candidate);
-          },
-
-          onPeerLeft: () => {
-            if (this.isDestroyed) return;
-            this.handlePartnerLeft();
+          onGuestPeerId: (_peerId) => {
+            // Host sees guest — logged for debugging
           },
         },
       );
 
-      if (!signalingOk) {
-        throw new Error("Failed to start signaling — check Supabase configuration");
-      }
-
       if (isHost) {
         this.setStatus("waiting", "Waiting for partner...");
-        // Host is passive — RoomSignal.onOffer will trigger connection
+        // Monitor PeerJS signaling health — rebuild if it dies
+        this.startSignalingHealthCheck(iceServers);
       } else {
         this.setStatus("connecting", "Looking for host...");
-        // DON'T send offers yet — Supabase broadcasts are ephemeral (not persistent).
-        // If we send before host subscribes, the offer is lost forever.
-        // Wait for host's presence heartbeat (proof host channel is active),
-        // then onPeerPresent callback will trigger startConnectionAttempts().
-        // Safety net: if host presence not detected in 15s, start anyway.
-        this.guestFirstTimeoutId = setTimeout(() => {
-          if (this.isDestroyed || this.peerPresent || this._status === "connected") return;
-          console.log("[Entrevoz] No host presence after 15s — starting offers anyway");
-          this.startConnectionAttempts();
-        }, 15000);
+        // Start connection attempts immediately (uses deterministic ID).
+        // If Supabase signal arrives with a different ID, attempts will switch target.
+        this.startConnectionAttempts();
       }
 
       return true;
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : "Connection failed";
-      console.error("[Entrevoz] Init error:", err);
+      const errorMessage =
+        err instanceof Error ? err.message : "Connection failed";
+      console.error("[Entrevoz Video] Init error:", err);
       this.setStatus("failed", errorMessage);
       this.callbacks.onError?.(errorMessage);
       return false;
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // RTCPeerConnection FACTORY
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  private createPeerConnection(): RTCPeerConnection {
-    const pc = new RTCPeerConnection({
-      iceServers: this.iceServers,
-      iceCandidatePoolSize: 10,
-      bundlePolicy: "max-bundle",
-      rtcpMuxPolicy: "require",
-    });
-
-    // ── Send ICE candidates to remote peer via Supabase ─────────────────
-    pc.onicecandidate = (event) => {
-      if (event.candidate && this.roomSignal?.isActive) {
-        this.roomSignal.sendCandidate(event.candidate.toJSON());
+  private waitForPeerOpen(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.peer) {
+        reject(new Error("Peer not created"));
+        return;
       }
-    };
 
-    // ── Receive remote media tracks ─────────────────────────────────────
-    pc.ontrack = (event) => {
-      if (this.isDestroyed) return;
+      if (this.peer.open) {
+        resolve();
+        return;
+      }
 
-      const stream = event.streams[0];
-      if (!stream) return;
+      const timeout = setTimeout(() => {
+        reject(new Error("Connection timeout - please refresh"));
+      }, 20000);
 
-      // Avoid duplicate stream events
-      if (this.remoteStream?.id === stream.id) return;
-
-      console.log("[Entrevoz] Remote stream received!", {
-        streamId: stream.id,
-        videoTracks: stream.getVideoTracks().length,
-        audioTracks: stream.getAudioTracks().length,
+      this.peer.on("open", () => {
+        clearTimeout(timeout);
+        resolve();
       });
 
-      this.streamReceived = true;
-      this.clearStreamTimeout();
-      this.clearVideoRetryTimeout();
-      this.videoRetryAttempts = 0;
+      this.peer.on("error", (error) => {
+        clearTimeout(timeout);
+        if (error.type === "unavailable-id") {
+          reject(new Error("Room already in use - try a different code"));
+        } else {
+          reject(error);
+        }
+      });
+    });
+  }
 
-      this.remoteStream = stream;
-      this.callbacks.onRemoteStream?.(stream);
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PEER LISTENERS
+  // ═══════════════════════════════════════════════════════════════════════════
 
-      if (this._status !== "connected") {
-        this.setStatus("connected", "Connected!");
-      }
-      this.startStatsMonitoring();
-    };
+  private setupPeerListeners(): void {
+    if (!this.peer) return;
 
-    // ── Host receives data channel created by guest ─────────────────────
-    pc.ondatachannel = (event) => {
+    // Handle incoming data connection (host receives this)
+    this.peer.on("connection", (conn) => {
       if (this.isDestroyed) return;
-      console.log("[Entrevoz] Received data channel");
-      this.setupDataChannel(event.channel);
-    };
+      console.log("[Entrevoz Video] Incoming data connection:", conn.peer);
 
-    // ── ICE + connection state monitoring ────────────────────────────────
-    this.setupIceMonitoring(pc);
+      // Check if host already has a connected partner
+      if (this.isHost && this.dataConnection?.open) {
+        console.log(
+          "[Entrevoz Video] Room full - rejecting new connection:",
+          conn.peer,
+        );
+        // Send room_full message to the new joiner and close their connection
+        conn.on("open", () => {
+          conn.send({ type: "room_full" });
+          setTimeout(() => {
+            try {
+              conn.close();
+            } catch {
+              // Ignore close errors
+            }
+          }, 100);
+        });
+        return;
+      }
 
-    return pc;
-  }
+      this.handleDataConnection(conn);
+    });
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // ICE STATE MONITORING
-  // ═══════════════════════════════════════════════════════════════════════════
+    // Handle incoming video call (host receives this)
+    this.peer.on("call", (call) => {
+      if (this.isDestroyed) return;
+      console.log("[Entrevoz Video] Incoming call:", call.peer);
 
-  private setupIceMonitoring(pc: RTCPeerConnection): void {
-    pc.oniceconnectionstatechange = () => {
-      const state = pc.iceConnectionState as IceConnectionState;
-      console.log("[Entrevoz] ICE state:", state);
-      this.callbacks.onIceStateChange?.(state);
-
-      if (state === "failed") {
-        console.log("[Entrevoz] ICE failed, attempting restart...");
+      // Check if host already has a connected partner - reject call if room full
+      if (this.isHost && this.mediaConnection?.open) {
+        console.log(
+          "[Entrevoz Video] Room full - rejecting video call:",
+          call.peer,
+        );
         try {
-          pc.restartIce?.();
-        } catch (err) {
-          console.error("[Entrevoz] ICE restart failed:", err);
-          if (!this.streamReceived && !this.isDestroyed && this._status !== "failed") {
-            this.handleConnectionError("ICE connection failed");
-          }
+          call.close();
+        } catch {
+          // Ignore close errors
         }
+        return;
       }
 
-      if (state === "disconnected") {
-        setTimeout(() => {
-          if (pc.iceConnectionState === "disconnected" && !this.isDestroyed) {
-            console.log("[Entrevoz] ICE still disconnected after 1.5s, restarting...");
-            try { pc.restartIce?.(); } catch { /* ignore */ }
-            // If still disconnected after another 3s, full renegotiation
-            setTimeout(() => {
-              if (pc.iceConnectionState === "disconnected" && !this.isDestroyed) {
-                console.log("[Entrevoz] ICE still disconnected — renegotiating...");
-                this.videoRetryAttempts = 0;
-                this.renegotiate();
-              }
-            }, 3000);
+      // Answer with our stream — CRITICAL: answering without a stream
+      // produces one-way audio on iOS Safari. Wait for the stream if missing.
+      if (this.localStream) {
+        call.answer(this.localStream);
+      } else {
+        console.error("[Entrevoz Video] Incoming call but no localStream — waiting up to 5s for media...");
+        const waitForStream = async () => {
+          for (let i = 0; i < 50; i++) {
+            if (this.localStream) {
+              call.answer(this.localStream);
+              console.log("[Entrevoz Video] localStream acquired — answered call");
+              return;
+            }
+            await new Promise(r => setTimeout(r, 100));
           }
-        }, 1500);
+          // Last resort: answer without stream rather than dropping the call entirely
+          console.error("[Entrevoz Video] Timeout waiting for localStream — answering without stream (one-way audio likely)");
+          call.answer();
+        };
+        waitForStream();
       }
 
-      if (state === "connected" || state === "completed") {
-        console.log("[Entrevoz] ICE connection established");
-        this.applyBandwidthLimits(pc);
-      }
-    };
+      this.handleMediaConnection(call);
+    });
 
-    pc.onicegatheringstatechange = () => {
-      console.log("[Entrevoz] ICE gathering:", pc.iceGatheringState);
-    };
+    this.peer.on("error", (error: { type: string; message?: string }) => {
+      console.error("[Entrevoz Video] Peer error:", error.type, error.message);
 
-    pc.onconnectionstatechange = () => {
-      console.log("[Entrevoz] Connection state:", pc.connectionState);
-      if (pc.connectionState === "failed" && !this.isDestroyed) {
-        if (!this.streamReceived && this._status !== "failed") {
-          this.handleConnectionError("Peer connection failed");
-        }
+      if (error.type === "peer-unavailable" && !this.isHost) {
+        console.log("[Entrevoz Video] Host not found, will retry...");
+      } else if (error.type === "unavailable-id") {
+        // This is handled by the retry logic in connect() — don't fail here
+        console.warn("[Entrevoz Video] Peer ID taken, retry logic will handle");
       }
-    };
+    });
+
+    this.peer.on("disconnected", () => {
+      console.log("[Entrevoz Video] Disconnected from signaling server");
+      if (!this.isDestroyed && this.peer && !this.peer.destroyed) {
+        // Aggressive reconnect — try immediately, then at 1s, then at 3s
+        const tryReconnect = (attempt: number) => {
+          if (this.isDestroyed || !this.peer || this.peer.destroyed || this.peer.open) return;
+          console.log(`[Entrevoz Video] Reconnect attempt ${attempt}`);
+          try { this.peer.reconnect(); } catch { /* ignore */ }
+          if (attempt < 3) {
+            setTimeout(() => tryReconnect(attempt + 1), attempt * 1500);
+          }
+        };
+        tryReconnect(1);
+      }
+    });
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // BANDWIDTH LIMITS — Defer until ICE connects (iOS Safari safety)
+  // CONNECTION ATTEMPTS (Guest) - Exponential Backoff with Jitter
   // ═══════════════════════════════════════════════════════════════════════════
 
-  private applyBandwidthLimits(pc: RTCPeerConnection): void {
-    try {
-      for (const sender of pc.getSenders()) {
-        if (!sender.track) continue;
-        const params = sender.getParameters();
-        if (!params.encodings || params.encodings.length === 0) {
-          params.encodings = [{}];
-        }
-        if (params.encodings.length === 0) continue;
-        if (sender.track.kind === "video") {
-          params.encodings[0].maxBitrate = 500000;
-          params.encodings[0].scaleResolutionDownBy = 1;
-        } else if (sender.track.kind === "audio") {
-          params.encodings[0].maxBitrate = 64000;
-        }
-        sender.setParameters(params).catch(() => { /* older browsers */ });
-      }
-    } catch {
-      // setParameters not supported — bandwidth will be uncapped
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // GUEST: CONNECTION ATTEMPTS — Exponential Backoff with Jitter
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  private static readonly FAST_RETRY_COUNT = 6;
-  private static readonly FAST_RETRY_DELAY = 2000; // 2s between re-broadcasts (was 500ms — too fast, caused race conditions)
-  private static readonly BASE_DELAY = 1500;
-  private static readonly MAX_DELAY = 10000;
+  // Backoff configuration — fast initial retries, then exponential
+  private static readonly FAST_RETRY_COUNT = 6; // First 6 attempts are rapid
+  private static readonly FAST_RETRY_DELAY = 500; // 500ms between fast retries
+  private static readonly BASE_DELAY = 1500; // After fast phase
+  private static readonly MAX_DELAY = 10000; // 10 seconds max
   private static readonly BACKOFF_FACTOR = 1.8;
-  private static readonly JITTER_FACTOR = 0.15;
+  private static readonly JITTER_FACTOR = 0.15; // ±15%
 
   private calculateBackoffDelay(): number {
+    // First N attempts: rapid-fire 500ms (covers host registration delay)
     if (this.connectionAttempts <= PeerConnection.FAST_RETRY_COUNT) {
       return PeerConnection.FAST_RETRY_DELAY;
     }
+
+    // After fast phase: exponential backoff
     const attemptsSinceFast = this.connectionAttempts - PeerConnection.FAST_RETRY_COUNT;
     const exponentialDelay =
       PeerConnection.BASE_DELAY *
       Math.pow(PeerConnection.BACKOFF_FACTOR, attemptsSinceFast - 1);
     const cappedDelay = Math.min(exponentialDelay, PeerConnection.MAX_DELAY);
+
+    // Add jitter to prevent thundering herd
     const jitter = cappedDelay * PeerConnection.JITTER_FACTOR;
     const randomJitter = (Math.random() - 0.5) * 2 * jitter;
+
     return Math.round(cappedDelay + randomJitter);
   }
 
@@ -531,265 +655,84 @@ export class PeerConnection {
 
       const delay = this.calculateBackoffDelay();
       console.log(
-        `[Entrevoz] Connection attempt ${this.connectionAttempts}/${this.maxConnectionAttempts} (next in ${delay}ms)`,
+        `[Entrevoz Video] Connection attempt ${this.connectionAttempts}/${this.maxConnectionAttempts} (next in ${delay}ms)`,
       );
+      this.connectToHost();
 
-      // First attempt: create PC + offer. Retries: re-broadcast same offer.
-      // This prevents race conditions where host answers an old offer
-      // that no longer matches the guest's current PC.
-      if (!this.pc || !this.currentOffer) {
-        this.initiateConnection();
-      } else if (this.roomSignal?.isActive && this.currentOffer) {
-        // Re-broadcast existing offer in case host missed it
-        this.roomSignal.sendOffer(this.currentOffer);
-        console.log("[Entrevoz] Re-broadcast existing offer");
-      }
-
+      // Schedule next attempt with exponential backoff
       if (this.connectionAttempts < this.maxConnectionAttempts) {
-        this.connectionAttemptTimeout = setTimeout(tryConnect, delay);
+        this.connectionAttemptInterval = setTimeout(tryConnect, delay);
       }
     };
 
+    // First attempt immediately
     tryConnect();
   }
 
   private stopConnectionAttempts(): void {
-    if (this.connectionAttemptTimeout) {
-      clearTimeout(this.connectionAttemptTimeout);
-      this.connectionAttemptTimeout = null;
-    }
-    if (this.guestFirstTimeoutId) {
-      clearTimeout(this.guestFirstTimeoutId);
-      this.guestFirstTimeoutId = null;
+    if (this.connectionAttemptInterval) {
+      clearTimeout(this.connectionAttemptInterval);
+      this.connectionAttemptInterval = null;
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // GUEST: Create offer and send via Supabase
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  private async initiateConnection(): Promise<void> {
-    if (this.isDestroyed) return;
-
-    // Don't re-initiate if already connected
-    if (this.dataChannel?.readyState === "open" && this.remoteStream) {
-      this.stopConnectionAttempts();
+  private connectToHost(): void {
+    if (!this.peer || this.isDestroyed || !this.peer.open) {
       return;
     }
 
-    // Tear down any existing connection + clear stale timeouts
-    this.closePeerConnection();
-    this.clearStreamTimeout();
-    this.clearVideoRetryTimeout();
-    this.remoteDescSet = false;
-    this.pendingCandidates = [];
-    this.streamReceived = false;
-
-    const pc = this.createPeerConnection();
-    this.pc = pc;
-
-    // Guest creates the data channel
-    const dc = pc.createDataChannel("entrevoz", { ordered: true });
-    this.setupDataChannel(dc);
-
-    // Add local media tracks
-    if (this.localStream) {
-      for (const track of this.localStream.getTracks()) {
-        pc.addTrack(track, this.localStream);
-      }
-    }
-
-    try {
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      this.currentOffer = { type: offer.type, sdp: offer.sdp };
-      this.roomSignal?.sendOffer(this.currentOffer);
-      console.log("[Entrevoz] SDP offer sent via Supabase");
-
-      // Set stream timeout
-      const timeout = this.getStreamTimeout();
-      this.streamTimeoutId = setTimeout(() => {
-        if (this.isDestroyed || this.streamReceived || this.remoteStream) return;
-        console.warn(`[Entrevoz] Stream timeout after ${timeout}ms`);
-        this.handleConnectionError("Stream timeout - partner may not have video enabled");
-      }, timeout);
-    } catch (err) {
-      console.error("[Entrevoz] Failed to create offer:", err);
-      this.handleConnectionError("Failed to create connection offer");
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // HOST: Handle incoming offer, create answer
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  private async handleRemoteOffer(sdp: RTCSessionDescriptionInit): Promise<void> {
-    if (!this.isHost || this.isDestroyed) return;
-
-    // Room full — already connected to someone
-    if (this._status === "connected" && this.dataChannel?.readyState === "open") {
-      console.log("[Entrevoz] Room full — ignoring new offer");
+    // Don't reconnect if already connected
+    if (this.dataConnection?.open) {
       return;
     }
 
-    // If we already have a PC processing this same offer (re-broadcast), just re-send our answer
-    // This prevents tearing down a working PC when guest re-broadcasts the same offer
-    if (this.pc && this.remoteDescSet && this.currentOffer) {
-      console.log("[Entrevoz] Host already processing offer — re-sending answer");
-      this.roomSignal?.sendAnswer(this.currentOffer);
+    console.log("[Entrevoz Video] Connecting to host:", this.hostPeerId);
+
+    // Create data connection first
+    const conn = this.peer.connect(this.hostPeerId, {
+      reliable: true,
+      serialization: "json",
+    });
+
+    this.handleDataConnection(conn);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DATA CONNECTION
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  private handleDataConnection(conn: DataConnection): void {
+    // Avoid duplicate connections
+    if (this.dataConnection?.open && this.dataConnection.peer === conn.peer) {
       return;
     }
 
-    console.log("[Entrevoz] Host received offer — creating answer");
-
-    // Tear down existing connection + clear stale timeouts
-    this.closePeerConnection();
-    this.clearStreamTimeout();
-    this.clearVideoRetryTimeout();
-    this.remoteDescSet = false;
-    this.pendingCandidates = [];
-    this.streamReceived = false;
-
-    const pc = this.createPeerConnection();
-    this.pc = pc;
-
-    // Add local media tracks BEFORE setting remote description
-    // CRITICAL for iOS Safari: tracks must be added before createAnswer
-    // If stream is not ready yet, wait up to 5s (same as old PeerJS behavior)
-    if (!this.localStream) {
-      console.warn("[Entrevoz] No localStream — waiting up to 5s for media...");
-      for (let i = 0; i < 50; i++) {
-        if (this.localStream || this.isDestroyed) break;
-        await new Promise((r) => setTimeout(r, 100));
+    // Close old connection
+    if (this.dataConnection && this.dataConnection.peer !== conn.peer) {
+      try {
+        this.dataConnection.close();
+      } catch {
+        // Ignore
       }
     }
-    const streamToAdd = this.localStream;
-    if (streamToAdd) {
-      for (const track of streamToAdd.getTracks()) {
-        pc.addTrack(track, streamToAdd);
-      }
-      if (!this.localStream) {
-        // Was null initially but acquired during wait
-        console.log("[Entrevoz] localStream acquired — added tracks");
-      }
-    } else {
-      console.error("[Entrevoz] No localStream — answering without media (one-way audio likely)");
-    }
 
-    try {
-      await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-      this.remoteDescSet = true;
+    this.dataConnection = conn;
 
-      // Flush queued ICE candidates
-      for (const candidate of this.pendingCandidates) {
-        await pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
-      }
-      this.pendingCandidates = [];
-
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      const answerSdp = { type: answer.type, sdp: answer.sdp } as RTCSessionDescriptionInit;
-      this.currentOffer = answerSdp; // Cache answer for re-send on duplicate offers
-      this.roomSignal?.sendAnswer(answerSdp);
-      console.log("[Entrevoz] SDP answer sent via Supabase");
-
-      this.setStatus("connecting", "Establishing video...");
-
-      // Set stream timeout
-      const timeout = this.getStreamTimeout();
-      this.streamTimeoutId = setTimeout(() => {
-        if (this.isDestroyed || this.streamReceived || this.remoteStream) return;
-        console.warn(`[Entrevoz] Stream timeout after ${timeout}ms`);
-        // Host doesn't retry — guest drives the retry loop
-      }, timeout);
-    } catch (err) {
-      console.error("[Entrevoz] Failed to handle offer:", err);
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // GUEST: Handle incoming answer
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  private async handleRemoteAnswer(sdp: RTCSessionDescriptionInit): Promise<void> {
-    if (this.isHost || this.isDestroyed || !this.pc) return;
-
-    console.log("[Entrevoz] Guest received answer — applying");
-
-    try {
-      await this.pc.setRemoteDescription(new RTCSessionDescription(sdp));
-      this.remoteDescSet = true;
-
-      // Answer received — reset stream timeout to shorter window
-      // (signaling succeeded, now just waiting for media to flow)
-      this.clearStreamTimeout();
-      const mediaTimeout = Math.min(this.getStreamTimeout(), 12000);
-      this.streamTimeoutId = setTimeout(() => {
-        if (this.isDestroyed || this.streamReceived || this.remoteStream) return;
-        console.warn(`[Entrevoz] Media timeout ${mediaTimeout}ms after answer received`);
-        this.handleConnectionError("Media stream not received after signaling succeeded");
-      }, mediaTimeout);
-
-      // Flush queued ICE candidates
-      for (const candidate of this.pendingCandidates) {
-        await this.pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
-      }
-      this.pendingCandidates = [];
-
-      // Answer received means host is alive — stop retrying
-      this.stopConnectionAttempts();
-      this.connectionAttempts = 0;
-    } catch (err) {
-      console.error("[Entrevoz] Failed to apply answer:", err);
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // ICE CANDIDATE HANDLING — Queue until remote desc is set
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  private async handleRemoteCandidate(candidate: RTCIceCandidateInit): Promise<void> {
-    if (this.isDestroyed || !this.pc) return;
-
-    if (!this.remoteDescSet) {
-      this.pendingCandidates.push(candidate);
-      return;
-    }
-
-    try {
-      await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
-    } catch (err) {
-      console.warn("[Entrevoz] Failed to add ICE candidate:", err);
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // DATA CHANNEL
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  private setupDataChannel(dc: RTCDataChannel): void {
-    // Close old channel if different
-    if (this.dataChannel && this.dataChannel !== dc) {
-      try { this.dataChannel.close(); } catch { /* ignore */ }
-    }
-
-    this.dataChannel = dc;
-
-    dc.onopen = () => {
+    conn.on("open", () => {
       if (this.isDestroyed) return;
-      console.log("[Entrevoz] Data channel open");
+      console.log("[Entrevoz Video] Data channel open");
 
       this.stopConnectionAttempts();
       this.connectionAttempts = 0;
       this.videoRetryAttempts = 0;
       this.lastPongTime = Date.now();
 
-      // Flush queued messages
+      // Flush any queued messages
       if (this.pendingMessages.length > 0) {
-        console.log(`[Entrevoz] Flushing ${this.pendingMessages.length} queued messages`);
+        console.log(`[Entrevoz Video] Flushing ${this.pendingMessages.length} queued messages`);
         const queued = this.pendingMessages.splice(0);
         for (const msg of queued) {
-          try { dc.send(JSON.stringify(msg)); } catch { /* skip stale */ }
+          try { conn.send(msg); } catch { /* skip stale */ }
         }
       }
 
@@ -799,38 +742,49 @@ export class PeerConnection {
       // Start keep-alive
       this.startKeepAlive();
 
-      this.setStatus("connecting", "Establishing video...");
-    };
-
-    dc.onmessage = (event) => {
-      if (this.isDestroyed) return;
-      try {
-        const data = JSON.parse(event.data);
-        this.handleDataMessage(data);
-      } catch {
-        // Non-JSON message — ignore
+      // UNIDIRECTIONAL VIDEO CALL INITIATION
+      // CRITICAL FIX: Only ONE side initiates to prevent race condition
+      // Host listens for incoming calls via peer.on("call") → call.answer()
+      // Guest initiates the video call
+      if (this.localStream && !this.isHost) {
+        // Only guest initiates video call - host answers via setupPeerListeners
+        setTimeout(() => this.initiateVideoCallWithRetry(), 500);
       }
-    };
 
-    dc.onclose = () => {
-      console.log("[Entrevoz] Data channel closed");
+      this.setStatus("connecting", "Establishing video...");
+    });
+
+    conn.on("data", (data: unknown) => {
+      if (this.isDestroyed) return;
+      this.handleDataMessage(data);
+    });
+
+    conn.on("close", () => {
+      console.log("[Entrevoz Video] Data channel closed");
       this.handlePartnerLeft();
-    };
+    });
 
-    dc.onerror = (err) => {
-      console.error("[Entrevoz] Data channel error:", err);
-    };
+    conn.on("error", (err) => {
+      console.error("[Entrevoz Video] Data channel error:", err);
+    });
   }
 
   private handleDataMessage(data: unknown): void {
     if (!data || typeof data !== "object") return;
+
     const msg = data as Record<string, unknown>;
 
-    // Room full
+    // Room full message - 3rd person trying to join
     if (msg.type === "room_full") {
+      console.log("[Entrevoz Video] Room is full - cannot join");
       this.stopConnectionAttempts();
-      this.setStatus("room_full", "This room is full. Only 2 participants allowed.");
-      this.callbacks.onError?.("This room is full. Only 2 participants allowed.");
+      this.setStatus(
+        "room_full",
+        "This room is full. Only 2 participants allowed.",
+      );
+      this.callbacks.onError?.(
+        "This room is full. Only 2 participants allowed.",
+      );
       return;
     }
 
@@ -839,25 +793,28 @@ export class PeerConnection {
       this.send({ type: "pong", time: msg.time });
       return;
     }
+
     if (msg.type === "pong") {
       this.lastPongTime = Date.now();
       return;
     }
 
-    // Hello
+    // Hello message
     if (msg.type === "hello") {
       const name = String(msg.name || "Partner");
       const partnerDeviceId = msg.deviceId ? String(msg.deviceId) : undefined;
       const partnerLang = msg.lang ? String(msg.lang) : undefined;
-      console.log("[Entrevoz] Partner joined:", name);
+      console.log("[Entrevoz Video] Partner joined:", name);
       this.callbacks.onPartnerJoined?.(name);
       this.callbacks.onPartnerInfo?.({ name, deviceId: partnerDeviceId, lang: partnerLang });
 
+      // Data channel is confirmed working — mark connected immediately
+      // so mic/STT can start while video negotiation continues in background
       if (this._status !== "connected") {
         this.setStatus("connected", "Connected!");
       }
 
-      // Acknowledge once (prevent infinite ping-pong)
+      // Send hello back ONCE (prevent infinite hello ping-pong)
       if (!this.helloAcknowledged) {
         this.helloAcknowledged = true;
         this.send({ type: "hello", name: this.userName, deviceId: this.deviceId, lang: this.lang });
@@ -870,58 +827,15 @@ export class PeerConnection {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // RENEGOTIATION — Tear down and rebuild RTCPeerConnection
+  // VIDEO CALL WITH RETRY LOGIC AND ERROR HANDLING
   // ═══════════════════════════════════════════════════════════════════════════
 
-  private renegotiate(): void {
-    if (this.isDestroyed) return;
-    console.log("[Entrevoz] Renegotiating connection...");
+  // Stream timeout - adaptive based on network conditions
+  private static readonly DEFAULT_STREAM_TIMEOUT = 8000;
+  private streamTimeoutId: NodeJS.Timeout | null = null;
+  private streamReceived: boolean = false;
 
-    // Reset cached offer so next attempt creates fresh PC + offer
-    this.currentOffer = null;
-    this.closePeerConnection();
-
-    // Guest drives the connection — send a new offer
-    if (!this.isHost) {
-      this.initiateConnection();
-    }
-    // Host: the guest will send a new offer through the retry loop
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // ERROR HANDLING WITH RETRY
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  private handleConnectionError(reason: string): void {
-    console.error(`[Entrevoz] Connection error: ${reason}`);
-    this.clearStreamTimeout();
-    this.clearVideoRetryTimeout();
-
-    this.videoRetryAttempts++;
-
-    if (this.videoRetryAttempts < PeerConnection.MAX_VIDEO_RETRIES && !this.isDestroyed) {
-      const retryDelay = Math.min(1500 * Math.pow(1.3, this.videoRetryAttempts - 1), 6000);
-      console.log(
-        `[Entrevoz] Scheduling retry in ${retryDelay}ms (attempt ${this.videoRetryAttempts + 1}/${PeerConnection.MAX_VIDEO_RETRIES})`,
-      );
-      this.setStatus("reconnecting", `Retrying... (${this.videoRetryAttempts}/${PeerConnection.MAX_VIDEO_RETRIES})`);
-
-      this.videoRetryTimeout = setTimeout(() => {
-        if (!this.isDestroyed && this.localStream && this.roomSignal?.isActive) {
-          this.renegotiate();
-        }
-      }, retryDelay);
-    } else if (!this.isDestroyed) {
-      console.error("[Entrevoz] Max retries exhausted");
-      this.setStatus("failed", "Video connection failed - please refresh and try again");
-      this.callbacks.onError?.(`Video connection failed: ${reason}`);
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // ADAPTIVE STREAM TIMEOUT
-  // ═══════════════════════════════════════════════════════════════════════════
-
+  // Get adaptive stream timeout based on network quality
   private getStreamTimeout(): number {
     try {
       const connection = (navigator as NavigatorWithConnection).connection;
@@ -938,6 +852,45 @@ export class PeerConnection {
     }
   }
 
+  private initiateVideoCallWithRetry(): void {
+    if (this.isDestroyed) return;
+
+    // Already have a working video stream - no retry needed
+    if (this.remoteStream) {
+      console.log(
+        "[Entrevoz Video] Already have remote stream, skipping video call",
+      );
+      return;
+    }
+
+    // Clear any existing timeouts
+    this.clearVideoRetryTimeout();
+    this.clearStreamTimeout();
+
+    // Reset stream received flag for this attempt
+    this.streamReceived = false;
+
+    this.initiateVideoCall();
+
+    // Set up stream timeout - adaptive based on network conditions
+    const timeout = this.getStreamTimeout();
+    console.log(
+      `[Entrevoz Video] Stream timeout set to ${timeout}ms based on network`,
+    );
+
+    this.streamTimeoutId = setTimeout(() => {
+      if (this.isDestroyed) return;
+
+      // Check if we got a stream
+      if (!this.streamReceived && !this.remoteStream) {
+        console.warn(`[Entrevoz Video] Stream timeout after ${timeout}ms`);
+        this.handleVideoCallError(
+          "Stream timeout - partner may not have video enabled",
+        );
+      }
+    }, timeout);
+  }
+
   private clearVideoRetryTimeout(): void {
     if (this.videoRetryTimeout) {
       clearTimeout(this.videoRetryTimeout);
@@ -952,28 +905,376 @@ export class PeerConnection {
     }
   }
 
+  /**
+   * Handle video call errors with retry logic
+   */
+  private handleVideoCallError(reason: string): void {
+    console.error(`[Entrevoz Video] Video call error: ${reason}`);
+
+    // Clear timeouts
+    this.clearStreamTimeout();
+    this.clearVideoRetryTimeout();
+
+    // Close failed media connection
+    if (this.mediaConnection) {
+      try {
+        this.mediaConnection.close();
+      } catch {
+        // Ignore close errors
+      }
+      this.mediaConnection = null;
+    }
+
+    this.videoRetryAttempts++;
+
+    if (
+      this.videoRetryAttempts < PeerConnection.MAX_VIDEO_RETRIES &&
+      !this.isDestroyed
+    ) {
+      // Calculate retry delay: 1.5s, 2s, 3s, 4s, 5s, 6s
+      const retryDelay = Math.min(1500 * Math.pow(1.3, this.videoRetryAttempts - 1), 6000);
+      console.log(
+        `[Entrevoz Video] Scheduling video retry in ${retryDelay}ms (attempt ${this.videoRetryAttempts + 1}/${PeerConnection.MAX_VIDEO_RETRIES})`,
+      );
+
+      this.setStatus(
+        "reconnecting",
+        `Retrying video... (${this.videoRetryAttempts}/${PeerConnection.MAX_VIDEO_RETRIES})`,
+      );
+
+      this.videoRetryTimeout = setTimeout(() => {
+        if (
+          !this.isDestroyed &&
+          this.localStream &&
+          this.peer?.open &&
+          this.dataConnection?.open
+        ) {
+          this.initiateVideoCallWithRetry();
+        }
+      }, retryDelay);
+    } else if (!this.isDestroyed) {
+      // Max retries exhausted
+      console.error("[Entrevoz Video] Max video call retries exhausted");
+      this.setStatus(
+        "failed",
+        "Video connection failed - please refresh and try again",
+      );
+      this.callbacks.onError?.(`Video connection failed: ${reason}`);
+    }
+  }
+
+  private initiateVideoCall(): void {
+    if (!this.peer || !this.localStream || this.isDestroyed) {
+      console.warn(
+        "[Entrevoz Video] Cannot initiate call - missing prerequisites",
+        {
+          hasPeer: !!this.peer,
+          hasLocalStream: !!this.localStream,
+          isDestroyed: this.isDestroyed,
+        },
+      );
+      return;
+    }
+
+    // Don't create duplicate calls if we already have an open connection with stream
+    if (this.mediaConnection?.open && this.remoteStream) {
+      console.log(
+        "[Entrevoz Video] Already have active media connection with stream",
+      );
+      return;
+    }
+
+    // Determine target peer ID
+    // Guest calls host, host calls guest (using the data connection's peer ID)
+    const targetPeerId = this.isHost
+      ? this.dataConnection?.peer
+      : this.hostPeerId;
+
+    if (!targetPeerId) {
+      console.error("[Entrevoz Video] No target peer ID for video call");
+      this.handleVideoCallError("No target peer available");
+      return;
+    }
+
+    console.log(
+      `[Entrevoz Video] ${this.isHost ? "Host" : "Guest"} initiating video call to: ${targetPeerId} (attempt ${this.videoRetryAttempts + 1}/${PeerConnection.MAX_VIDEO_RETRIES})`,
+    );
+
+    try {
+      const call = this.peer.call(targetPeerId, this.localStream);
+
+      if (!call) {
+        console.error("[Entrevoz Video] peer.call() returned null/undefined");
+        this.handleVideoCallError("Failed to create call object");
+        return;
+      }
+
+      this.handleMediaConnection(call);
+    } catch (err) {
+      const errorMsg =
+        err instanceof Error ? err.message : "Unknown error initiating call";
+      console.error("[Entrevoz Video] Exception initiating video call:", err);
+      this.handleVideoCallError(errorMsg);
+    }
+  }
+
+  private handleMediaConnection(call: MediaConnection): void {
+    // Avoid duplicate connections if we already have a working stream
+    if (
+      this.mediaConnection?.peer === call.peer &&
+      this.mediaConnection.open &&
+      this.remoteStream
+    ) {
+      console.log(
+        "[Entrevoz Video] Ignoring duplicate media connection - already have stream",
+      );
+      return;
+    }
+
+    // Close old connection if different peer
+    if (this.mediaConnection && this.mediaConnection.peer !== call.peer) {
+      console.log("[Entrevoz Video] Closing old media connection for new peer");
+      try {
+        this.mediaConnection.close();
+      } catch {
+        // Ignore
+      }
+    }
+
+    this.mediaConnection = call;
+    console.log(
+      `[Entrevoz Video] Handling media connection from: ${call.peer}`,
+    );
+
+    // Track if we received a stream through this connection
+    let connectionStreamReceived = false;
+
+    call.on("stream", (stream) => {
+      if (this.isDestroyed) return;
+
+      // Avoid duplicate stream events
+      if (this.remoteStream?.id === stream.id) {
+        console.log("[Entrevoz Video] Ignoring duplicate stream event");
+        return;
+      }
+
+      console.log("[Entrevoz Video] Remote stream received!", {
+        streamId: stream.id,
+        videoTracks: stream.getVideoTracks().length,
+        audioTracks: stream.getAudioTracks().length,
+      });
+
+      // Mark stream as received - prevents timeout and retry from triggering
+      this.streamReceived = true;
+      connectionStreamReceived = true;
+
+      // Clear all timeouts on successful stream
+      this.clearStreamTimeout();
+      this.clearVideoRetryTimeout();
+
+      // Reset retry counter on success
+      this.videoRetryAttempts = 0;
+
+      this.remoteStream = stream;
+      this.callbacks.onRemoteStream?.(stream);
+
+      // NOW we're truly connected - data channel + video stream
+      this.setStatus("connected", "Connected!");
+
+      // Start quality monitoring when we have video
+      this.startStatsMonitoring();
+    });
+
+    call.on("close", () => {
+      console.log("[Entrevoz Video] Media connection closed", {
+        hadStream: connectionStreamReceived,
+        isDestroyed: this.isDestroyed,
+        currentStatus: this._status,
+      });
+
+      // If connection closed before stream was received, trigger retry
+      if (
+        !connectionStreamReceived &&
+        !this.isDestroyed &&
+        this._status !== "failed"
+      ) {
+        console.warn(
+          "[Entrevoz Video] Media connection closed before stream received",
+        );
+        this.handleVideoCallError(
+          "Connection closed before video stream received",
+        );
+      }
+
+      this.remoteStream = null;
+    });
+
+    call.on("error", (err) => {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error("[Entrevoz Video] Media connection error:", errorMsg);
+
+      // Trigger retry on error (if we haven't received a stream yet)
+      if (
+        !connectionStreamReceived &&
+        !this.isDestroyed &&
+        this._status !== "failed"
+      ) {
+        this.handleVideoCallError(`Media error: ${errorMsg}`);
+      }
+    });
+
+    // Apply bandwidth limits to prevent overloading poor connections
+    // CRITICAL: setParameters() before ICE negotiation completes can break
+    // audio on iOS Safari. Defer until the peer connection reaches 'connected'.
+    const pc = (call as unknown as { peerConnection: RTCPeerConnection })
+      .peerConnection;
+    if (pc) {
+      const applyBandwidthLimits = () => {
+        try {
+          const senders = pc.getSenders();
+          for (const sender of senders) {
+            if (!sender.track) continue;
+            const params = sender.getParameters();
+            if (!params.encodings || params.encodings.length === 0) {
+              params.encodings = [{}];
+            }
+            if (params.encodings.length === 0) continue; // Defensive: skip if still empty
+            if (sender.track.kind === "video") {
+              params.encodings[0].maxBitrate = 500000; // 500kbps max video
+              params.encodings[0].scaleResolutionDownBy = 1;
+            } else if (sender.track.kind === "audio") {
+              params.encodings[0].maxBitrate = 64000; // 64kbps audio (Opus is great here)
+            }
+            sender.setParameters(params).catch(() => { /* ignore on older browsers */ });
+          }
+        } catch {
+          // setParameters not supported — bandwidth will be uncapped
+        }
+      };
+
+      // Wait for ICE to connect before applying params (iOS Safari safety)
+      if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+        applyBandwidthLimits();
+      } else {
+        const onIceConnected = () => {
+          if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+            applyBandwidthLimits();
+            pc.removeEventListener("iceconnectionstatechange", onIceConnected);
+          }
+        };
+        pc.addEventListener("iceconnectionstatechange", onIceConnected);
+      }
+
+      // Monitor ICE state for connection health
+      pc.oniceconnectionstatechange = () => {
+        const state = pc.iceConnectionState as IceConnectionState;
+        console.log("[Entrevoz Video] ICE state:", state);
+
+        // Notify UI of ICE state changes
+        this.callbacks.onIceStateChange?.(state);
+
+        if (state === "failed") {
+          console.log("[Entrevoz Video] ICE failed, attempting restart...");
+          try {
+            pc.restartIce?.();
+          } catch (err) {
+            console.error("[Entrevoz Video] ICE restart failed:", err);
+            // If ICE restart fails and no stream, trigger video retry
+            if (
+              !this.streamReceived &&
+              !this.isDestroyed &&
+              this._status !== "failed"
+            ) {
+              this.handleVideoCallError("ICE connection failed");
+            }
+          }
+        }
+
+        if (state === "disconnected") {
+          // Wait 1.5 seconds then restart ICE — fast recovery
+          setTimeout(() => {
+            if (pc.iceConnectionState === "disconnected" && !this.isDestroyed) {
+              console.log(
+                "[Entrevoz Video] ICE still disconnected after 1.5s, restarting...",
+              );
+              try {
+                pc.restartIce?.();
+              } catch {
+                // Ignore
+              }
+              // If still disconnected after another 3s, renegotiate video
+              setTimeout(() => {
+                if (pc.iceConnectionState === "disconnected" && !this.isDestroyed && this.dataConnection?.open) {
+                  console.log("[Entrevoz Video] ICE still disconnected, renegotiating video...");
+                  this.videoRetryAttempts = 0;
+                  this.initiateVideoCallWithRetry();
+                }
+              }, 3000);
+            }
+          }, 1500);
+        }
+
+        if (state === "connected" || state === "completed") {
+          console.log(
+            "[Entrevoz Video] ICE connection established successfully",
+          );
+        }
+      };
+
+      // Monitor ICE gathering state for debugging
+      pc.onicegatheringstatechange = () => {
+        console.log(
+          "[Entrevoz Video] ICE gathering state:",
+          pc.iceGatheringState,
+        );
+      };
+
+      // Monitor connection state (WebRTC 1.0)
+      pc.onconnectionstatechange = () => {
+        console.log("[Entrevoz Video] Connection state:", pc.connectionState);
+
+        if (pc.connectionState === "failed" && !this.isDestroyed) {
+          console.error("[Entrevoz Video] RTCPeerConnection failed");
+          if (!this.streamReceived && this._status !== "failed") {
+            this.handleVideoCallError("Peer connection failed");
+          }
+        }
+      };
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
-  // KEEP-ALIVE — 3s ping/pong, fast dead connection detection
+  // KEEP-ALIVE
   // ═══════════════════════════════════════════════════════════════════════════
+
+  // Track consecutive failed pongs for recovery decision
+  private missedPongs: number = 0;
+  private static readonly MAX_MISSED_PONGS = 2; // 6 seconds (2 x 3s) — faster detection
 
   private startKeepAlive(): void {
     this.stopKeepAlive();
     this.missedPongs = 0;
 
+    // Ping every 3 seconds (was 5s) for faster dead connection detection
     this.keepAliveInterval = setInterval(() => {
-      if (this.dataChannel?.readyState !== "open") {
+      if (!this.dataConnection?.open) {
         this.stopKeepAlive();
         return;
       }
 
+      // Check connection health
       const timeSinceLastPong = Date.now() - this.lastPongTime;
       if (timeSinceLastPong > 8000) {
         this.missedPongs++;
         console.warn(
-          `[Entrevoz] No pong for ${Math.round(timeSinceLastPong / 1000)}s (missed: ${this.missedPongs}/${PeerConnection.MAX_MISSED_PONGS})`,
+          `[Entrevoz Video] No pong for ${Math.round(timeSinceLastPong / 1000)}s (missed: ${this.missedPongs}/${PeerConnection.MAX_MISSED_PONGS})`,
         );
+
+        // After 2 missed pongs (6s), trigger ICE restart immediately
         if (this.missedPongs >= PeerConnection.MAX_MISSED_PONGS) {
-          console.warn("[Entrevoz] Connection dead — triggering ICE restart");
+          console.warn(
+            "[Entrevoz Video] Connection dead - triggering ICE restart",
+          );
           this.missedPongs = 0;
           this.triggerIceRestart();
         }
@@ -1005,12 +1306,16 @@ export class PeerConnection {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // QUALITY MONITORING — RTCPeerConnection.getStats()
+  // QUALITY MONITORING - RTCPeerConnection.getStats()
   // ═══════════════════════════════════════════════════════════════════════════
 
   private startStatsMonitoring(): void {
     this.stopStatsMonitoring();
-    this.statsInterval = setInterval(() => this.collectStats(), 2000);
+
+    // Poll stats every 2 seconds
+    this.statsInterval = setInterval(() => {
+      this.collectStats();
+    }, 2000);
   }
 
   private stopStatsMonitoring(): void {
@@ -1022,10 +1327,18 @@ export class PeerConnection {
   }
 
   private async collectStats(): Promise<void> {
-    if (!this.pc || this.isDestroyed) return;
+    if (!this.mediaConnection || this.isDestroyed) return;
 
     try {
-      const stats = await this.pc.getStats();
+      // Get the underlying RTCPeerConnection
+      const pc = (
+        this.mediaConnection as unknown as {
+          peerConnection?: RTCPeerConnection;
+        }
+      ).peerConnection;
+      if (!pc) return;
+
+      const stats = await pc.getStats();
       let packetsReceived = 0;
       let packetsLost = 0;
       let bytesReceived = 0;
@@ -1036,37 +1349,56 @@ export class PeerConnection {
         if (report.type === "inbound-rtp" && report.kind === "video") {
           packetsReceived = report.packetsReceived || 0;
           packetsLost = report.packetsLost || 0;
-          jitter = (report.jitter || 0) * 1000;
+          jitter = (report.jitter || 0) * 1000; // Convert to ms
           bytesReceived = report.bytesReceived || 0;
         }
         if (report.type === "candidate-pair" && report.state === "succeeded") {
-          rtt = report.currentRoundTripTime ? report.currentRoundTripTime * 1000 : 0;
+          rtt = report.currentRoundTripTime
+            ? report.currentRoundTripTime * 1000
+            : 0;
         }
       });
 
       const now = Date.now();
+
+      // Calculate quality metrics
       let packetLoss = 0;
       let bandwidth = 0;
 
       if (this.previousStats) {
         const timeDelta = (now - this.previousStats.timestamp) / 1000;
-        const packetsInPeriod = packetsReceived - this.previousStats.packetsReceived;
+        const packetsInPeriod =
+          packetsReceived - this.previousStats.packetsReceived;
         const lostInPeriod = packetsLost - this.previousStats.packetsLost;
         const bytesInPeriod = bytesReceived - this.previousStats.bytesReceived;
 
         if (packetsInPeriod + lostInPeriod > 0) {
           packetLoss = (lostInPeriod / (packetsInPeriod + lostInPeriod)) * 100;
         }
+
+        // Bandwidth in kbps
         bandwidth = timeDelta > 0 ? (bytesInPeriod * 8) / timeDelta / 1000 : 0;
       }
 
-      this.previousStats = { packetsReceived, packetsLost, bytesReceived, timestamp: now };
+      // Store for next calculation
+      this.previousStats = {
+        packetsReceived,
+        packetsLost,
+        bytesReceived,
+        timestamp: now,
+      };
 
+      // Determine quality level
       let quality: ConnectionQuality["quality"] = "excellent";
-      if (packetLoss > 10 || rtt > 300) quality = "poor";
-      else if (packetLoss > 5 || rtt > 200) quality = "fair";
-      else if (packetLoss > 2 || rtt > 100) quality = "good";
+      if (packetLoss > 10 || rtt > 300) {
+        quality = "poor";
+      } else if (packetLoss > 5 || rtt > 200) {
+        quality = "fair";
+      } else if (packetLoss > 2 || rtt > 100) {
+        quality = "good";
+      }
 
+      // Notify callback
       this.callbacks.onQualityUpdate?.({
         quality,
         packetLoss: Math.round(packetLoss * 10) / 10,
@@ -1081,22 +1413,76 @@ export class PeerConnection {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // CLEANUP
+  // SIGNALING HEALTH CHECK — Detect silent PeerJS drops, rebuild automatically
   // ═══════════════════════════════════════════════════════════════════════════
 
-  private closePeerConnection(): void {
-    if (this.dataChannel) {
-      try { this.dataChannel.close(); } catch { /* ignore */ }
-      this.dataChannel = null;
+  private startSignalingHealthCheck(iceServers: RTCIceServer[]): void {
+    if (this.signalingHealthCheck) clearInterval(this.signalingHealthCheck);
+
+    this.signalingHealthCheck = setInterval(async () => {
+      if (this.isDestroyed) {
+        this.stopSignalingHealthCheck();
+        return;
+      }
+      // Don't rebuild if we're already connected with a partner
+      if (this._status === "connected") return;
+
+      // Check if PeerJS signaling is still alive
+      if (!this.peer || this.peer.destroyed || !this.peer.open) {
+        console.warn("[Entrevoz Video] PeerJS signaling dead — rebuilding...");
+        await this.rebuildPeer(iceServers);
+      }
+    }, 8000); // Check every 8 seconds
+  }
+
+  private stopSignalingHealthCheck(): void {
+    if (this.signalingHealthCheck) {
+      clearInterval(this.signalingHealthCheck);
+      this.signalingHealthCheck = null;
     }
-    if (this.pc) {
-      try { this.pc.close(); } catch { /* ignore */ }
-      this.pc = null;
+  }
+
+  private async rebuildPeer(iceServers: RTCIceServer[]): Promise<void> {
+    // Destroy old peer
+    if (this.peer) {
+      try { this.peer.destroy(); } catch { /* ignore */ }
+      this.peer = null;
     }
-    this.remoteStream = null;
-    this.remoteDescSet = false;
-    this.pendingCandidates = [];
-    this.currentOffer = null;
+
+    // Generate new random ID
+    const randomId = Math.random().toString(36).substring(2, 8);
+    this.myPeerId = this.isHost
+      ? `ev-${this.roomId}-h-${randomId}`
+      : `ev-${this.roomId}-g-${randomId}`;
+
+    console.log("[Entrevoz Video] Rebuilding peer as:", this.myPeerId);
+
+    try {
+      this.peer = new Peer(this.myPeerId, {
+        host: PEERJS_SERVERS[0].host,
+        port: PEERJS_SERVERS[0].port,
+        secure: PEERJS_SERVERS[0].secure,
+        path: PEERJS_SERVERS[0].path,
+        config: {
+          iceServers,
+          iceCandidatePoolSize: 10,
+          iceTransportPolicy: "all",
+          bundlePolicy: "max-bundle",
+          rtcpMuxPolicy: "require",
+        },
+        debug: 1,
+      });
+
+      await this.waitForPeerOpen();
+      this.setupPeerListeners();
+
+      // Broadcast new ID via Supabase
+      this.roomSignal?.updatePeerId(this.myPeerId);
+
+      console.log("[Entrevoz Video] Peer rebuilt successfully:", this.myPeerId);
+    } catch (err) {
+      console.error("[Entrevoz Video] Rebuild failed:", err);
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1106,7 +1492,8 @@ export class PeerConnection {
   send(data: unknown): boolean {
     if (this.isDestroyed) return false;
 
-    if (this.dataChannel?.readyState !== "open") {
+    if (!this.dataConnection?.open) {
+      // Queue message for delivery when channel reopens (max 50 to prevent memory leak)
       if (this.pendingMessages.length < 50) {
         this.pendingMessages.push(data);
       }
@@ -1114,10 +1501,10 @@ export class PeerConnection {
     }
 
     try {
-      this.dataChannel.send(JSON.stringify(data));
+      this.dataConnection.send(data);
       return true;
     } catch (err) {
-      console.error("[Entrevoz] Send error:", err);
+      console.error("[Entrevoz Video] Send error:", err);
       if (this.pendingMessages.length < 50) {
         this.pendingMessages.push(data);
       }
@@ -1126,7 +1513,7 @@ export class PeerConnection {
   }
 
   disconnect(): void {
-    console.log("[Entrevoz] Disconnecting...");
+    console.log("[Entrevoz Video] Disconnecting...");
     this.isDestroyed = true;
     this.pendingMessages.length = 0;
 
@@ -1136,24 +1523,46 @@ export class PeerConnection {
     this.clearVideoRetryTimeout();
     this.clearStreamTimeout();
     this.removeNetworkListeners();
+    this.stopSignalingHealthCheck();
 
-    // Stop Supabase signaling (sends leave message)
+    // Stop Supabase room signaling
     if (this.roomSignal) {
       this.roomSignal.stop();
       this.roomSignal = null;
     }
 
-    // Release reference to local stream — track cleanup is caller's responsibility
+    // Release reference to local stream — but do NOT stop tracks here.
+    // Track cleanup is the caller's responsibility (the page component
+    // manages the stream lifecycle and may reuse it for other consumers).
     this.localStream = null;
 
-    this.closePeerConnection();
+    try {
+      this.mediaConnection?.close();
+    } catch {
+      // Ignore
+    }
+    try {
+      this.dataConnection?.close();
+    } catch {
+      // Ignore
+    }
+    try {
+      this.peer?.destroy();
+    } catch {
+      // Ignore
+    }
+
+    this.peer = null;
+    this.dataConnection = null;
+    this.mediaConnection = null;
+    this.remoteStream = null;
     this.connectionAttempts = 0;
   }
 
   private setStatus(status: ConnectionStatus, message?: string): void {
     if (this.isDestroyed) return;
     this._status = status;
-    console.log("[Entrevoz] Status:", status, message || "");
+    console.log("[Entrevoz Video] Status:", status, message || "");
     this.callbacks.onStatusChange?.(status, message);
   }
 }
@@ -1166,6 +1575,7 @@ export async function getCamera(
   facingMode: "user" | "environment" = "user",
 ): Promise<MediaStream> {
   const constraints = [
+    // Optimized for real-time calls: 640x480 cap reduces bandwidth, strong noise suppression
     {
       video: {
         facingMode,
@@ -1177,8 +1587,11 @@ export async function getCamera(
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
+        // sampleRate and channelCount removed — iOS Safari doesn't support
+        // these constraints reliably and can produce silent audio tracks
       },
     },
+    // Lower quality fallback
     {
       video: {
         facingMode,
@@ -1188,8 +1601,11 @@ export async function getCamera(
       },
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     },
+    // Minimum video + audio
     { video: true, audio: { echoCancellation: true, noiseSuppression: true } },
+    // Audio only (no camera)
     { video: false, audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } },
+    // Minimum audio only
     { video: false, audio: true },
   ];
 
@@ -1200,18 +1616,25 @@ export async function getCamera(
       const stream = await navigator.mediaDevices.getUserMedia(constraint);
       const hasVideo = stream.getVideoTracks().length > 0;
       const hasAudio = stream.getAudioTracks().length > 0;
-      console.log(`[Entrevoz] Media acquired - Video: ${hasVideo}, Audio: ${hasAudio}`);
+      console.log(
+        `[Entrevoz] Media acquired - Video: ${hasVideo}, Audio: ${hasAudio}`,
+      );
       return stream;
     } catch (err: unknown) {
       if (err instanceof Error) {
         lastError = err;
+        // Only throw immediately for permission denied (user action required)
         if (err.name === "NotAllowedError") {
-          throw new Error("Camera/microphone access denied. Please allow access in browser settings.");
+          throw new Error(
+            "Camera/microphone access denied. Please allow access in browser settings.",
+          );
         }
       }
+      // Try next constraint (including audio-only fallbacks)
     }
   }
 
+  // If we get here, nothing worked
   throw lastError || new Error("Could not access camera or microphone");
 }
 
