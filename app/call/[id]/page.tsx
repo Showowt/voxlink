@@ -3,12 +3,12 @@
 import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import {
-  PeerConnection,
   getCamera,
   stopCamera,
   type IceConnectionState,
   type ConnectionQuality,
 } from "../../lib/peer-connection";
+import { DailyConnection } from "../../lib/daily-connection";
 import { getSpeechCode, getFlag, getLanguage } from "../../lib/languages";
 import type {
   CaptionData,
@@ -689,7 +689,7 @@ function VideoCallContent() {
   const cyranoEnabledOnJoinRef = useRef(false);
 
   // Refs (need to be defined before useTranscription hook)
-  const peerRef = useRef<PeerConnection | null>(null);
+  const peerRef = useRef<DailyConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
 
@@ -989,7 +989,7 @@ function VideoCallContent() {
         setStatusMessage(isHost ? "Creating room..." : "Joining room...");
 
         // Create WebRTC connection
-        const peer = new PeerConnection({
+        const peer = new DailyConnection({
           onStatusChange: (peerStatus, message) => {
             if (!mountedRef.current) return;
             // Peer status update
