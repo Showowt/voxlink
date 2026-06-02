@@ -1107,9 +1107,53 @@ function VideoCallContent() {
     window.addEventListener("beforeunload", handleUnload);
     window.addEventListener("pagehide", handleUnload);
 
+    // PHONE CALL RECOVERY: When user returns from a phone call or app switch,
+    // iOS/Android kills camera+mic tracks. Detect this and re-acquire media.
+    const handleVisibilityChange = async () => {
+      if (document.hidden || !mountedRef.current) return;
+
+      // Page is visible again — check if media tracks are still alive
+      const stream = localStreamRef.current;
+      if (!stream) return;
+
+      const tracksAlive = stream.getTracks().some((t) => t.readyState === "live");
+      if (tracksAlive) return; // Tracks still good, no recovery needed
+
+      console.log("[Entrevoz] Media tracks died (phone call?) — re-acquiring camera");
+      try {
+        const newStream = await getCamera("user");
+        localStreamRef.current = newStream;
+
+        // Update local video preview
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = newStream;
+        }
+
+        // Update Daily.co with new media tracks
+        if (peerRef.current && "call" in peerRef.current) {
+          const dailyConn = peerRef.current as unknown as { call: { setInputDevicesAsync: (opts: { audioSource: MediaStreamTrack; videoSource: MediaStreamTrack }) => Promise<void> } | null };
+          if (dailyConn.call) {
+            const videoTrack = newStream.getVideoTracks()[0];
+            const audioTrack = newStream.getAudioTracks()[0];
+            if (videoTrack && audioTrack) {
+              await dailyConn.call.setInputDevicesAsync({
+                audioSource: audioTrack,
+                videoSource: videoTrack,
+              });
+              console.log("[Entrevoz] Media re-acquired after phone call interruption");
+            }
+          }
+        }
+      } catch (err) {
+        console.error("[Entrevoz] Failed to re-acquire camera after interruption:", err);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
       window.removeEventListener("beforeunload", handleUnload);
       window.removeEventListener("pagehide", handleUnload);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       mountedRef.current = false;
       stopListening();
       // Disconnect peer FIRST to prevent "track already stopped" errors
