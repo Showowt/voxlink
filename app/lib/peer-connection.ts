@@ -147,6 +147,9 @@ export class PeerConnection {
   private pendingCandidates: RTCIceCandidateInit[] = [];
   private remoteDescSet = false;
 
+  // Cached offer — reuse on retries instead of creating new PC each time
+  private currentOffer: RTCSessionDescriptionInit | null = null;
+
   // Network change detection
   private networkChangeHandler: (() => void) | null = null;
   private onlineHandler: (() => void) | null = null;
@@ -474,7 +477,7 @@ export class PeerConnection {
   // ═══════════════════════════════════════════════════════════════════════════
 
   private static readonly FAST_RETRY_COUNT = 6;
-  private static readonly FAST_RETRY_DELAY = 500;
+  private static readonly FAST_RETRY_DELAY = 2000; // 2s between re-broadcasts (was 500ms — too fast, caused race conditions)
   private static readonly BASE_DELAY = 1500;
   private static readonly MAX_DELAY = 10000;
   private static readonly BACKOFF_FACTOR = 1.8;
@@ -515,8 +518,16 @@ export class PeerConnection {
         `[Entrevoz] Connection attempt ${this.connectionAttempts}/${this.maxConnectionAttempts} (next in ${delay}ms)`,
       );
 
-      // Create a new RTCPeerConnection + offer each attempt
-      this.initiateConnection();
+      // First attempt: create PC + offer. Retries: re-broadcast same offer.
+      // This prevents race conditions where host answers an old offer
+      // that no longer matches the guest's current PC.
+      if (!this.pc || !this.currentOffer) {
+        this.initiateConnection();
+      } else if (this.roomSignal?.isActive && this.currentOffer) {
+        // Re-broadcast existing offer in case host missed it
+        this.roomSignal.sendOffer(this.currentOffer);
+        console.log("[Entrevoz] Re-broadcast existing offer");
+      }
 
       if (this.connectionAttempts < this.maxConnectionAttempts) {
         this.connectionAttemptTimeout = setTimeout(tryConnect, delay);
@@ -569,7 +580,8 @@ export class PeerConnection {
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      this.roomSignal?.sendOffer({ type: offer.type, sdp: offer.sdp });
+      this.currentOffer = { type: offer.type, sdp: offer.sdp };
+      this.roomSignal?.sendOffer(this.currentOffer);
       console.log("[Entrevoz] SDP offer sent via Supabase");
 
       // Set stream timeout
@@ -595,8 +607,14 @@ export class PeerConnection {
     // Room full — already connected to someone
     if (this._status === "connected" && this.dataChannel?.readyState === "open") {
       console.log("[Entrevoz] Room full — ignoring new offer");
-      // Ideally we'd tell them, but we don't have a direct channel to the new joiner yet.
-      // The new joiner will timeout and see an error.
+      return;
+    }
+
+    // If we already have a PC processing this same offer (re-broadcast), just re-send our answer
+    // This prevents tearing down a working PC when guest re-broadcasts the same offer
+    if (this.pc && this.remoteDescSet && this.currentOffer) {
+      console.log("[Entrevoz] Host already processing offer — re-sending answer");
+      this.roomSignal?.sendAnswer(this.currentOffer);
       return;
     }
 
@@ -646,7 +664,9 @@ export class PeerConnection {
 
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      this.roomSignal?.sendAnswer({ type: answer.type, sdp: answer.sdp });
+      const answerSdp = { type: answer.type, sdp: answer.sdp } as RTCSessionDescriptionInit;
+      this.currentOffer = answerSdp; // Cache answer for re-send on duplicate offers
+      this.roomSignal?.sendAnswer(answerSdp);
       console.log("[Entrevoz] SDP answer sent via Supabase");
 
       this.setStatus("connecting", "Establishing video...");
@@ -822,6 +842,10 @@ export class PeerConnection {
   private renegotiate(): void {
     if (this.isDestroyed) return;
     console.log("[Entrevoz] Renegotiating connection...");
+
+    // Reset cached offer so next attempt creates fresh PC + offer
+    this.currentOffer = null;
+    this.closePeerConnection();
 
     // Guest drives the connection — send a new offer
     if (!this.isHost) {
@@ -1038,6 +1062,7 @@ export class PeerConnection {
     this.remoteStream = null;
     this.remoteDescSet = false;
     this.pendingCandidates = [];
+    this.currentOffer = null;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
