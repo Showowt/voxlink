@@ -724,9 +724,9 @@ function VideoCallContent() {
     // Show interim text while speaking, final text briefly after
     if (transcription.localCaption) {
       // Truncate to last 150 chars to prevent wall of text
-      setMyLiveText(transcription.localCaption.slice(-150));
+      setMyLiveText(transcription.localCaption);
     } else if (transcription.localFinal) {
-      setMyLiveText(transcription.localFinal.slice(-150));
+      setMyLiveText(transcription.localFinal);
       // Clear after 5s (was 2s — too fast to read)
       const wordCount = transcription.localFinal.split(/\s+/).length;
       const displayTime = Math.min(Math.max(5000, wordCount * 400), 10000);
@@ -809,13 +809,13 @@ function VideoCallContent() {
   // Show fallback remote transcription when active
   useEffect(() => {
     if (remoteTranscription.isFallbackActive && remoteTranscription.remoteText) {
-      setTheirLiveText(remoteTranscription.remoteText.slice(-150));
+      setTheirLiveText(remoteTranscription.remoteText);
     }
   }, [remoteTranscription.remoteText, remoteTranscription.isFallbackActive]);
 
   useEffect(() => {
     if (remoteTranscription.isFallbackActive && remoteTranscription.remoteTranslation) {
-      setTheirLiveTranslation(remoteTranscription.remoteTranslation.slice(-150));
+      setTheirLiveTranslation(remoteTranscription.remoteTranslation);
       // Speak the translation
       speakText(remoteTranscription.remoteTranslation, userLang);
     }
@@ -1220,8 +1220,8 @@ function VideoCallContent() {
         // Show only the latest segment (truncate long text)
         const displayOriginal = original || text;
         const displayTranslation = text;
-        setTheirLiveText(displayOriginal.slice(-150));
-        setTheirLiveTranslation(displayTranslation.slice(-150));
+        setTheirLiveText(displayOriginal);
+        setTheirLiveTranslation(displayTranslation);
 
         // Voice output: either ElevenLabs dubbing OR browser TTS (never both)
         if (isFinal) {
@@ -1268,7 +1268,7 @@ function VideoCallContent() {
         if (lang) setPartnerLang(lang);
 
         // Show only last 150 chars of interim (prevents wall of text)
-        setTheirLiveText(text.slice(-150));
+        setTheirLiveText(text);
 
         // Keep interim visible for 5s (partner is still speaking)
         theirCaptionTimeoutRef.current = setTimeout(() => {
@@ -1887,19 +1887,19 @@ function VideoCallContent() {
         )}
 
         {/* LIVE CAPTIONS - Compact subtitle style, max 3 lines */}
-        <div className="absolute bottom-20 md:bottom-24 inset-x-0 px-2 md:px-4 space-y-1.5 pointer-events-none z-20">
+        <div className="absolute bottom-20 md:bottom-24 inset-x-0 px-2 md:px-4 space-y-1.5 pointer-events-none z-20 max-h-[40vh] overflow-y-auto">
           {/* Partner's speech */}
           {theirLiveText && (
             <div className="flex justify-start caption-slide-in">
-              <div className="max-w-[90%] md:max-w-[70%]">
-                <div className="bg-black/70 backdrop-blur-md rounded-lg px-3 py-2">
-                  <p className="text-white/70 text-xs leading-snug line-clamp-2">
+              <div className="max-w-[95%] md:max-w-[80%]">
+                <div className="bg-black/80 backdrop-blur-md rounded-lg px-3 py-2">
+                  <p className="text-white/70 text-xs leading-snug">
                     <span className="text-purple-400 font-medium">{partnerName || "Partner"}</span>{" "}
-                    {theirLiveText.length > 120 ? "..." + theirLiveText.slice(-120) : theirLiveText}
+                    {theirLiveText}
                   </p>
                   {theirLiveTranslation && (
                     <p
-                      className={`text-white font-medium leading-snug line-clamp-2 mt-0.5 ${
+                      className={`text-white font-medium leading-snug mt-0.5 ${
                         fontSize === "small"
                           ? "text-sm"
                           : fontSize === "medium"
@@ -1907,7 +1907,7 @@ function VideoCallContent() {
                             : "text-lg"
                       }`}
                     >
-                      {theirLiveTranslation.length > 150 ? "..." + theirLiveTranslation.slice(-150) : theirLiveTranslation}
+                      {theirLiveTranslation}
                     </p>
                   )}
                 </div>
@@ -1918,16 +1918,16 @@ function VideoCallContent() {
           {/* My speech */}
           {myLiveText && (
             <div className="flex justify-end caption-slide-in">
-              <div className="max-w-[90%] md:max-w-[70%]">
-                <div className="bg-black/70 backdrop-blur-md rounded-lg px-3 py-2">
-                  <p className="text-white/70 text-xs leading-snug line-clamp-2">
+              <div className="max-w-[95%] md:max-w-[80%]">
+                <div className="bg-black/80 backdrop-blur-md rounded-lg px-3 py-2">
+                  <p className="text-white/70 text-xs leading-snug">
                     <span className="text-[#00C896] font-medium">You</span>{" "}
-                    {myLiveText.length > 120 ? "..." + myLiveText.slice(-120) : myLiveText}
+                    {myLiveText}
                     <span className="inline-block w-0.5 h-3 bg-white/70 ml-0.5 animate-blink" />
                   </p>
                   {myLiveTranslation && (
                     <p
-                      className={`text-[#00C896] font-medium leading-snug line-clamp-2 mt-0.5 ${
+                      className={`text-[#00C896] font-medium leading-snug mt-0.5 ${
                         fontSize === "small"
                           ? "text-sm"
                           : fontSize === "medium"
@@ -1935,7 +1935,7 @@ function VideoCallContent() {
                             : "text-lg"
                       }`}
                     >
-                      → {myLiveTranslation.length > 150 ? "..." + myLiveTranslation.slice(-150) : myLiveTranslation}
+                      → {myLiveTranslation}
                     </p>
                   )}
                 </div>
