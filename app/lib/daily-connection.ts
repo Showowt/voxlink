@@ -14,6 +14,7 @@ import type {
 export class DailyConnection {
   private call: DailyCall | null = null;
   private localStream: MediaStream | null = null;
+  private remoteStream: MediaStream | null = null;
   private _status: ConnectionStatus = "initializing";
   private callbacks: PeerCallbacks = {};
   private isDestroyed = false;
@@ -143,31 +144,35 @@ export class DailyConnection {
     });
 
     // Track started (remote video/audio)
+    // Fires ONCE PER TRACK — audio may arrive before video.
+    // We maintain a single MediaStream and add tracks to it incrementally,
+    // then re-fire onRemoteStream each time so the video element updates.
     this.call.on("track-started", (event) => {
       if (this.isDestroyed || !event) return;
-      const { participant } = event;
-      if (!participant || participant.local) return;
+      const { participant, track } = event;
+      if (!participant || participant.local || !track) return;
 
-      // Build a MediaStream from the remote tracks
-      const remoteParticipant =
-        this.call?.participants()?.[participant.session_id];
-      if (remoteParticipant) {
-        const tracks: MediaStreamTrack[] = [];
-        if (remoteParticipant.tracks?.video?.persistentTrack) {
-          tracks.push(remoteParticipant.tracks.video.persistentTrack);
-        }
-        if (remoteParticipant.tracks?.audio?.persistentTrack) {
-          tracks.push(remoteParticipant.tracks.audio.persistentTrack);
-        }
-        if (tracks.length > 0) {
-          const stream = new MediaStream(tracks);
-          console.log("[Daily] Remote stream ready:", {
-            videoTracks: stream.getVideoTracks().length,
-            audioTracks: stream.getAudioTracks().length,
-          });
-          this.callbacks.onRemoteStream?.(stream);
-        }
+      console.log("[Daily] Remote track started:", track.kind);
+
+      // Add track to our persistent remote stream
+      if (!this.remoteStream) {
+        this.remoteStream = new MediaStream();
       }
+
+      // Remove existing track of same kind (replace, don't duplicate)
+      const existing = this.remoteStream.getTracks().filter(t => t.kind === track.kind);
+      for (const old of existing) {
+        this.remoteStream.removeTrack(old);
+      }
+      this.remoteStream.addTrack(track);
+
+      console.log("[Daily] Remote stream updated:", {
+        videoTracks: this.remoteStream.getVideoTracks().length,
+        audioTracks: this.remoteStream.getAudioTracks().length,
+      });
+
+      // Fire callback every time — the call page will update the video element
+      this.callbacks.onRemoteStream?.(this.remoteStream);
     });
 
     // App message (data channel replacement)
@@ -314,6 +319,7 @@ export class DailyConnection {
       this.statsInterval = null;
     }
     this.localStream = null;
+    this.remoteStream = null;
 
     if (this.call) {
       try {
