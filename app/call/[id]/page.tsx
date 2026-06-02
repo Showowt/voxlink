@@ -727,11 +727,13 @@ function VideoCallContent() {
       setMyLiveText(transcription.localCaption.slice(-150));
     } else if (transcription.localFinal) {
       setMyLiveText(transcription.localFinal.slice(-150));
-      // Clear after 2s so UI stays clean between utterances
+      // Clear after 5s (was 2s — too fast to read)
+      const wordCount = transcription.localFinal.split(/\s+/).length;
+      const displayTime = Math.min(Math.max(5000, wordCount * 400), 10000);
       const timeout = setTimeout(() => {
         setMyLiveText("");
         setMyLiveTranslation("");
-      }, 2000);
+      }, displayTime);
       return () => clearTimeout(timeout);
     } else {
       setMyLiveText("");
@@ -1248,11 +1250,13 @@ function VideoCallContent() {
           }
         }
 
-        // Auto-clear after 3 seconds
+        // Auto-clear: longer for longer text (min 5s, ~100ms per word, max 12s)
+        const wordCount = (text || "").split(/\s+/).length;
+        const displayTime = Math.min(Math.max(5000, wordCount * 400), 12000);
         theirCaptionTimeoutRef.current = setTimeout(() => {
           setTheirLiveText("");
           setTheirLiveTranslation("");
-        }, 3000);
+        }, displayTime);
         return;
       }
 
@@ -1266,11 +1270,11 @@ function VideoCallContent() {
         // Show only last 150 chars of interim (prevents wall of text)
         setTheirLiveText(text.slice(-150));
 
-        // Auto-clear after 3 seconds
+        // Keep interim visible for 5s (partner is still speaking)
         theirCaptionTimeoutRef.current = setTimeout(() => {
           setTheirLiveText("");
           setTheirLiveTranslation("");
-        }, 3000);
+        }, 5000);
         return;
       }
 

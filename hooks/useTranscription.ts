@@ -35,7 +35,7 @@ import { offlineTranslate } from "@/lib/offline-dictionary";
 // ─── BCP-47 language tags for Web Speech API ──────────────────────────────────
 const SPEECH_LANG_MAP: Record<string, string> = {
   en: "en-US",
-  es: "es-CO",
+  es: "es-ES",
   "es-CO": "es-CO",
   "es-MX": "es-MX",
   "es-ES": "es-ES",

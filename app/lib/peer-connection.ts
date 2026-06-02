@@ -1270,13 +1270,22 @@ export class PeerConnection {
           `[Entrevoz Video] No pong for ${Math.round(timeSinceLastPong / 1000)}s (missed: ${this.missedPongs}/${PeerConnection.MAX_MISSED_PONGS})`,
         );
 
-        // After 2 missed pongs (6s), trigger ICE restart immediately
+        // After 2 missed pongs (6s), trigger ICE restart
         if (this.missedPongs >= PeerConnection.MAX_MISSED_PONGS) {
           console.warn(
             "[Entrevoz Video] Connection dead - triggering ICE restart",
           );
           this.missedPongs = 0;
           this.triggerIceRestart();
+        }
+        // After 4 missed pongs (12s), attempt full video renegotiation
+        if (this.missedPongs >= PeerConnection.MAX_MISSED_PONGS * 2) {
+          console.warn(
+            "[Entrevoz Video] ICE restart failed — renegotiating video",
+          );
+          this.missedPongs = 0;
+          this.videoRetryAttempts = 0;
+          this.initiateVideoCallWithRetry();
         }
       } else {
         this.missedPongs = 0;
