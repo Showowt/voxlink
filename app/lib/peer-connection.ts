@@ -318,9 +318,17 @@ export class PeerConnection {
         // Host is passive — RoomSignal.onOffer will trigger connection
       } else {
         this.setStatus("connecting", "Looking for host...");
-        // Guest starts trying immediately — host presence isn't required up front
-        // because the guest's offer will be waiting when the host arrives
-        this.startConnectionAttempts();
+        // DON'T send offers yet — Supabase broadcasts are ephemeral (not persistent).
+        // If we send before host subscribes, the offer is lost forever.
+        // Wait for host's presence heartbeat (proof host channel is active),
+        // then onPeerPresent callback will trigger startConnectionAttempts().
+        // Safety net: if host presence not detected in 15s, start anyway.
+        setTimeout(() => {
+          if (!this.isDestroyed && !this.peerPresent && this._status !== "connected") {
+            console.log("[Entrevoz] No host presence after 15s — starting offers anyway");
+            this.startConnectionAttempts();
+          }
+        }, 15000);
       }
 
       return true;
