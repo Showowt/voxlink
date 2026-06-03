@@ -76,10 +76,13 @@ export class DailyConnection {
       const roomUrl = roomData.url;
       console.log("[Daily] Room URL:", roomUrl);
 
-      // Create the Daily call object
+      // Create the Daily call object — let Daily manage its OWN mic and camera.
+      // Do NOT pass our localStream tracks here. Sharing audio tracks between
+      // Daily.co and Web Speech API causes iOS Safari to kill audio to one consumer.
+      // Daily will call getUserMedia internally with its own exclusive tracks.
       this.call = DailyIframe.createCallObject({
-        audioSource: localStream?.getAudioTracks()[0] || true,
-        videoSource: localStream?.getVideoTracks()[0] || true,
+        audioSource: true,
+        videoSource: true,
         dailyConfig: {
           keepCamIndicatorLightOn: false,
         },
