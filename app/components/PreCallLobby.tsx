@@ -392,88 +392,109 @@ export default function PreCallLobby({
             </div>
           </div>
 
-          {/* Language Settings */}
-          <div className="p-4 space-y-4">
-            <div>
-              <label className="block text-sm text-gray-400 mb-2 flex items-center gap-2">
-                <span>🗣️</span> You speak
-              </label>
-              <LanguageSelector
-                value={userLang}
-                onChange={setUserLang}
-                excludeCode={partnerLang}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm text-gray-400 mb-2 flex items-center gap-2">
-                <span>👤</span> Partner speaks
-              </label>
-              <LanguageSelector
-                value={partnerLang}
-                onChange={setPartnerLang}
-                excludeCode={userLang}
-              />
-            </div>
-
-            {/* Language preview */}
-            <div className="p-3 rounded-xl bg-gradient-to-r from-[#00C896]/10 to-[#0066FF]/10 border border-white/10">
-              <div className="flex items-center justify-center gap-4">
-                <div className="text-center">
-                  <span className="text-2xl">{getFlag(userLang)}</span>
-                  <p className="text-xs text-gray-400 mt-1">You</p>
-                </div>
-                <span className="text-xl text-white/70">↔</span>
-                <div className="text-center">
-                  <span className="text-2xl">{getFlag(partnerLang)}</span>
-                  <p className="text-xs text-gray-400 mt-1">Partner</p>
-                </div>
+          {/* Language Settings — only show for host. Guests get a simpler view. */}
+          {isHost ? (
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-2 flex items-center gap-2">
+                  <span>🗣️</span> You speak
+                </label>
+                <LanguageSelector
+                  value={userLang}
+                  onChange={setUserLang}
+                  excludeCode={partnerLang}
+                />
               </div>
-            </div>
 
-            {/* Cyrano Mode Toggle */}
-            <button
-              onClick={() => setCyranoEnabled(!cyranoEnabled)}
-              className={`w-full p-4 rounded-xl border transition-all ${
-                cyranoEnabled
-                  ? "bg-gradient-to-r from-amber-500/20 to-orange-500/20 border-amber-500/50"
-                  : "bg-[#1a1a2e] border-gray-700 hover:border-gray-600"
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">🎭</span>
-                  <div className="text-left">
-                    <p
-                      className={`font-medium ${cyranoEnabled ? "text-amber-400" : "text-white"}`}
-                    >
-                      Cyrano Mode
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      AI coaching with real-time suggestions
-                    </p>
+              <div>
+                <label className="block text-sm text-gray-400 mb-2 flex items-center gap-2">
+                  <span>👤</span> Partner speaks
+                </label>
+                <LanguageSelector
+                  value={partnerLang}
+                  onChange={setPartnerLang}
+                  excludeCode={userLang}
+                />
+              </div>
+
+              {/* Language preview */}
+              <div className="p-3 rounded-xl bg-gradient-to-r from-[#00C896]/10 to-[#0066FF]/10 border border-white/10">
+                <div className="flex items-center justify-center gap-4">
+                  <div className="text-center">
+                    <span className="text-2xl">{getFlag(userLang)}</span>
+                    <p className="text-xs text-gray-400 mt-1">You</p>
+                  </div>
+                  <span className="text-xl text-white/70">↔</span>
+                  <div className="text-center">
+                    <span className="text-2xl">{getFlag(partnerLang)}</span>
+                    <p className="text-xs text-gray-400 mt-1">Partner</p>
                   </div>
                 </div>
-                <div
-                  className={`w-12 h-7 rounded-full p-1 transition-colors ${
-                    cyranoEnabled ? "bg-amber-500" : "bg-gray-600"
-                  }`}
-                >
+              </div>
+
+              {/* Cyrano Mode Toggle */}
+              <button
+                onClick={() => setCyranoEnabled(!cyranoEnabled)}
+                className={`w-full p-4 rounded-xl border transition-all ${
+                  cyranoEnabled
+                    ? "bg-gradient-to-r from-amber-500/20 to-orange-500/20 border-amber-500/50"
+                    : "bg-[#1a1a2e] border-gray-700 hover:border-gray-600"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">🎭</span>
+                    <div className="text-left">
+                      <p
+                        className={`font-medium ${cyranoEnabled ? "text-amber-400" : "text-white"}`}
+                      >
+                        Cyrano Mode
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        AI coaching with real-time suggestions
+                      </p>
+                    </div>
+                  </div>
                   <div
-                    className={`w-5 h-5 rounded-full bg-white shadow-md transition-transform ${
-                      cyranoEnabled ? "translate-x-5" : "translate-x-0"
+                    className={`w-12 h-7 rounded-full p-1 transition-colors ${
+                      cyranoEnabled ? "bg-amber-500" : "bg-gray-600"
                     }`}
-                  />
+                  >
+                    <div
+                      className={`w-5 h-5 rounded-full bg-white shadow-md transition-transform ${
+                        cyranoEnabled ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </div>
+                </div>
+                {cyranoEnabled && (
+                  <p className="mt-3 text-xs text-amber-400/80 text-left pl-9">
+                    ⚡ Get Bold, Warm, and Safe response suggestions during your
+                    call
+                  </p>
+                )}
+              </button>
+            </div>
+          ) : (
+            <div className="p-4">
+              <div className="p-3 rounded-xl bg-gradient-to-r from-[#00C896]/10 to-[#0066FF]/10 border border-white/10">
+                <div className="flex items-center justify-center gap-4">
+                  <div className="text-center">
+                    <span className="text-2xl">{getFlag(userLang)}</span>
+                    <p className="text-xs text-gray-400 mt-1">You</p>
+                  </div>
+                  <span className="text-xl text-white/70">↔</span>
+                  <div className="text-center">
+                    <span className="text-2xl">{getFlag(partnerLang)}</span>
+                    <p className="text-xs text-gray-400 mt-1">Partner</p>
+                  </div>
                 </div>
               </div>
-              {cyranoEnabled && (
-                <p className="mt-3 text-xs text-amber-400/80 text-left pl-9">
-                  ⚡ Get Bold, Warm, and Safe response suggestions during your
-                  call
-                </p>
-              )}
-            </button>
-          </div>
+              <p className="text-center text-gray-500 text-xs mt-3">
+                Make sure your camera and mic are working above, then tap Join
+              </p>
+            </div>
+          )}
 
           {/* Join Buttons */}
           <div className="p-4 pt-0 space-y-3">

@@ -618,9 +618,9 @@ function VideoCallContent() {
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [reconnectCountdown, setReconnectCountdown] = useState(0);
 
-  // Lobby state - guests auto-join (skip lobby), hosts see lobby
-  const autoJoin = searchParams.get("autoJoin") === "true" || !isHost;
-  const [inLobby, setInLobby] = useState(!autoJoin);
+  // Lobby state - EVERYONE sees lobby now (ensures camera/mic permissions granted before connecting)
+  // Previously guests skipped lobby, causing black screen + no audio when permissions weren't granted
+  const [inLobby, setInLobby] = useState(true);
   const [lobbyStream, setLobbyStream] = useState<MediaStream | null>(null);
 
   // Language state (can be changed in lobby)
