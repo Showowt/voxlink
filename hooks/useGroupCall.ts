@@ -186,11 +186,22 @@ export function useGroupCall(): UseGroupCallReturn {
 
   const broadcast = useCallback((msg: DataChannelMessage) => {
     const encoded = JSON.stringify(msg);
+    let sent = 0;
     dataConnsRef.current.forEach(dc => {
       if (dc.open) {
-        try { dc.send(encoded); } catch { /* peer gone */ }
+        try { dc.send(encoded); sent++; } catch { /* peer gone */ }
       }
     });
+    // If no peers connected yet and this is a final transcript, retry after 2s
+    if (sent === 0 && msg.type === 'transcript' && msg.isFinal) {
+      setTimeout(() => {
+        dataConnsRef.current.forEach(dc => {
+          if (dc.open) {
+            try { dc.send(encoded); } catch { /* ignore */ }
+          }
+        });
+      }, 2000);
+    }
   }, []);
 
   // ─── VAD setup per remote stream ─────────────────────────────────────────────
@@ -431,12 +442,32 @@ export function useGroupCall(): UseGroupCallReturn {
       const result = e.results[e.results.length - 1];
       const text = result[0].transcript.trim();
       if (!text) return;
-      broadcast({
+
+      const msg: DataChannelMessage = {
         type: 'transcript',
         text,
         isFinal: result.isFinal,
         language: myLangRef.current,
         speakerSlot: mySlotRef.current as SlotIndex,
+      };
+
+      // Broadcast to all connected peers
+      broadcast(msg);
+
+      // Also show locally as "my" subtitle so speaker sees their own text
+      const id = `me-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      dispatch({
+        type: 'SUBTITLE_ADD',
+        subtitle: {
+          id,
+          speakerSlot: mySlotRef.current as SlotIndex,
+          speakerName: displayNameRef.current,
+          speakerLanguage: myLangRef.current,
+          original: text,
+          translated: text, // Same language for self
+          isFinal: result.isFinal,
+          timestamp: Date.now(),
+        },
       });
     };
 
