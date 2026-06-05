@@ -476,7 +476,17 @@ export default function PreCallLobby({
               </button>
             </div>
           ) : (
-            <div className="p-4">
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-2 flex items-center gap-2">
+                  <span>🗣️</span> You speak
+                </label>
+                <LanguageSelector
+                  value={userLang}
+                  onChange={setUserLang}
+                  excludeCode={partnerLang}
+                />
+              </div>
               <div className="p-3 rounded-xl bg-gradient-to-r from-[#00C896]/10 to-[#0066FF]/10 border border-white/10">
                 <div className="flex items-center justify-center gap-4">
                   <div className="text-center">
@@ -491,7 +501,7 @@ export default function PreCallLobby({
                 </div>
               </div>
               <p className="text-center text-gray-500 text-xs mt-3">
-                Make sure your camera and mic are working above, then tap Join
+                Select your language, then tap Join
               </p>
             </div>
           )}

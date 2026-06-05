@@ -1549,9 +1549,8 @@ function VideoCallContent() {
   };
 
   const copyLink = () => {
-    // Default to different language for joining guest
-    const guestLang = userLang === "en" ? "es" : "en";
-    const url = `${window.location.origin}/call/${roomCode}?host=false&name=Guest&lang=${guestLang}`;
+    // Don't hardcode guest language — let them pick in the lobby
+    const url = `${window.location.origin}/call/${roomCode}`;
     navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
