@@ -315,6 +315,9 @@ export function useGroupCall(): UseGroupCallReturn {
     const peer = peerRef.current;
     if (!peer || peer.destroyed) return;
 
+    // Skip if already connected to this slot
+    if (dataConnsRef.current.get(remoteSlot)?.open) return;
+
     // Add participant placeholder
     dispatch({
       type: 'PARTICIPANT_ADD',
@@ -334,68 +337,82 @@ export function useGroupCall(): UseGroupCallReturn {
       },
     });
 
-    // Data connection
-    const dc = peer.connect(remotePeerId, { reliable: true, metadata: {
-      type: 'group',
-      roomCode: roomCodeRef.current,
-      slotIndex: mySlotRef.current,
-      displayName: displayNameRef.current,
-      language: myLangRef.current,
-    }});
+    const attemptConnection = (attempt: number) => {
+      if (!peerRef.current || peerRef.current.destroyed || phaseRef.current !== 'active') return;
+      if (dataConnsRef.current.get(remoteSlot)?.open) return; // Already connected
 
-    dc.on('open', () => {
-      dataConnsRef.current.set(remoteSlot, dc);
-      // Send presence
-      dc.send(JSON.stringify({
-        type: 'presence',
-        displayName: displayNameRef.current,
-        language: myLangRef.current,
-        slotIndex: mySlotRef.current,
-      }));
-    });
+      console.log(`[GroupCall] Connecting to slot ${remoteSlot} (attempt ${attempt + 1})`);
 
-    dc.on('data', (data) => {
-      handleDCMessage(typeof data === 'string' ? data : JSON.stringify(data), remoteSlot);
-    });
-
-    dc.on('close', () => {
-      dataConnsRef.current.delete(remoteSlot);
-    });
-
-    dc.on('error', () => {
-      dataConnsRef.current.delete(remoteSlot);
-      const attempts = reconnectCountRef.current.get(remoteSlot) ?? 0;
-      if (attempts < RECONNECT_MAX && phaseRef.current === 'active') {
-        reconnectCountRef.current.set(remoteSlot, attempts + 1);
-        setTimeout(() => connectToPeer(remotePeerId, remoteSlot, remoteInfo), RECONNECT_BASE_DELAY * (attempts + 1));
-      }
-    });
-
-    // Media connection (video/audio)
-    if (localStreamRef.current) {
-      const mc = peer.call(remotePeerId, localStreamRef.current, { metadata: {
+      // Data connection
+      const dc = peerRef.current.connect(remotePeerId, { reliable: true, metadata: {
         type: 'group',
         roomCode: roomCodeRef.current,
         slotIndex: mySlotRef.current,
+        displayName: displayNameRef.current,
+        language: myLangRef.current,
       }});
 
-      mc.on('stream', (remoteStream) => {
-        dispatch({ type: 'PARTICIPANT_STREAM', slotIndex: remoteSlot, stream: remoteStream });
-        dispatch({ type: 'PARTICIPANT_QUALITY', slotIndex: remoteSlot, quality: 4 });
-        setupVAD(remoteSlot, remoteStream);
-        startVAD();
+      let opened = false;
+      const openTimeout = setTimeout(() => {
+        if (!opened && attempt < 8 && phaseRef.current === 'active') {
+          console.log(`[GroupCall] Connection to slot ${remoteSlot} timed out, retrying...`);
+          try { dc.close(); } catch { /* ignore */ }
+          setTimeout(() => attemptConnection(attempt + 1), Math.min(2000 * (attempt + 1), 8000));
+        }
+      }, 5000);
+
+      dc.on('open', () => {
+        opened = true;
+        clearTimeout(openTimeout);
+        dataConnsRef.current.set(remoteSlot, dc);
+        // Send presence
+        dc.send(JSON.stringify({
+          type: 'presence',
+          displayName: displayNameRef.current,
+          language: myLangRef.current,
+          slotIndex: mySlotRef.current,
+        }));
+
+        // NOW initiate media connection (after data channel confirms peer is reachable)
+        if (localStreamRef.current && !mediaConnsRef.current.get(remoteSlot)) {
+          const mc = peerRef.current!.call(remotePeerId, localStreamRef.current, { metadata: {
+            type: 'group',
+            roomCode: roomCodeRef.current,
+            slotIndex: mySlotRef.current,
+          }});
+
+          mc.on('stream', (remoteStream) => {
+            dispatch({ type: 'PARTICIPANT_STREAM', slotIndex: remoteSlot, stream: remoteStream });
+            dispatch({ type: 'PARTICIPANT_QUALITY', slotIndex: remoteSlot, quality: 4 });
+            setupVAD(remoteSlot, remoteStream);
+            startVAD();
+          });
+
+          mc.on('close', () => mediaConnsRef.current.delete(remoteSlot));
+          mc.on('error', () => dispatch({ type: 'PARTICIPANT_QUALITY', slotIndex: remoteSlot, quality: 1 }));
+          mediaConnsRef.current.set(remoteSlot, mc);
+        }
       });
 
-      mc.on('close', () => {
-        mediaConnsRef.current.delete(remoteSlot);
+      dc.on('data', (data) => {
+        handleDCMessage(typeof data === 'string' ? data : JSON.stringify(data), remoteSlot);
       });
 
-      mc.on('error', () => {
-        dispatch({ type: 'PARTICIPANT_QUALITY', slotIndex: remoteSlot, quality: 1 });
+      dc.on('close', () => {
+        dataConnsRef.current.delete(remoteSlot);
       });
 
-      mediaConnsRef.current.set(remoteSlot, mc);
-    }
+      dc.on('error', () => {
+        clearTimeout(openTimeout);
+        dataConnsRef.current.delete(remoteSlot);
+        if (!opened && attempt < 8 && phaseRef.current === 'active') {
+          setTimeout(() => attemptConnection(attempt + 1), Math.min(2000 * (attempt + 1), 8000));
+        }
+      });
+    };
+
+    // Start first attempt after a short delay (give remote peer time to register on PeerJS)
+    setTimeout(() => attemptConnection(0), 1500);
   }, [handleDCMessage, setupVAD, startVAD]);
 
   // ─── Speech recognition (my voice to broadcast) ───────────────────────────────
