@@ -556,9 +556,14 @@ export function useGroupCall(): UseGroupCallReturn {
     deviceIdRef.current = opts.deviceId;
 
     try {
-      // Get local media
-      const constraints = opts.callType === 'video' ? GROUP_VIDEO_CONSTRAINTS : GROUP_AUDIO_CONSTRAINTS;
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      // Get local media — reuse lobby stream if available (avoids double getUserMedia on iOS)
+      let stream: MediaStream;
+      if (opts.existingStream && opts.existingStream.getTracks().some(t => t.readyState === 'live')) {
+        stream = opts.existingStream;
+      } else {
+        const constraints = opts.callType === 'video' ? GROUP_VIDEO_CONSTRAINTS : GROUP_AUDIO_CONSTRAINTS;
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      }
       localStreamRef.current = stream;
       dispatch({ type: 'SET_LOCAL_STREAM', stream });
 

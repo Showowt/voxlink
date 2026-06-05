@@ -104,6 +104,7 @@ export default function GroupCallPage() {
       language: selectedLang,
       callType,
       deviceId: getDeviceId(),
+      existingStream: lobbyStream ?? undefined,
     });
     setIsJoining(false);
   };
@@ -135,18 +136,20 @@ export default function GroupCallPage() {
 
   useEffect(() => {
     if (gc.phase !== 'lobby' || callType !== 'video') return;
-    let stream: MediaStream | null = null;
+    let cancelled = false;
     (async () => {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
         setLobbyStream(stream);
         setCamPermission('granted');
         if (lobbyVideoRef.current) lobbyVideoRef.current.srcObject = stream;
       } catch {
-        setCamPermission('denied');
+        if (!cancelled) setCamPermission('denied');
       }
     })();
-    return () => { stream?.getTracks().forEach(t => t.stop()); };
+    // Do NOT stop tracks on cleanup — the stream is passed to joinRoom
+    return () => { cancelled = true; };
   }, [gc.phase, callType]);
 
   // ── LOBBY ──────────────────────────────────────────────────────────────────────

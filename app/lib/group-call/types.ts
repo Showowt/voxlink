@@ -48,6 +48,7 @@ export interface JoinOptions {
   language: string;
   callType: CallType;
   deviceId: string;
+  existingStream?: MediaStream;
 }
 
 // DataChannel messages (peer-to-peer, after connection established)
