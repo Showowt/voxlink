@@ -45,6 +45,7 @@ interface State {
   myLanguage: string;
   isMuted: boolean;
   isCameraOff: boolean;
+  localStream: MediaStream | null;
   participants: (Participant | null)[];
   subtitles: SubtitleEntry[];
 }
@@ -61,6 +62,7 @@ type Action =
   | { type: 'PARTICIPANT_STATE'; slotIndex: number; muted?: boolean; cameraOff?: boolean }
   | { type: 'PARTICIPANT_SPEAKING'; slotIndex: number; speaking: boolean }
   | { type: 'PARTICIPANT_QUALITY'; slotIndex: number; quality: 1|2|3|4 }
+  | { type: 'SET_LOCAL_STREAM'; stream: MediaStream }
   | { type: 'SUBTITLE_ADD'; subtitle: SubtitleEntry }
   | { type: 'SUBTITLE_UPDATE'; id: string; translated: string; isFinal: boolean }
   | { type: 'SUBTITLE_PRUNE' };
@@ -72,6 +74,7 @@ const INIT: State = {
   myLanguage: 'en',
   isMuted: false,
   isCameraOff: false,
+  localStream: null,
   participants: [null, null, null, null],
   subtitles: [],
 };
@@ -88,6 +91,8 @@ function reducer(state: State, action: Action): State {
       return { ...state, isMuted: !state.isMuted };
     case 'TOGGLE_CAMERA':
       return { ...state, isCameraOff: !state.isCameraOff };
+    case 'SET_LOCAL_STREAM':
+      return { ...state, localStream: action.stream };
     case 'PARTICIPANT_ADD': {
       const p = [...state.participants];
       p[action.slotIndex] = action.participant;
@@ -555,6 +560,7 @@ export function useGroupCall(): UseGroupCallReturn {
       const constraints = opts.callType === 'video' ? GROUP_VIDEO_CONSTRAINTS : GROUP_AUDIO_CONSTRAINTS;
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       localStreamRef.current = stream;
+      dispatch({ type: 'SET_LOCAL_STREAM', stream });
 
       // Claim a slot via API
       const slotRes = await fetch('/api/group/join', {
@@ -767,7 +773,7 @@ export function useGroupCall(): UseGroupCallReturn {
     myLanguage: state.myLanguage,
     isMuted: state.isMuted,
     isCameraOff: state.isCameraOff,
-    localStream: localStreamRef.current,
+    localStream: state.localStream,
     participants: state.participants,
     subtitles: state.subtitles,
     participantCount: state.participants.filter(Boolean).length + (state.mySlotIndex !== null ? 1 : 0),
