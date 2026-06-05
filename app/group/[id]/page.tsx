@@ -128,6 +128,27 @@ export default function GroupCallPage() {
     window.open(`whatsapp://send?text=${msg}`, '_blank');
   };
 
+  // ── Camera preview for lobby ────────────────────────────────────────────────
+  const lobbyVideoRef = useRef<HTMLVideoElement>(null);
+  const [lobbyStream, setLobbyStream] = useState<MediaStream | null>(null);
+  const [camPermission, setCamPermission] = useState<'checking' | 'granted' | 'denied'>('checking');
+
+  useEffect(() => {
+    if (gc.phase !== 'lobby' || callType !== 'video') return;
+    let stream: MediaStream | null = null;
+    (async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        setLobbyStream(stream);
+        setCamPermission('granted');
+        if (lobbyVideoRef.current) lobbyVideoRef.current.srcObject = stream;
+      } catch {
+        setCamPermission('denied');
+      }
+    })();
+    return () => { stream?.getTracks().forEach(t => t.stop()); };
+  }, [gc.phase, callType]);
+
   // ── LOBBY ──────────────────────────────────────────────────────────────────────
 
   if (gc.phase === 'lobby' || gc.phase === 'joining') {
@@ -139,6 +160,36 @@ export default function GroupCallPage() {
             <div className="font-mono text-white text-3xl font-medium tracking-[0.3em] mb-1">{roomCode}</div>
             <div className="text-white/40 text-sm">{callType === 'video' ? 'Video + Audio' : 'Audio Only'}</div>
           </div>
+
+          {/* Camera preview */}
+          {callType === 'video' && (
+            <div className="relative aspect-video bg-black rounded-2xl overflow-hidden mb-3 border border-white/10">
+              {camPermission === 'granted' && lobbyStream ? (
+                <video ref={lobbyVideoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
+              ) : camPermission === 'denied' ? (
+                <div className="w-full h-full flex items-center justify-center">
+                  <div className="text-center px-4">
+                    <span className="text-3xl">📵</span>
+                    <p className="text-red-400 text-sm mt-2">Camera access denied</p>
+                    <p className="text-white/40 text-xs mt-1">Check browser settings and refresh</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="w-8 h-8 border-2 border-[#00C896] border-t-transparent rounded-full animate-spin mx-auto" />
+                    <p className="text-white/40 text-xs mt-2">Starting camera...</p>
+                  </div>
+                </div>
+              )}
+              {camPermission === 'granted' && (
+                <div className="absolute bottom-2 left-2 flex items-center gap-1.5 bg-black/60 px-2 py-1 rounded-lg">
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                  <span className="text-white text-xs">Camera ready</span>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-5 mb-3 backdrop-blur-sm">
             <div className="mb-4">
