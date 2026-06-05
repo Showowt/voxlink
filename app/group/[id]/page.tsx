@@ -252,6 +252,16 @@ export default function GroupCallPage() {
   const remoteParts = gc.participants.filter((p, i) => p !== null && i !== gc.mySlotIndex);
   const myLangObj = LANGUAGES.find(l => l.code === gc.myLanguage);
 
+  // Detect translation mode — are there different languages in the room?
+  const activeLanguages = new Set<string>();
+  activeLanguages.add(gc.myLanguage);
+  gc.participants.forEach(p => { if (p?.language) activeLanguages.add(p.language); });
+  const isMultiLingual = activeLanguages.size > 1;
+  const languageList = Array.from(activeLanguages).map(code => {
+    const l = LANGUAGES.find(x => x.code === code);
+    return l ? `${l.flag} ${l.name}` : code;
+  });
+
   return (
     <div className="h-[100dvh] bg-[#06060a] flex flex-col overflow-hidden select-none">
 
@@ -278,6 +288,19 @@ export default function GroupCallPage() {
             CC
           </button>
         </div>
+      </div>
+
+      {/* Translation status indicator */}
+      <div className={`flex-shrink-0 px-4 py-1.5 text-xs text-center border-b ${
+        isMultiLingual
+          ? 'bg-[#00C896]/10 border-[#00C896]/20 text-[#00C896]'
+          : 'bg-white/5 border-white/5 text-white/40'
+      }`}>
+        {isMultiLingual ? (
+          <span>🌐 Live Translation Active — {languageList.join(' · ')}</span>
+        ) : (
+          <span>📝 Same Language — Live Transcription Only · Select different languages to enable translation</span>
+        )}
       </div>
 
       {/* Video grid */}
@@ -376,21 +399,37 @@ export default function GroupCallPage() {
 
       {/* Subtitles */}
       {showSubtitles && gc.subtitles.length > 0 && (
-        <div className="flex-shrink-0 px-3 py-2 max-h-28 overflow-y-auto overscroll-contain border-t border-white/5 bg-black/30" style={{ WebkitOverflowScrolling: 'touch' }}>
-          {gc.subtitles.slice(-4).map(sub => {
+        <div className="flex-shrink-0 px-3 py-2 max-h-36 overflow-y-auto overscroll-contain border-t border-white/5 bg-black/40" style={{ WebkitOverflowScrolling: 'touch' }}>
+          {gc.subtitles.slice(-6).map(sub => {
             const isMe = sub.speakerSlot === gc.mySlotIndex;
             const lang = LANGUAGES.find(l => l.code === sub.speakerLanguage);
-            const text = sub.translated ?? sub.original;
-            const isTranslating = sub.translated === null && sub.speakerLanguage !== gc.myLanguage;
+            const isSameLang = sub.speakerLanguage === gc.myLanguage;
+            const isTranslating = sub.translated === null && !isSameLang;
+            const hasTranslation = sub.translated !== null && !isSameLang;
 
             return (
-              <div key={sub.id} className="flex gap-2 items-start mb-1.5 last:mb-0">
-                <span className="text-sm flex-shrink-0 mt-0.5">{isMe ? '\u{1F7E2}' : (lang?.flag ?? '\u{1F310}')}</span>
-                <div className="min-w-0 flex-1">
-                  <span className="text-white/40 text-xs mr-1">{sub.speakerName}:</span>
-                  <span className={`text-sm leading-snug ${isTranslating ? 'text-white/40 italic' : 'text-white'}`}>
-                    {isTranslating ? `${sub.original} ...` : text}
-                  </span>
+              <div key={sub.id} className="mb-2 last:mb-0">
+                <div className="flex gap-2 items-start">
+                  <span className="text-sm flex-shrink-0 mt-0.5">{isMe ? '\u{1F7E2}' : (lang?.flag ?? '\u{1F310}')}</span>
+                  <div className="min-w-0 flex-1">
+                    <span className={`text-xs mr-1 ${isMe ? 'text-[#00C896]/60' : 'text-white/40'}`}>{sub.speakerName}:</span>
+                    <span className="text-white/60 text-xs leading-snug">
+                      {sub.original}
+                    </span>
+                    {isTranslating && (
+                      <span className="text-white/30 text-xs italic ml-1">translating...</span>
+                    )}
+                    {hasTranslation && (
+                      <p className="text-white text-sm font-medium leading-snug mt-0.5">
+                        → {sub.translated}
+                      </p>
+                    )}
+                    {isSameLang && !isMe && (
+                      <p className="text-white text-sm leading-snug mt-0.5">
+                        {sub.original}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             );
