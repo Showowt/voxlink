@@ -610,7 +610,10 @@ function VideoCallContent() {
 
   const isHost = searchParams.get("host") === "true";
   const userName = searchParams.get("name") || "User";
-  const initialUserLang = searchParams.get("lang") || "en";
+  // Guest: if hostLang is provided, default to opposite language so translation works immediately
+  const hostLang = searchParams.get("hostLang");
+  const langParam = searchParams.get("lang");
+  const initialUserLang = langParam || (hostLang ? (hostLang === "en" ? "es" : "en") : "en");
 
   // Reconnection state
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
@@ -628,7 +631,7 @@ function VideoCallContent() {
   // Partner's language - can be set in lobby OR auto-detected during call
   const [partnerLang, setPartnerLang] = useState<string | null>(null);
   const [expectedPartnerLang, setExpectedPartnerLang] = useState<string>(
-    initialUserLang === "en" ? "es" : "en",
+    hostLang || (initialUserLang === "en" ? "es" : "en"),
   );
 
   // State
@@ -1549,8 +1552,8 @@ function VideoCallContent() {
   };
 
   const copyLink = () => {
-    // Don't hardcode guest language — let them pick in the lobby
-    const url = `${window.location.origin}/call/${roomCode}`;
+    // Pass host language so guest defaults to opposite, but guest can change in lobby
+    const url = `${window.location.origin}/call/${roomCode}?hostLang=${userLang}`;
     navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
