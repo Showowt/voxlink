@@ -1475,6 +1475,32 @@ function VideoCallContent() {
     }
   };
 
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
+  const flipCamera = async () => {
+    const newMode = facingMode === "user" ? "environment" : "user";
+    try {
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: newMode, width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: true,
+      });
+      // Stop old tracks
+      localStreamRef.current?.getVideoTracks().forEach(t => t.stop());
+      // Replace video track
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      if (localStreamRef.current && newVideoTrack) {
+        const oldVideoTrack = localStreamRef.current.getVideoTracks()[0];
+        if (oldVideoTrack) localStreamRef.current.removeTrack(oldVideoTrack);
+        localStreamRef.current.addTrack(newVideoTrack);
+      }
+      if (localVideoRef.current && localStreamRef.current) {
+        localVideoRef.current.srcObject = localStreamRef.current;
+      }
+      setFacingMode(newMode);
+    } catch (err) {
+      console.error("[Entrevoz] Camera flip failed:", err);
+    }
+  };
+
   const endCall = async () => {
     stopListening();
     cleanupDubbing();
@@ -2246,6 +2272,15 @@ function VideoCallContent() {
             }`}
           >
             {isVideoOff ? "📵" : "📹"}
+          </button>
+
+          {/* Flip Camera */}
+          <button
+            onClick={flipCamera}
+            title="Flip camera"
+            className="w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center text-lg md:text-xl bg-white/10 text-white hover:bg-white/20 transition-all"
+          >
+            🔄
           </button>
 
           {/* Text Input Fallback */}

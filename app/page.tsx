@@ -1180,8 +1180,7 @@ function HomeContent() {
   const startWhatsAppCall = () => {
     if (!name.trim()) { setToast({ message: "Please enter your name", type: "error" }); return; }
     const code = generateCode();
-    const targetLang = language === "en" ? "es" : "en";
-    const link = `${origin}/call/${code}?lang=${targetLang}`;
+    const link = `${origin}/call/${code}?hostLang=${language}`;
     const hostLink = `/call/${code}?host=true&name=${encodeURIComponent(name)}&lang=${language}`;
     const msg = encodeURIComponent(`Hey, I want to talk with live translation \u2014 tap to join our call \ud83c\udfa4\n${link}\n(No download needed \u2014 opens in your browser)`);
     window.open(`https://wa.me/?text=${msg}`, "_blank");
@@ -1190,8 +1189,7 @@ function HomeContent() {
 
   const shareCallLink = async () => {
     if (!name.trim()) { setToast({ message: "Please enter your name", type: "error" }); return; }
-    const targetLang = language === "en" ? "es" : "en";
-    const link = `${origin}/call/${roomCode}?lang=${targetLang}`;
+    const link = `${origin}/call/${roomCode}?hostLang=${language}`;
     const hostLink = `/call/${roomCode}?host=true&name=${encodeURIComponent(name)}&lang=${language}`;
     if (navigator.share) {
       try {
@@ -1763,7 +1761,7 @@ function HomeContent() {
                       <button onClick={shareCallLink} className="flex-1 py-3 rounded-xl border border-white/10 bg-white/5 text-voxxo-400 font-semibold text-sm hover:bg-white/10 transition-all">
                         Share Link
                       </button>
-                      <button onClick={() => { const link = `${origin}/call/${roomCode}?lang=${language === "en" ? "es" : "en"}`; navigator.clipboard.writeText(link); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 3000); }} className="flex-1 py-3 rounded-xl border border-white/10 bg-white/5 text-voxxo-400 font-semibold text-sm hover:bg-white/10 transition-all">
+                      <button onClick={() => { const link = `${origin}/call/${roomCode}?hostLang=${language}`; navigator.clipboard.writeText(link); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 3000); }} className="flex-1 py-3 rounded-xl border border-white/10 bg-white/5 text-voxxo-400 font-semibold text-sm hover:bg-white/10 transition-all">
                         {linkCopied ? "Copied!" : "Copy Link"}
                       </button>
                     </div>
