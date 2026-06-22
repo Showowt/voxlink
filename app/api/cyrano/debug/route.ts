@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.ANTHROPIC_API_KEY2 || process.env.ANTHROPIC_API_KEY;
 
   const diagnostics: Record<string, unknown> = {
     timestamp: new Date().toISOString(),

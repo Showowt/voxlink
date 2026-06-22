@@ -299,7 +299,7 @@ async function translateClaude(
   from: string,
   to: string,
 ): Promise<string | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.ANTHROPIC_API_KEY2 || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
 
   try {

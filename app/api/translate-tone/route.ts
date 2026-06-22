@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing fields" }, { status: 400 });
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = process.env.ANTHROPIC_API_KEY2 || process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       // Fallback: just use regular translate
       return NextResponse.json({ translated: text, tone: tone || "casual" });

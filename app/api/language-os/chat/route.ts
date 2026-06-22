@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
       chatMessages.push({ role: "user", content: getCorrectionFor });
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+    const apiKey = process.env.ANTHROPIC_API_KEY2 || process.env.ANTHROPIC_API_KEY?.trim();
     if (!apiKey) {
       console.error("[LangOS Chat] ANTHROPIC_API_KEY not set");
       const fallback = persona.fallbackResponses[Math.floor(Math.random() * persona.fallbackResponses.length)];

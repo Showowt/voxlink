@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
       .map((m) => `${m.sender === "me" ? "You" : "Partner"}: ${m.original}${m.translated ? ` [Translation: ${m.translated}]` : ""}`)
       .join("\n");
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = process.env.ANTHROPIC_API_KEY2 || process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       // Fallback without AI — basic summary
       return NextResponse.json({

@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Verify API key is configured ──────────────────────────────────────────
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.ANTHROPIC_API_KEY2 || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     console.error("[Cyrano] ANTHROPIC_API_KEY is not set.");
     return NextResponse.json(
