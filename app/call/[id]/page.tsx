@@ -42,6 +42,7 @@ import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { useCallRecording } from "@/hooks/useCallRecording";
 import RecordingIndicator from "../../components/RecordingIndicator";
 import { saveRecording } from "@/app/lib/recording-storage";
+import LearningMode, { useLearningMode, TappableCaption } from "../../components/LearningMode";
 
 // Text-to-Speech helper — loud and fast
 // iOS Safari: voices load asynchronously; we must wait for them before speaking.
@@ -676,8 +677,8 @@ function VideoCallContent() {
   // iOS Safari autoplay workaround — shows "Tap to hear audio" overlay
   const [needsAudioUnmute, setNeedsAudioUnmute] = useState(false);
 
-  // Learning Mode state
-  const [learningMode, setLearningMode] = useState(false);
+  // Learning Mode — tappable captions + vocabulary builder
+  const learning = useLearningMode();
 
   // Cultural Whispers state
   const [culturalWhispersEnabled] = useState(true);
@@ -1962,12 +1963,18 @@ function VideoCallContent() {
         <div className="absolute bottom-20 md:bottom-24 inset-x-0 px-2 md:px-4 space-y-1.5 pointer-events-none z-20 max-h-[40vh] overflow-y-auto">
           {/* Partner's speech */}
           {theirLiveText && (
-            <div className="flex justify-start caption-slide-in">
+            <div className={`flex justify-start caption-slide-in ${learning.enabled ? "pointer-events-auto" : ""}`}>
               <div className="max-w-[95%] md:max-w-[80%]">
                 <div className="bg-black/80 backdrop-blur-md rounded-lg px-3 py-2">
                   <p className="text-white/70 text-xs leading-snug">
                     <span className="text-purple-400 font-medium">{partnerName || "Partner"}</span>{" "}
-                    {theirLiveText}
+                    <TappableCaption
+                      text={theirLiveText}
+                      sourceLang={partnerLang || expectedPartnerLang}
+                      targetLang={userLang}
+                      onWordSaved={learning.saveWord}
+                      enabled={learning.enabled}
+                    />
                   </p>
                   {theirLiveTranslation && (
                     <p
@@ -1979,7 +1986,13 @@ function VideoCallContent() {
                             : "text-lg"
                       }`}
                     >
-                      {theirLiveTranslation}
+                      <TappableCaption
+                        text={theirLiveTranslation}
+                        sourceLang={userLang}
+                        targetLang={partnerLang || expectedPartnerLang}
+                        onWordSaved={learning.saveWord}
+                        enabled={learning.enabled}
+                      />
                     </p>
                   )}
                 </div>
@@ -1989,7 +2002,7 @@ function VideoCallContent() {
 
           {/* My speech */}
           {myLiveText && (
-            <div className="flex justify-end caption-slide-in">
+            <div className={`flex justify-end caption-slide-in ${learning.enabled ? "pointer-events-auto" : ""}`}>
               <div className="max-w-[95%] md:max-w-[80%]">
                 <div className="bg-black/80 backdrop-blur-md rounded-lg px-3 py-2">
                   <p className="text-white/70 text-xs leading-snug">
@@ -2007,7 +2020,14 @@ function VideoCallContent() {
                             : "text-lg"
                       }`}
                     >
-                      → {myLiveTranslation}
+                      →{" "}
+                      <TappableCaption
+                        text={myLiveTranslation}
+                        sourceLang={partnerLang || expectedPartnerLang}
+                        targetLang={userLang}
+                        onWordSaved={learning.saveWord}
+                        enabled={learning.enabled}
+                      />
                     </p>
                   )}
                 </div>
@@ -2391,6 +2411,15 @@ function VideoCallContent() {
               <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
             )}
           </button>
+
+          {/* Learning Mode Toggle */}
+          <LearningMode
+            enabled={learning.enabled}
+            onToggle={learning.toggle}
+            partnerLang={partnerLang || expectedPartnerLang}
+            userLang={userLang}
+            savedWords={learning.savedWords}
+          />
 
           {/* Voice Dubbing Toggle */}
           {isConnected && (

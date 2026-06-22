@@ -21,6 +21,7 @@ import {
 import ReconnectingOverlay from "../../components/ReconnectingOverlay";
 import { useBrowserSupport } from "../../lib/browser-support";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
+import LearningMode, { useLearningMode, TappableCaption } from "../../components/LearningMode";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // VOXXO TALK MODE - FaceTime-Quality Live Translation
@@ -102,6 +103,9 @@ function TalkContent() {
   const [isRoomFull, setIsRoomFull] = useState(false);
   const [partnerName, setPartnerName] = useState("");
   const [partnerLang, setPartnerLang] = useState<string | null>(null);
+
+  // Learning Mode
+  const learning = useLearningMode();
 
   // Speech state
   const [isListening, setIsListening] = useState(false);
@@ -1194,14 +1198,36 @@ function TalkContent() {
                 <p
                   className={`text-white ${fontSizeClasses[fontSize]} leading-relaxed mb-1`}
                 >
-                  {entry.speaker === "me" ? entry.original : entry.translated}
+                  {entry.speaker === "me" ? (
+                    entry.original
+                  ) : (
+                    <TappableCaption
+                      text={entry.translated}
+                      sourceLang={userLang}
+                      targetLang={entry.sourceLang}
+                      onWordSaved={learning.saveWord}
+                      enabled={learning.enabled}
+                    />
+                  )}
                 </p>
 
                 {/* Secondary: Original in smaller muted text */}
                 <p className="text-gray-500 text-sm">
-                  {entry.speaker === "me"
-                    ? `→ ${entry.translated}`
-                    : `(${entry.original})`}
+                  {entry.speaker === "me" ? (
+                    <>→ {entry.translated}</>
+                  ) : (
+                    <>
+                      (
+                      <TappableCaption
+                        text={entry.original}
+                        sourceLang={entry.sourceLang}
+                        targetLang={userLang}
+                        onWordSaved={learning.saveWord}
+                        enabled={learning.enabled}
+                      />
+                      )
+                    </>
+                  )}
                 </p>
 
                 {/* TTS buttons */}
@@ -1274,7 +1300,13 @@ function TalkContent() {
                 <p
                   className={`text-purple-200 ${fontSizeClasses[fontSize]} leading-relaxed flex-1`}
                 >
-                  {partnerLiveTranslation}
+                  <TappableCaption
+                    text={partnerLiveTranslation}
+                    sourceLang={userLang}
+                    targetLang={partnerLang || defaultTargetLang}
+                    onWordSaved={learning.saveWord}
+                    enabled={learning.enabled}
+                  />
                 </p>
               </div>
             )}
@@ -1355,6 +1387,15 @@ function TalkContent() {
               </svg>
             )}
           </button>
+
+          {/* Learning Mode */}
+          <LearningMode
+            enabled={learning.enabled}
+            onToggle={learning.toggle}
+            partnerLang={partnerLang || defaultTargetLang}
+            userLang={userLang}
+            savedWords={learning.savedWords}
+          />
 
           <button
             onClick={() =>

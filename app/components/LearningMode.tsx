@@ -1,8 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
-
-const FEATURE_LEARNING_MODE = true;
+import { useState, useCallback, useRef } from "react";
 
 interface LearnedWord {
   original: string;
@@ -17,6 +15,16 @@ interface LearningModeProps {
   onToggle: () => void;
   partnerLang: string;
   userLang: string;
+  savedWords: LearnedWord[];
+}
+
+interface TappableCaptionProps {
+  text: string;
+  sourceLang: string;
+  targetLang: string;
+  onWordSaved: (original: string, translation: string, lang: string) => void;
+  enabled: boolean;
+  className?: string;
 }
 
 // Storage key
@@ -33,7 +41,6 @@ function getStoredWords(): LearnedWord[] {
 
 function storeWord(word: LearnedWord) {
   const words = getStoredWords();
-  // Avoid duplicates
   const exists = words.find((w) => w.original === word.original && w.lang === word.lang);
   if (exists) {
     exists.reviewCount++;
@@ -41,7 +48,6 @@ function storeWord(word: LearnedWord) {
   } else {
     words.unshift(word);
   }
-  // Keep max 200 words
   localStorage.setItem(STORAGE_KEY, JSON.stringify(words.slice(0, 200)));
 }
 
@@ -71,16 +77,123 @@ export function useLearningMode() {
   return { enabled, toggle, savedWords, saveWord };
 }
 
+// ═══════════════════════════════════════════════════════════════
+// TAPPABLE CAPTION — tap any word to save it to vocabulary
+// Shows inline toast on save, translates single words via API
+// ═══════════════════════════════════════════════════════════════
+
+export function TappableCaption({
+  text,
+  sourceLang,
+  targetLang,
+  onWordSaved,
+  enabled,
+  className = "",
+}: TappableCaptionProps) {
+  const [savingWord, setSavingWord] = useState<string | null>(null);
+  const [savedFlash, setSavedFlash] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const handleWordTap = useCallback(async (word: string) => {
+    // Strip punctuation for lookup, keep original for display
+    const cleaned = word.replace(/^[^\w\u00C0-\u024F]+|[^\w\u00C0-\u024F]+$/g, "");
+    if (!cleaned || cleaned.length < 2) return;
+
+    // Cancel any in-flight request
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setSavingWord(cleaned);
+    try {
+      const res = await fetch("/api/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: cleaned,
+          sourceLang,
+          targetLang,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) throw new Error("Translation failed");
+      const data = await res.json();
+
+      if (data.translation) {
+        onWordSaved(cleaned, data.translation, sourceLang);
+        setSavedFlash(cleaned);
+        setTimeout(() => setSavedFlash(null), 1200);
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") return;
+      console.error("[LearningMode] Word translate failed:", err);
+    } finally {
+      setSavingWord(null);
+    }
+  }, [sourceLang, targetLang, onWordSaved]);
+
+  // When disabled, render plain text
+  if (!enabled) {
+    return <span className={className}>{text}</span>;
+  }
+
+  const words = text.split(/(\s+)/);
+
+  return (
+    <span className={className}>
+      {words.map((segment, i) => {
+        // Whitespace — render as-is
+        if (/^\s+$/.test(segment)) {
+          return <span key={i}>{segment}</span>;
+        }
+
+        const cleaned = segment.replace(/^[^\w\u00C0-\u024F]+|[^\w\u00C0-\u024F]+$/g, "");
+        const isSaving = savingWord === cleaned;
+        const justSaved = savedFlash === cleaned;
+
+        return (
+          <button
+            key={i}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleWordTap(segment);
+            }}
+            className={`inline px-0 py-0 leading-inherit transition-all duration-200 rounded-sm ${
+              justSaved
+                ? "bg-amber-400/30 text-amber-200"
+                : isSaving
+                  ? "bg-white/20 animate-pulse"
+                  : "hover:bg-white/15 active:bg-amber-400/20 underline decoration-dotted decoration-white/20 underline-offset-2"
+            }`}
+            style={{ cursor: "pointer", border: "none", background: justSaved ? undefined : isSaving ? undefined : "transparent", font: "inherit", color: "inherit" }}
+            title={`Tap to save "${cleaned}"`}
+          >
+            {segment}
+            {justSaved && (
+              <span className="ml-0.5 text-amber-400 text-[10px] animate-bounce inline-block">✓</span>
+            )}
+          </button>
+        );
+      })}
+    </span>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LEARNING MODE PANEL + TOGGLE BUTTON
+// ═══════════════════════════════════════════════════════════════
+
 export default function LearningMode({
   enabled,
   onToggle,
   partnerLang,
   userLang,
+  savedWords,
 }: LearningModeProps) {
-  const [words] = useState<LearnedWord[]>(() => getStoredWords());
   const [showVocab, setShowVocab] = useState(false);
-
-  if (!FEATURE_LEARNING_MODE) return null;
+  const words = savedWords.length > 0 ? savedWords : getStoredWords();
 
   return (
     <>
@@ -88,21 +201,26 @@ export default function LearningMode({
       <button
         onClick={onToggle}
         title="Learning Mode"
-        className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center text-lg md:text-xl transition-all ${
+        className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center text-lg md:text-xl transition-all active:scale-95 relative ${
           enabled
-            ? "bg-amber-500/20 text-amber-400 border border-amber-500/40"
+            ? "bg-amber-500/20 text-amber-400 border-[1.5px] border-amber-500/40"
             : "bg-white/10 text-white hover:bg-white/20"
         }`}
+        style={enabled ? { boxShadow: "0 0 16px rgba(245,158,11,0.2)" } : undefined}
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
         </svg>
+        {enabled && (
+          <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+        )}
       </button>
 
       {/* Vocabulary panel */}
       {enabled && showVocab && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/80 backdrop-blur-sm" onClick={() => setShowVocab(false)}>
           <div
+            onClick={(e) => e.stopPropagation()}
             className="w-full max-w-sm max-h-[70vh] overflow-hidden mx-4 mb-4 md:mb-0 rounded-2xl flex flex-col"
             style={{
               background: "linear-gradient(180deg, #111114 0%, #0a0a0e 100%)",
@@ -115,7 +233,7 @@ export default function LearningMode({
               </h3>
               <button
                 onClick={() => setShowVocab(false)}
-                className="text-white/40 hover:text-white/70 p-2"
+                className="text-white/40 hover:text-white/70 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center"
               >
                 ✕
               </button>
@@ -123,13 +241,13 @@ export default function LearningMode({
             <div className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-2" style={{ WebkitOverflowScrolling: 'touch' }}>
               {words.length === 0 ? (
                 <p className="text-white/40 text-xs text-center py-8">
-                  Tap words during a call to save them here
+                  Tap words in captions to save them here
                 </p>
               ) : (
                 words.slice(0, 50).map((w, i) => (
-                  <div key={i} className="flex items-center justify-between p-2 bg-white/5 rounded-lg">
+                  <div key={`${w.original}-${w.lang}-${i}`} className="flex items-center justify-between p-2.5 bg-white/5 rounded-lg">
                     <div>
-                      <p className="text-white text-sm">{w.original}</p>
+                      <p className="text-white text-sm font-medium">{w.original}</p>
                       <p className="text-[#00C896] text-xs">{w.translation}</p>
                     </div>
                     <span className="text-white/20 text-[10px]">×{w.reviewCount}</span>
@@ -141,14 +259,14 @@ export default function LearningMode({
         </div>
       )}
 
-      {/* Indicator badge */}
+      {/* Floating indicator badge — tap to open vocab panel */}
       {enabled && !showVocab && (
         <button
           onClick={() => setShowVocab(true)}
-          className="absolute top-safe left-1 z-30 flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-amber-500/15 text-amber-400 border border-amber-500/30"
-          style={{ top: "max(3.5rem, calc(env(safe-area-inset-top) + 2.5rem))" }}
+          className="fixed z-30 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium bg-amber-500/15 text-amber-400 border border-amber-500/30 backdrop-blur-sm active:scale-95 transition-all"
+          style={{ top: "max(3.5rem, calc(env(safe-area-inset-top) + 2.5rem))", left: "0.5rem" }}
         >
-          📖 Learning: ON
+          📖 Learning{words.length > 0 ? ` (${words.length})` : ""}
         </button>
       )}
     </>

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useGroupCall } from '@/hooks/useGroupCall';
 import type { SlotIndex } from '@/app/lib/group-call/types';
+import LearningMode, { useLearningMode, TappableCaption } from '@/app/components/LearningMode';
 
 const LANGUAGES = [
   { code: 'en', name: 'English', flag: '\u{1F1FA}\u{1F1F8}' },
@@ -72,6 +73,7 @@ export default function GroupCallPage() {
   const [lobbyErr, setLobbyErr] = useState('');
   const [isJoining, setIsJoining] = useState(false);
   const [showSubtitles, setShowSubtitles] = useState(true);
+  const learning = useLearningMode();
   const [shareMsg, setShareMsg] = useState('');
 
   // Video refs
@@ -468,14 +470,27 @@ export default function GroupCallPage() {
                   <div className="min-w-0 flex-1">
                     <span className={`text-xs mr-1 ${isMe ? 'text-[#00C896]/60' : 'text-white/40'}`}>{sub.speakerName}:</span>
                     <span className="text-white/60 text-xs leading-snug">
-                      {sub.original}
+                      <TappableCaption
+                        text={sub.original}
+                        sourceLang={sub.speakerLanguage}
+                        targetLang={gc.myLanguage}
+                        onWordSaved={learning.saveWord}
+                        enabled={learning.enabled}
+                      />
                     </span>
                     {isTranslating && (
                       <span className="text-white/30 text-xs italic ml-1">translating...</span>
                     )}
                     {hasTranslation && (
                       <p className="text-white text-sm font-medium leading-snug mt-0.5">
-                        → {sub.translated}
+                        →{" "}
+                        <TappableCaption
+                          text={sub.translated!}
+                          sourceLang={gc.myLanguage}
+                          targetLang={sub.speakerLanguage}
+                          onWordSaved={learning.saveWord}
+                          enabled={learning.enabled}
+                        />
                       </p>
                     )}
                     {isSameLang && !isMe && (
@@ -543,6 +558,15 @@ export default function GroupCallPage() {
             </option>
           ))}
         </select>
+
+        {/* Learning Mode */}
+        <LearningMode
+          enabled={learning.enabled}
+          onToggle={learning.toggle}
+          partnerLang=""
+          userLang={gc.myLanguage}
+          savedWords={learning.savedWords}
+        />
 
         {/* Share */}
         <button
