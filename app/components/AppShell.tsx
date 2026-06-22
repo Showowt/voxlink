@@ -3,6 +3,7 @@
 import { useEffect, useState, ReactNode } from "react";
 import ErrorBoundary from "./ErrorBoundary";
 import AccessGate, { STORAGE_KEY } from "./AccessGate";
+import BottomNav from "./BottomNav";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // APP SHELL - Wraps entire app with error handling and self-healing
@@ -77,6 +78,7 @@ export default function AppShell({ children }: AppShellProps) {
         <OfflineIndicator />
         <LogoutButton />
         {children}
+        <BottomNav />
       </AccessGate>
     </ErrorBoundary>
   );

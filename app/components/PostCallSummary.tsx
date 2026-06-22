@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { getDeviceId } from "@/app/lib/language-os/device-id";
 
 const FEATURE_POST_CALL = true;
 
@@ -43,6 +44,7 @@ export default function PostCallSummary({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [vocabSaved, setVocabSaved] = useState(false);
 
   const generateSummary = useCallback(async () => {
     setLoading(true);
@@ -59,6 +61,20 @@ export default function PostCallSummary({
 
       const data = await res.json();
       setSummary(data);
+
+      // Fire-and-forget: push key phrases to Language OS vocab bridge
+      if (data.keyPhrases?.length > 0 && languages.length >= 2) {
+        const words = (data.keyPhrases as Array<{ original: string }>).map((p) => p.original);
+        const [sourceLang, targetLang] = languages;
+        const deviceId = getDeviceId();
+        fetch("/api/language-os/entrevoz-bridge", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ words, sourceLang, targetLang, deviceId }),
+        })
+          .then((r) => { if (r.ok) setVocabSaved(true); })
+          .catch((bridgeErr) => console.error("[PostCall] vocab bridge", bridgeErr));
+      }
 
       // Save to localStorage
       const history = JSON.parse(localStorage.getItem("entrevoz_summaries") || "[]");
@@ -176,9 +192,19 @@ export default function PostCallSummary({
             {/* Key Phrases */}
             {summary.keyPhrases.length > 0 && (
               <div>
-                <h3 className="text-white/60 text-xs font-medium uppercase tracking-wider mb-2">
-                  Key Phrases
-                </h3>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-white/60 text-xs font-medium uppercase tracking-wider">
+                    Key Phrases
+                  </h3>
+                  {vocabSaved && (
+                    <span className="flex items-center gap-1 text-[10px] text-[#00C896]/70">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Vocab saved to Language OS
+                    </span>
+                  )}
+                </div>
                 <div className="space-y-2">
                   {summary.keyPhrases.map((phrase, i) => (
                     <div key={i} className="bg-white/5 rounded-lg p-2.5 border-l-2 border-[#00C896]/50">

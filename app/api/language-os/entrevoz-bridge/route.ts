@@ -17,6 +17,27 @@ function checkLimit(ip: string, max: number): boolean {
 
 export const dynamic = "force-dynamic";
 
+async function translateWord(word: string, from: string, to: string): Promise<string | null> {
+  try {
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${from}&tl=${to}&dt=t&q=${encodeURIComponent(word)}`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json() as Array<Array<Array<string>>>;
+    if (Array.isArray(data) && Array.isArray(data[0])) {
+      const result = data[0].map((item) => item[0]).join("").trim();
+      // Reject if translation came back identical to the source word (unsupported pair or error)
+      if (result.toLowerCase() === word.toLowerCase()) return null;
+      return result || null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // Common stop words to filter out
 const STOP_WORDS = new Set([
   "el", "la", "los", "las", "un", "una", "de", "en", "que", "y", "a",
@@ -33,7 +54,89 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { userId, languagePair, transcript, conversationId, durationSeconds } = await req.json();
+    const body = await req.json();
+
+    // Support two payload formats:
+    // 1. PostCallSummary: { words, sourceLang, targetLang, deviceId }
+    // 2. Original: { userId, languagePair, transcript, conversationId, durationSeconds }
+    if (body.words && body.sourceLang && body.targetLang) {
+      // PostCallSummary format — simplified word import
+      const { words, sourceLang, targetLang, deviceId } = body as {
+        words: string[];
+        sourceLang: string;
+        targetLang: string;
+        deviceId: string;
+      };
+
+      const userId = deviceId || "anonymous";
+      const languagePair = `${sourceLang}-${targetLang}`;
+      const wordsToProcess = (words || [])
+        .filter((w: string) => typeof w === "string" && w.length >= 2)
+        .slice(0, 10);
+
+      if (wordsToProcess.length === 0) {
+        return NextResponse.json({ wordsImported: 0, cardsCreated: 0, sampleWords: [] });
+      }
+
+      // Translate all words
+      const translationResults = await Promise.allSettled(
+        wordsToProcess.map((word: string) => translateWord(word, targetLang, sourceLang))
+      );
+
+      const translatedWords: Map<string, string> = new Map();
+      for (let i = 0; i < wordsToProcess.length; i++) {
+        const result = translationResults[i];
+        if (result.status === "fulfilled" && result.value) {
+          translatedWords.set(wordsToProcess[i], result.value);
+        }
+      }
+
+      let cardsCreated = 0;
+      const sampleWords: string[] = [];
+
+      if (losClient) {
+        const sm2Defaults = getInitialCard();
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        for (const word of wordsToProcess) {
+          const translation = translatedWords.get(word);
+          if (!translation) continue;
+
+          try {
+            const { error } = await losClient.from("los_srs_cards").insert({
+              user_id: userId,
+              language_pair: languagePair,
+              front: word,
+              back: translation,
+              audio_text: word,
+              card_type: "vocab",
+              source: "conversation",
+              ease_factor: sm2Defaults.easeFactor,
+              interval_days: sm2Defaults.intervalDays,
+              repetitions: sm2Defaults.repetitions,
+              next_review_date: tomorrow.toISOString().split("T")[0],
+            });
+
+            if (!error) {
+              cardsCreated++;
+              if (sampleWords.length < 3) sampleWords.push(word);
+            }
+          } catch {
+            // Continue on individual card failure
+          }
+        }
+      }
+
+      return NextResponse.json({
+        wordsImported: translatedWords.size,
+        cardsCreated,
+        sampleWords,
+      });
+    }
+
+    // Original format
+    const { userId, languagePair, transcript, conversationId, durationSeconds } = body;
 
     if (!userId || !languagePair || !transcript) {
       return NextResponse.json({ error: "Missing fields" }, { status: 400 });
@@ -75,6 +178,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ wordsImported: 0, cardsCreated: 0, sampleWords: [] });
     }
 
+    // Determine translation direction: foreign word (targetLang) → user's native language
+    const nativeLang = languagePair.split("-")[0] || "en";
+
+    // Translate all candidate words in parallel before inserting cards
+    const wordsToProcess = uniqueWords.slice(0, 10);
+
+    const translationResults = await Promise.allSettled(
+      wordsToProcess.map((word) => translateWord(word, targetLang, nativeLang))
+    );
+
+    // Build a map of word → translation, skipping any that failed
+    const translatedWords: Map<string, string> = new Map();
+    for (let i = 0; i < wordsToProcess.length; i++) {
+      const result = translationResults[i];
+      if (result.status === "fulfilled" && result.value) {
+        translatedWords.set(wordsToProcess[i], result.value);
+      }
+    }
+
     // Create SRS cards for discovered words
     let cardsCreated = 0;
     const sampleWords: string[] = [];
@@ -83,13 +205,17 @@ export async function POST(req: NextRequest) {
     tomorrow.setDate(tomorrow.getDate() + 1);
 
     if (losClient) {
-      for (const word of uniqueWords.slice(0, 10)) {
+      for (const word of wordsToProcess) {
+        const translation = translatedWords.get(word);
+        // Skip words where translation failed — no broken cards
+        if (!translation) continue;
+
         try {
           const { error } = await losClient.from("los_srs_cards").insert({
             user_id: userId,
             language_pair: languagePair,
             front: word,
-            back: word, // Will be enriched later with translations
+            back: translation,
             audio_text: word,
             card_type: "vocab",
             source: "conversation",
@@ -109,7 +235,7 @@ export async function POST(req: NextRequest) {
       }
 
       if (cardsCreated === 0 && uniqueWords.length > 0) {
-        console.error('[LangOS Entrevoz Bridge] All SRS card insertions failed');
+        console.error('[LangOS Entrevoz Bridge] All SRS card insertions failed — translation may have returned no results');
         return NextResponse.json({ error: 'All card insertions failed', wordsImported: 0, cardsCreated: 0, sampleWords: [] }, { status: 500 });
       }
 
