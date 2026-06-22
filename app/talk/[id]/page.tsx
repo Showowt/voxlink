@@ -21,7 +21,7 @@ import {
 import ReconnectingOverlay from "../../components/ReconnectingOverlay";
 import { useBrowserSupport } from "../../lib/browser-support";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
-import LearningMode, { useLearningMode, TappableCaption } from "../../components/LearningMode";
+import LearningMode, { useLearningMode, TappableCaption, LearningInsightCard } from "../../components/LearningMode";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // VOXXO TALK MODE - FaceTime-Quality Live Translation
@@ -382,6 +382,11 @@ function TalkContent() {
             timestamp: new Date(payload.timestamp),
             sourceLang: partnerSourceLang,
           });
+
+          // Feed to learning engine
+          if (learning.enabled) {
+            learning.addTurn("partner", payload.original, translatedForUs, partnerSourceLang, userLang, partnerSourceLang);
+          }
         }
 
         // ═══════════════════════════════════════════════════════════════════
@@ -659,6 +664,11 @@ function TalkContent() {
                 sourceLang: userLang,
               });
 
+              // Feed to learning engine
+              if (learning.enabled) {
+                learning.addTurn("me", finalizedText.trim(), transcriptTranslated, userLang, userLang, transcriptTargetLang);
+              }
+
               sendToPartner({
                 type: "message",
                 data: {
@@ -701,6 +711,11 @@ function TalkContent() {
           timestamp: new Date(),
           sourceLang: userLang,
         });
+
+        // Feed to learning engine
+        if (learning.enabled) {
+          learning.addTurn("me", newFinal.trim(), translated, userLang, userLang, currentTargetLang);
+        }
 
         sendToPartner({
           type: "message",
@@ -1273,6 +1288,19 @@ function TalkContent() {
 
           <div ref={historyEndRef} />
         </div>
+
+        {/* Learning Insight Card */}
+        {learning.enabled && (learning.insight || learning.insightLoading) && (
+          <div className="border-t border-amber-500/10 bg-black/60 backdrop-blur-sm px-3 py-2 flex-shrink-0 max-h-[30vh] overflow-y-auto">
+            <LearningInsightCard
+              insight={learning.insight!}
+              isLoading={learning.insightLoading}
+              onSaveWord={learning.saveWord}
+              partnerLang={partnerLang || defaultTargetLang}
+              onDismiss={learning.dismissInsight}
+            />
+          </div>
+        )}
 
         {/* ═══════════════════════════════════════════════════════════════════ */}
         {/* LIVE CAPTIONS - Clean, minimal, non-overlapping */}

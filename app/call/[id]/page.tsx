@@ -42,7 +42,7 @@ import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { useCallRecording } from "@/hooks/useCallRecording";
 import RecordingIndicator from "../../components/RecordingIndicator";
 import { saveRecording } from "@/app/lib/recording-storage";
-import LearningMode, { useLearningMode, TappableCaption } from "../../components/LearningMode";
+import LearningMode, { useLearningMode, TappableCaption, LearningInsightCard } from "../../components/LearningMode";
 
 // Text-to-Speech helper — loud and fast
 // iOS Safari: voices load asynchronously; we must wait for them before speaking.
@@ -750,6 +750,10 @@ function VideoCallContent() {
       // Add to transcript when we have both final text and translation
       if (transcription.localFinal) {
         addToTranscript("me", userName, transcription.localFinal, transcription.localTranslated, userLang);
+        // Feed to learning engine
+        if (learning.enabled) {
+          learning.addTurn("me", transcription.localFinal, transcription.localTranslated, userLang, userLang, partnerLang || expectedPartnerLang);
+        }
       }
     }
   }, [transcription.localTranslated]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1295,6 +1299,11 @@ function VideoCallContent() {
           // Feed to Cyrano
           if (cyrano.isActive && original) {
             cyrano.addTheirLine(original);
+          }
+
+          // Feed to learning engine
+          if (learning.enabled) {
+            learning.addTurn("partner", original || text, text, resolvedFrom, userLang, partnerLang || expectedPartnerLang);
           }
         }
 
@@ -1947,6 +1956,19 @@ function VideoCallContent() {
             </>
           )}
         </div>
+
+        {/* Learning Insight Card */}
+        {learning.enabled && (learning.insight || learning.insightLoading) && (
+          <div className="absolute bottom-56 md:bottom-64 inset-x-0 px-3 md:px-4 pointer-events-auto z-10 max-h-[35vh] overflow-y-auto">
+            <LearningInsightCard
+              insight={learning.insight!}
+              isLoading={learning.insightLoading}
+              onSaveWord={learning.saveWord}
+              partnerLang={partnerLang || expectedPartnerLang}
+              onDismiss={learning.dismissInsight}
+            />
+          </div>
+        )}
 
         {/* Cultural Whisper */}
         {theirLiveText && (

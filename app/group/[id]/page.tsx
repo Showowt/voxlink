@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useGroupCall } from '@/hooks/useGroupCall';
 import type { SlotIndex } from '@/app/lib/group-call/types';
-import LearningMode, { useLearningMode, TappableCaption } from '@/app/components/LearningMode';
+import LearningMode, { useLearningMode, TappableCaption, LearningInsightCard } from '@/app/components/LearningMode';
 
 const LANGUAGES = [
   { code: 'en', name: 'English', flag: '\u{1F1FA}\u{1F1F8}' },
@@ -75,6 +75,33 @@ export default function GroupCallPage() {
   const [showSubtitles, setShowSubtitles] = useState(true);
   const learning = useLearningMode();
   const [shareMsg, setShareMsg] = useState('');
+  const lastSubCountRef = useRef(0);
+
+  // Feed new subtitles to learning engine
+  useEffect(() => {
+    if (!learning.enabled || gc.subtitles.length <= lastSubCountRef.current) {
+      lastSubCountRef.current = gc.subtitles.length;
+      return;
+    }
+    // Process only new subtitles
+    const newSubs = gc.subtitles.slice(lastSubCountRef.current);
+    lastSubCountRef.current = gc.subtitles.length;
+
+    for (const sub of newSubs) {
+      const isMe = sub.speakerSlot === gc.mySlotIndex;
+      const isSameLang = sub.speakerLanguage === gc.myLanguage;
+      if (isSameLang) continue;
+
+      learning.addTurn(
+        isMe ? "me" : "partner",
+        sub.original,
+        sub.translated || sub.original,
+        sub.speakerLanguage,
+        gc.myLanguage,
+        sub.speakerLanguage,
+      );
+    }
+  }, [gc.subtitles.length, learning.enabled]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Video refs
   const localVideoRef = useRef<HTMLVideoElement>(null);
@@ -452,6 +479,19 @@ export default function GroupCallPage() {
           );
         })}
       </div>
+
+      {/* Learning Insight Card */}
+      {learning.enabled && (learning.insight || learning.insightLoading) && (
+        <div className="flex-shrink-0 px-3 py-2 border-t border-amber-500/10 bg-black/40 max-h-[30vh] overflow-y-auto">
+          <LearningInsightCard
+            insight={learning.insight!}
+            isLoading={learning.insightLoading}
+            onSaveWord={learning.saveWord}
+            partnerLang=""
+            onDismiss={learning.dismissInsight}
+          />
+        </div>
+      )}
 
       {/* Subtitles */}
       {showSubtitles && gc.subtitles.length > 0 && (

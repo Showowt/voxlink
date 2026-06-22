@@ -1,6 +1,10 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
+
+// ═══════════════════════════════════════════════════════════════
+// TYPES
+// ═══════════════════════════════════════════════════════════════
 
 interface LearnedWord {
   original: string;
@@ -8,6 +12,36 @@ interface LearnedWord {
   lang: string;
   timestamp: number;
   reviewCount: number;
+}
+
+interface ConversationTurn {
+  speaker: "me" | "partner";
+  original: string;
+  translated: string;
+  lang: string;
+}
+
+interface VocabItem {
+  word: string;
+  meaning: string;
+  type: string;
+}
+
+interface LearningInsight {
+  keyPhrase: {
+    original: string;
+    translation: string;
+    pronunciation: string;
+    context: string;
+  } | null;
+  correction: {
+    userSaid: string;
+    betterWay: string | null;
+    explanation: string;
+  } | null;
+  grammarTip: string | null;
+  responseHint: string | null;
+  vocabWords: VocabItem[];
 }
 
 interface LearningModeProps {
@@ -27,7 +61,18 @@ interface TappableCaptionProps {
   className?: string;
 }
 
-// Storage key
+interface LearningInsightCardProps {
+  insight: LearningInsight;
+  isLoading: boolean;
+  onSaveWord: (original: string, translation: string, lang: string) => void;
+  partnerLang: string;
+  onDismiss: () => void;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// STORAGE
+// ═══════════════════════════════════════════════════════════════
+
 const STORAGE_KEY = "entrevoz_learned_words";
 
 function getStoredWords(): LearnedWord[] {
@@ -51,16 +96,30 @@ function storeWord(word: LearnedWord) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(words.slice(0, 200)));
 }
 
+// ═══════════════════════════════════════════════════════════════
+// HOOK — useLearningMode
+// Manages learning state, conversation tracking, and insights API
+// ═══════════════════════════════════════════════════════════════
+
 export function useLearningMode() {
   const [enabled, setEnabled] = useState(false);
   const [savedWords, setSavedWords] = useState<LearnedWord[]>([]);
+  const [insight, setInsight] = useState<LearningInsight | null>(null);
+  const [insightLoading, setInsightLoading] = useState(false);
+  const conversationRef = useRef<ConversationTurn[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
   const toggle = useCallback(() => {
-    setEnabled((v) => !v);
-    if (!enabled) {
-      setSavedWords(getStoredWords());
-    }
-  }, [enabled]);
+    setEnabled((v) => {
+      if (!v) {
+        setSavedWords(getStoredWords());
+        conversationRef.current = [];
+        setInsight(null);
+      }
+      return !v;
+    });
+  }, []);
 
   const saveWord = useCallback((original: string, translation: string, lang: string) => {
     const word: LearnedWord = {
@@ -74,12 +133,111 @@ export function useLearningMode() {
     setSavedWords(getStoredWords());
   }, []);
 
-  return { enabled, toggle, savedWords, saveWord };
+  // Feed a conversation turn and get learning insights
+  const addTurn = useCallback((
+    speaker: "me" | "partner",
+    original: string,
+    translated: string,
+    lang: string,
+    userLang: string,
+    partnerLang: string,
+  ) => {
+    const turn: ConversationTurn = { speaker, original, translated, lang };
+    conversationRef.current.push(turn);
+
+    // Auto-save vocab words from partner's speech
+    if (speaker === "partner" && translated) {
+      // Extract and auto-save notable words (4+ chars, not common)
+      const words = original.split(/\s+/).filter((w) => w.replace(/[^\w]/g, "").length >= 4);
+      if (words.length > 0) {
+        // Save the full phrase as a learned item
+        storeWord({
+          original,
+          translation: translated,
+          lang,
+          timestamp: Date.now(),
+          reviewCount: 1,
+        });
+        setSavedWords(getStoredWords());
+      }
+    }
+
+    // Debounce the insights API call (wait 1.5s after last turn)
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      fetchInsights(turn, userLang, partnerLang);
+    }, 1500);
+  }, []);
+
+  const fetchInsights = useCallback(async (
+    latestTurn: ConversationTurn,
+    userLang: string,
+    partnerLang: string,
+  ) => {
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setInsightLoading(true);
+    try {
+      const res = await fetch("/api/learning-insights", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversation: conversationRef.current.slice(-10),
+          userLang,
+          partnerLang,
+          latestTurn,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) throw new Error("API error");
+      const data = await res.json();
+
+      if (data.insights) {
+        setInsight(data.insights);
+
+        // Auto-save vocab words from insights
+        if (data.insights.vocabWords) {
+          for (const v of data.insights.vocabWords) {
+            storeWord({
+              original: v.word,
+              translation: v.meaning,
+              lang: partnerLang,
+              timestamp: Date.now(),
+              reviewCount: 1,
+            });
+          }
+          setSavedWords(getStoredWords());
+        }
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") return;
+      console.error("[LearningMode] Insights fetch failed:", err);
+    } finally {
+      setInsightLoading(false);
+    }
+  }, []);
+
+  const dismissInsight = useCallback(() => {
+    setInsight(null);
+  }, []);
+
+  return {
+    enabled,
+    toggle,
+    savedWords,
+    saveWord,
+    addTurn,
+    insight,
+    insightLoading,
+    dismissInsight,
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════
 // TAPPABLE CAPTION — tap any word to save it to vocabulary
-// Shows inline toast on save, translates single words via API
 // ═══════════════════════════════════════════════════════════════
 
 export function TappableCaption({
@@ -95,11 +253,9 @@ export function TappableCaption({
   const abortRef = useRef<AbortController | null>(null);
 
   const handleWordTap = useCallback(async (word: string) => {
-    // Strip punctuation for lookup, keep original for display
     const cleaned = word.replace(/^[^\w\u00C0-\u024F]+|[^\w\u00C0-\u024F]+$/g, "");
     if (!cleaned || cleaned.length < 2) return;
 
-    // Cancel any in-flight request
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -109,11 +265,7 @@ export function TappableCaption({
       const res = await fetch("/api/translate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: cleaned,
-          sourceLang,
-          targetLang,
-        }),
+        body: JSON.stringify({ text: cleaned, sourceLang, targetLang }),
         signal: controller.signal,
       });
 
@@ -133,7 +285,6 @@ export function TappableCaption({
     }
   }, [sourceLang, targetLang, onWordSaved]);
 
-  // When disabled, render plain text
   if (!enabled) {
     return <span className={className}>{text}</span>;
   }
@@ -143,7 +294,6 @@ export function TappableCaption({
   return (
     <span className={className}>
       {words.map((segment, i) => {
-        // Whitespace — render as-is
         if (/^\s+$/.test(segment)) {
           return <span key={i}>{segment}</span>;
         }
@@ -182,14 +332,145 @@ export function TappableCaption({
 }
 
 // ═══════════════════════════════════════════════════════════════
+// LEARNING INSIGHT CARD — shows real-time teaching during calls
+// ═══════════════════════════════════════════════════════════════
+
+export function LearningInsightCard({
+  insight,
+  isLoading,
+  onSaveWord,
+  partnerLang,
+  onDismiss,
+}: LearningInsightCardProps) {
+  const [savedWords, setSavedWords] = useState<Set<string>>(new Set());
+
+  if (isLoading) {
+    return (
+      <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2 backdrop-blur-sm">
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+          <span className="text-amber-300 text-xs">Analyzing conversation...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!insight) return null;
+
+  const handleSaveVocab = (word: string, meaning: string) => {
+    onSaveWord(word, meaning, partnerLang);
+    setSavedWords((prev) => new Set(prev).add(word));
+  };
+
+  return (
+    <div className="bg-black/90 border border-amber-500/25 rounded-xl overflow-hidden backdrop-blur-sm">
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 py-2 bg-amber-500/10 border-b border-amber-500/15">
+        <span className="text-amber-400 text-xs font-semibold flex items-center gap-1.5">
+          📖 Learning Insight
+        </span>
+        <button
+          onClick={onDismiss}
+          className="text-white/30 hover:text-white/60 p-1 min-w-[32px] min-h-[32px] flex items-center justify-center"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="px-3 py-2 space-y-2.5">
+        {/* Key Phrase */}
+        {insight.keyPhrase && (
+          <div>
+            <p className="text-amber-300 text-[10px] uppercase tracking-wider font-semibold mb-1">Key Phrase</p>
+            <div className="bg-white/5 rounded-lg px-2.5 py-2">
+              <p className="text-white text-sm font-medium">{insight.keyPhrase.original}</p>
+              <p className="text-[#00C896] text-xs mt-0.5">{insight.keyPhrase.translation}</p>
+              {insight.keyPhrase.pronunciation && (
+                <p className="text-white/40 text-[10px] mt-0.5 italic">/{insight.keyPhrase.pronunciation}/</p>
+              )}
+              {insight.keyPhrase.context && (
+                <p className="text-white/50 text-[10px] mt-1">{insight.keyPhrase.context}</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Correction — when user spoke */}
+        {insight.correction && (
+          <div>
+            <p className="text-amber-300 text-[10px] uppercase tracking-wider font-semibold mb-1">
+              {insight.correction.betterWay ? "Better Way to Say It" : "Nice!"}
+            </p>
+            <div className={`rounded-lg px-2.5 py-2 ${insight.correction.betterWay ? "bg-red-500/10 border border-red-500/15" : "bg-emerald-500/10 border border-emerald-500/15"}`}>
+              {insight.correction.betterWay ? (
+                <>
+                  <p className="text-white/50 text-xs line-through">{insight.correction.userSaid}</p>
+                  <p className="text-white text-sm font-medium mt-0.5">{insight.correction.betterWay}</p>
+                </>
+              ) : (
+                <p className="text-emerald-300 text-xs">{insight.correction.userSaid}</p>
+              )}
+              <p className="text-white/60 text-[10px] mt-1">{insight.correction.explanation}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Response Hint — when partner spoke */}
+        {insight.responseHint && (
+          <div>
+            <p className="text-amber-300 text-[10px] uppercase tracking-wider font-semibold mb-1">Try Responding</p>
+            <div className="bg-violet-500/10 border border-violet-500/15 rounded-lg px-2.5 py-2">
+              <p className="text-violet-200 text-sm">{insight.responseHint}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Grammar Tip */}
+        {insight.grammarTip && (
+          <div className="bg-blue-500/10 border border-blue-500/15 rounded-lg px-2.5 py-1.5">
+            <p className="text-blue-300 text-[10px] font-semibold mb-0.5">Grammar</p>
+            <p className="text-white/70 text-xs">{insight.grammarTip}</p>
+          </div>
+        )}
+
+        {/* Vocabulary */}
+        {insight.vocabWords && insight.vocabWords.length > 0 && (
+          <div>
+            <p className="text-amber-300 text-[10px] uppercase tracking-wider font-semibold mb-1">Vocabulary</p>
+            <div className="space-y-1">
+              {insight.vocabWords.map((v, i) => (
+                <button
+                  key={`${v.word}-${i}`}
+                  onClick={() => handleSaveVocab(v.word, v.meaning)}
+                  className="w-full flex items-center justify-between px-2.5 py-1.5 bg-white/5 rounded-lg hover:bg-white/10 transition-all text-left"
+                >
+                  <div>
+                    <span className="text-white text-xs font-medium">{v.word}</span>
+                    <span className="text-white/30 text-[10px] ml-1.5">{v.type}</span>
+                    <p className="text-[#00C896] text-[10px]">{v.meaning}</p>
+                  </div>
+                  {savedWords.has(v.word) ? (
+                    <span className="text-amber-400 text-xs">✓</span>
+                  ) : (
+                    <span className="text-white/20 text-[10px]">+save</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
 // LEARNING MODE PANEL + TOGGLE BUTTON
 // ═══════════════════════════════════════════════════════════════
 
 export default function LearningMode({
   enabled,
   onToggle,
-  partnerLang,
-  userLang,
   savedWords,
 }: LearningModeProps) {
   const [showVocab, setShowVocab] = useState(false);
@@ -241,16 +522,16 @@ export default function LearningMode({
             <div className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-2" style={{ WebkitOverflowScrolling: 'touch' }}>
               {words.length === 0 ? (
                 <p className="text-white/40 text-xs text-center py-8">
-                  Tap words in captions to save them here
+                  Words from your conversations will appear here
                 </p>
               ) : (
                 words.slice(0, 50).map((w, i) => (
                   <div key={`${w.original}-${w.lang}-${i}`} className="flex items-center justify-between p-2.5 bg-white/5 rounded-lg">
-                    <div>
-                      <p className="text-white text-sm font-medium">{w.original}</p>
-                      <p className="text-[#00C896] text-xs">{w.translation}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-white text-sm font-medium truncate">{w.original}</p>
+                      <p className="text-[#00C896] text-xs truncate">{w.translation}</p>
                     </div>
-                    <span className="text-white/20 text-[10px]">×{w.reviewCount}</span>
+                    <span className="text-white/20 text-[10px] ml-2 shrink-0">×{w.reviewCount}</span>
                   </div>
                 ))
               )}
@@ -259,7 +540,7 @@ export default function LearningMode({
         </div>
       )}
 
-      {/* Floating indicator badge — tap to open vocab panel */}
+      {/* Floating indicator badge */}
       {enabled && !showVocab && (
         <button
           onClick={() => setShowVocab(true)}
