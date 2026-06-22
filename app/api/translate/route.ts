@@ -311,7 +311,7 @@ async function translateClaude(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6-20250627",
         max_tokens: 300,
         messages: [
           {

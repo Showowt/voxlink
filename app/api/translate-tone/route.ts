@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6-20250627",
         max_tokens: 150,
         system: `You are a real-time translation engine for a live conversation. ${toneInstruction} Translate from ${LANG_NAMES[from] || from} to ${LANG_NAMES[to] || to}. Output ONLY the translated text. No quotes, no explanation, no extra text.`,
         messages: [{ role: "user", content: text }],
