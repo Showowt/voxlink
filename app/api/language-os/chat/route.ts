@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6-20250627",
+        model: "claude-3-5-sonnet-20241022",
         max_tokens: 600,
         system: systemPrompt,
         messages: chatMessages,
@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
             "anthropic-version": "2023-06-01",
           },
           body: JSON.stringify({
-            model: "claude-sonnet-4-6-20250627",
+            model: "claude-3-5-sonnet-20241022",
             max_tokens: 200,
             system: `Translate the following ${config.targetLanguage} text to ${config.sourceLanguage}. Output ONLY the translation.`,
             messages: [{ role: "user", content: reply }],
