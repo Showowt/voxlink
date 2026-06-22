@@ -69,6 +69,7 @@ export async function POST(req: NextRequest) {
         fpEarned: 2,
         sessionId: body.sessionId || crypto.randomUUID(),
         error: "AI_UNAVAILABLE",
+        debug: "ANTHROPIC_API_KEY not configured",
       });
     }
 
@@ -90,13 +91,14 @@ export async function POST(req: NextRequest) {
 
     if (!response.ok) {
       const errorBody = await response.text().catch(() => "");
-      console.error(`[LangOS Chat] Claude API error: ${response.status} ${response.statusText}`, errorBody.slice(0, 500));
+      console.error(`[LangOS Chat] Claude API HTTP ${response.status}: ${errorBody.slice(0, 500)}`);
       const fallback = persona.fallbackResponses[Math.floor(Math.random() * persona.fallbackResponses.length)];
       return NextResponse.json({
         reply: fallback,
         fpEarned: 2,
         sessionId: body.sessionId || crypto.randomUUID(),
         error: "AI_UNAVAILABLE",
+        debug: `HTTP ${response.status}: ${errorBody.slice(0, 200)}`,
       });
     }
 
