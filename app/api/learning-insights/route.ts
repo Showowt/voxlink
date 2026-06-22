@@ -123,10 +123,10 @@ Analyze this exchange and provide learning insights.`;
       headers: {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
-        "anthropic-version": "2024-10-22",
+        "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-3-5-sonnet-latest",
+        model: "claude-3-haiku-20240307",
         max_tokens: 600,
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],

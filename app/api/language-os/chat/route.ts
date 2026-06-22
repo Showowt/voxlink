@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
       chatMessages.push({ role: "user", content: getCorrectionFor });
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
     if (!apiKey) {
       console.error("[LangOS Chat] ANTHROPIC_API_KEY not set");
       const fallback = persona.fallbackResponses[Math.floor(Math.random() * persona.fallbackResponses.length)];
@@ -78,10 +78,10 @@ export async function POST(req: NextRequest) {
       headers: {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
-        "anthropic-version": "2024-10-22",
+        "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-3-5-sonnet-latest",
+        model: "claude-3-haiku-20240307",
         max_tokens: 600,
         system: systemPrompt,
         messages: chatMessages,
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
         fpEarned: 2,
         sessionId: body.sessionId || crypto.randomUUID(),
         error: "AI_UNAVAILABLE",
-        debug: `HTTP ${response.status}: ${errorBody.slice(0, 200)}`,
+        debug: `HTTP ${response.status} | key=${apiKey.slice(0, 10)}... | ${errorBody.slice(0, 200)}`,
       });
     }
 
@@ -121,10 +121,10 @@ export async function POST(req: NextRequest) {
           headers: {
             "Content-Type": "application/json",
             "x-api-key": apiKey,
-            "anthropic-version": "2024-10-22",
+            "anthropic-version": "2023-06-01",
           },
           body: JSON.stringify({
-            model: "claude-3-5-sonnet-latest",
+            model: "claude-3-haiku-20240307",
             max_tokens: 200,
             system: `Translate the following ${config.targetLanguage} text to ${config.sourceLanguage}. Output ONLY the translation.`,
             messages: [{ role: "user", content: reply }],

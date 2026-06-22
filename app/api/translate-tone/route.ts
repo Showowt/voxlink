@@ -66,10 +66,10 @@ export async function POST(req: NextRequest) {
       headers: {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
-        "anthropic-version": "2024-10-22",
+        "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-3-5-sonnet-latest",
+        model: "claude-3-haiku-20240307",
         max_tokens: 150,
         system: `You are a real-time translation engine for a live conversation. ${toneInstruction} Translate from ${LANG_NAMES[from] || from} to ${LANG_NAMES[to] || to}. Output ONLY the translated text. No quotes, no explanation, no extra text.`,
         messages: [{ role: "user", content: text }],
