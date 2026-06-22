@@ -126,7 +126,7 @@ Analyze this exchange and provide learning insights.`;
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-3-5-sonnet-20241022",
+        model: "claude-3-5-sonnet-latest",
         max_tokens: 600,
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
