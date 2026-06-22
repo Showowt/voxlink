@@ -117,10 +117,16 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
       const assistantMsg: SessionMessage = {
         role: "assistant",
         content: data.reply || "...",
-        correction: data.correction,
-        translation: data.translation,
+        correction: data.error === "AI_UNAVAILABLE" ? undefined : data.correction,
+        translation: data.error === "AI_UNAVAILABLE" ? undefined : data.translation,
         timestamp: new Date().toISOString(),
       };
+
+      // If AI is unavailable, append a note so user knows
+      if (data.error === "AI_UNAVAILABLE") {
+        assistantMsg.content += "\n\n⚠️ AI tutor offline — using cached responses. Corrections and translations are temporarily unavailable.";
+      }
+
       setMessages((prev) => [...prev, assistantMsg]);
 
       // Update progress locally

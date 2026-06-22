@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      // Fallback: return random persona response
+      console.error("[LangOS Chat] ANTHROPIC_API_KEY not set");
       const fallback = persona.fallbackResponses[Math.floor(Math.random() * persona.fallbackResponses.length)];
       return NextResponse.json({
         reply: fallback,
@@ -89,6 +89,8 @@ export async function POST(req: NextRequest) {
     });
 
     if (!response.ok) {
+      const errorBody = await response.text().catch(() => "");
+      console.error(`[LangOS Chat] Claude API error: ${response.status} ${response.statusText}`, errorBody.slice(0, 500));
       const fallback = persona.fallbackResponses[Math.floor(Math.random() * persona.fallbackResponses.length)];
       return NextResponse.json({
         reply: fallback,
