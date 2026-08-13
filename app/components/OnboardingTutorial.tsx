@@ -6,6 +6,11 @@ import { useState, useCallback, useRef, type FC, type TouchEvent } from "react";
 // ONBOARDING TUTORIAL - First-time user walkthrough
 // Full-screen overlay with 5 slides, swipe support, dot indicators
 // Design: dark gradient + teal/blue accents matching Entrevoz brand
+//
+// LOCALIZED (2026): EN / ES / PT. Auto-detects the visitor's browser language
+// so non-English speakers understand it from the first frame, with a toggle to
+// switch. Additive only — props + onComplete contract are unchanged, so every
+// existing mount point (home, settings replay) keeps working.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 interface OnboardingTutorialProps {
@@ -19,62 +24,249 @@ interface OnboardingStep {
   details: string[];
 }
 
-const STEPS: OnboardingStep[] = [
-  {
-    icon: "🗣️",
-    title: "Welcome to Entrevoz",
-    subtitle: "Your Voice. Any Language. Instantly.",
-    details: [
-      "Real-time translation for conversations",
-      "Works in your browser -- no download needed",
-      "50+ languages supported",
-    ],
+export type OnboardingLang = "en" | "es" | "pt";
+
+const UI_LANG_KEY = "entrevoz_ui_lang";
+
+// ─── Per-language slide content ───────────────────────────────────────────────
+const STEPS_BY_LANG: Record<OnboardingLang, OnboardingStep[]> = {
+  en: [
+    {
+      icon: "🗣️",
+      title: "Welcome to Entrevoz",
+      subtitle: "Your Voice. Any Language. Instantly.",
+      details: [
+        "Real-time translation for conversations",
+        "Works in your browser — no download needed",
+        "50+ languages supported",
+      ],
+    },
+    {
+      icon: "⌨️",
+      title: "Translate Anything",
+      subtitle: "Type or speak — get instant translations with verification.",
+      details: [
+        "Back-translation verifies your meaning",
+        "Voice-to-text for hands-free use",
+        "Copy or share with one tap",
+      ],
+    },
+    {
+      icon: "📹",
+      title: "Video Calls That Translate",
+      subtitle: "Real-time captions in any language. Share a link to connect.",
+      details: [
+        "Live translated subtitles on video",
+        "Send a link via WhatsApp or text",
+        "No app install for your guest",
+      ],
+    },
+    {
+      icon: "🧠",
+      title: "Learn While You Use",
+      subtitle:
+        "AI personas help you practice. Vocabulary from real calls feeds your flashcards.",
+      details: [
+        "Practice with AI conversation partners",
+        "Spaced repetition flashcards",
+        "Track your fluency over time",
+      ],
+    },
+    {
+      icon: "🚀",
+      title: "Finding Your Way Around",
+      subtitle: "Use the bottom tabs to navigate anywhere in the app.",
+      details: [
+        "Home — translate text & start calls",
+        "Learn — practice with AI, History — past calls",
+        "Profile — your settings & language",
+      ],
+    },
+  ],
+  es: [
+    {
+      icon: "🗣️",
+      title: "Bienvenido a Entrevoz",
+      subtitle: "Tu voz. Cualquier idioma. Al instante.",
+      details: [
+        "Traducción en tiempo real para conversaciones",
+        "Funciona en tu navegador — sin descargas",
+        "Más de 50 idiomas disponibles",
+      ],
+    },
+    {
+      icon: "⌨️",
+      title: "Traduce cualquier cosa",
+      subtitle: "Escribe o habla — traducciones instantáneas con verificación.",
+      details: [
+        "La retrotraducción verifica tu significado",
+        "Voz a texto para usar sin manos",
+        "Copia o comparte con un toque",
+      ],
+    },
+    {
+      icon: "📹",
+      title: "Videollamadas que traducen",
+      subtitle:
+        "Subtítulos en tiempo real en cualquier idioma. Comparte un enlace para conectar.",
+      details: [
+        "Subtítulos traducidos en vivo en el video",
+        "Envía un enlace por WhatsApp o mensaje",
+        "Tu invitado no instala ninguna app",
+      ],
+    },
+    {
+      icon: "🧠",
+      title: "Aprende mientras usas",
+      subtitle:
+        "Personas con IA te ayudan a practicar. El vocabulario de tus llamadas alimenta tus tarjetas.",
+      details: [
+        "Practica con compañeros de conversación con IA",
+        "Tarjetas de repetición espaciada",
+        "Sigue tu fluidez con el tiempo",
+      ],
+    },
+    {
+      icon: "🚀",
+      title: "Cómo moverte por la app",
+      subtitle: "Usa las pestañas de abajo para navegar por toda la app.",
+      details: [
+        "Inicio — traduce texto e inicia llamadas",
+        "Aprender — practica con IA, Historial — llamadas pasadas",
+        "Perfil — tus ajustes e idioma",
+      ],
+    },
+  ],
+  pt: [
+    {
+      icon: "🗣️",
+      title: "Bem-vindo ao Entrevoz",
+      subtitle: "Sua voz. Qualquer idioma. Na hora.",
+      details: [
+        "Tradução em tempo real para conversas",
+        "Funciona no navegador — sem baixar nada",
+        "Mais de 50 idiomas disponíveis",
+      ],
+    },
+    {
+      icon: "⌨️",
+      title: "Traduza qualquer coisa",
+      subtitle: "Digite ou fale — traduções instantâneas com verificação.",
+      details: [
+        "A retrotradução confere o seu significado",
+        "Voz para texto, sem usar as mãos",
+        "Copie ou compartilhe com um toque",
+      ],
+    },
+    {
+      icon: "📹",
+      title: "Chamadas de vídeo que traduzem",
+      subtitle:
+        "Legendas em tempo real em qualquer idioma. Compartilhe um link para conectar.",
+      details: [
+        "Legendas traduzidas ao vivo no vídeo",
+        "Envie um link pelo WhatsApp ou mensagem",
+        "Seu convidado não instala nenhum app",
+      ],
+    },
+    {
+      icon: "🧠",
+      title: "Aprenda enquanto usa",
+      subtitle:
+        "Personas de IA ajudam você a praticar. O vocabulário das suas chamadas abastece seus flashcards.",
+      details: [
+        "Pratique com parceiros de conversa com IA",
+        "Flashcards de repetição espaçada",
+        "Acompanhe sua fluência ao longo do tempo",
+      ],
+    },
+    {
+      icon: "🚀",
+      title: "Como se orientar no app",
+      subtitle: "Use as abas de baixo para navegar por todo o app.",
+      details: [
+        "Início — traduza texto e inicie chamadas",
+        "Aprender — pratique com IA, Histórico — chamadas anteriores",
+        "Perfil — suas configurações e idioma",
+      ],
+    },
+  ],
+};
+
+// ─── Per-language UI strings ──────────────────────────────────────────────────
+interface UIStrings {
+  skip: string;
+  back: string;
+  next: string;
+  getStarted: string;
+  startTranslating: string;
+  makeCall: string;
+  ariaDialog: string;
+  ariaLangGroup: string;
+}
+
+const UI: Record<OnboardingLang, UIStrings> = {
+  en: {
+    skip: "Skip",
+    back: "Back",
+    next: "Next",
+    getStarted: "Get Started",
+    startTranslating: "Start Translating",
+    makeCall: "Make a Call",
+    ariaDialog: "Onboarding tutorial",
+    ariaLangGroup: "Tutorial language",
   },
-  {
-    icon: "⌨️",
-    title: "Translate Anything",
-    subtitle: "Type or speak -- get instant translations with verification.",
-    details: [
-      "Back-translation verifies your meaning",
-      "Voice-to-text for hands-free use",
-      "Copy or share with one tap",
-    ],
+  es: {
+    skip: "Saltar",
+    back: "Atrás",
+    next: "Siguiente",
+    getStarted: "Comenzar",
+    startTranslating: "Traducir",
+    makeCall: "Llamar",
+    ariaDialog: "Tutorial de introducción",
+    ariaLangGroup: "Idioma del tutorial",
   },
-  {
-    icon: "📹",
-    title: "Video Calls That Translate",
-    subtitle: "Real-time captions in any language. Share a link to connect.",
-    details: [
-      "Live translated subtitles on video",
-      "Send a link via WhatsApp or text",
-      "No app install for your guest",
-    ],
+  pt: {
+    skip: "Pular",
+    back: "Voltar",
+    next: "Próximo",
+    getStarted: "Começar",
+    startTranslating: "Traduzir",
+    makeCall: "Ligar",
+    ariaDialog: "Tutorial de introdução",
+    ariaLangGroup: "Idioma do tutorial",
   },
-  {
-    icon: "🧠",
-    title: "Learn While You Use",
-    subtitle:
-      "AI personas help you practice. Vocabulary from real calls feeds your flashcards.",
-    details: [
-      "Practice with AI conversation partners",
-      "Spaced repetition flashcards",
-      "Track your fluency over time",
-    ],
-  },
-  {
-    icon: "🚀",
-    title: "You're Ready!",
-    subtitle: "Pick a language and start translating.",
-    details: [
-      "Chrome recommended for best experience",
-      "Works on iPhone, Android, and desktop",
-      "Your data stays private",
-    ],
-  },
-];
+};
+
+const LANG_OPTIONS: OnboardingLang[] = ["en", "es", "pt"];
+const LANG_LABEL: Record<OnboardingLang, string> = {
+  en: "EN",
+  es: "ES",
+  pt: "PT",
+};
+
+// Detect the visitor's preferred language: stored choice → browser → English
+function detectInitialLang(): OnboardingLang {
+  if (typeof window === "undefined") return "en";
+  try {
+    const stored = window.localStorage.getItem(UI_LANG_KEY);
+    if (stored === "en" || stored === "es" || stored === "pt") return stored;
+  } catch {
+    /* ignore */
+  }
+  const nav = (
+    navigator.language ||
+    (navigator.languages && navigator.languages[0]) ||
+    "en"
+  ).toLowerCase();
+  if (nav.startsWith("es")) return "es";
+  if (nav.startsWith("pt")) return "pt";
+  return "en";
+}
 
 const OnboardingTutorial: FC<OnboardingTutorialProps> = ({ onComplete }) => {
   const [currentStep, setCurrentStep] = useState(0);
+  const [lang, setLang] = useState<OnboardingLang>(detectInitialLang);
   const [slideDirection, setSlideDirection] = useState<"left" | "right" | null>(
     null,
   );
@@ -84,8 +276,19 @@ const OnboardingTutorial: FC<OnboardingTutorialProps> = ({ onComplete }) => {
   const touchStartX = useRef(0);
   const touchEndX = useRef(0);
 
-  const isLastStep = currentStep === STEPS.length - 1;
-  const step = STEPS[currentStep];
+  const steps = STEPS_BY_LANG[lang];
+  const t = UI[lang];
+  const isLastStep = currentStep === steps.length - 1;
+  const step = steps[currentStep];
+
+  const changeLang = useCallback((next: OnboardingLang) => {
+    setLang(next);
+    try {
+      window.localStorage.setItem(UI_LANG_KEY, next);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const animateSlide = useCallback(
     (direction: "left" | "right", callback: () => void) => {
@@ -109,10 +312,10 @@ const OnboardingTutorial: FC<OnboardingTutorialProps> = ({ onComplete }) => {
   );
 
   const goNext = useCallback(() => {
-    if (currentStep < STEPS.length - 1) {
+    if (currentStep < steps.length - 1) {
       animateSlide("left", () => setCurrentStep((s) => s + 1));
     }
-  }, [currentStep, animateSlide]);
+  }, [currentStep, steps.length, animateSlide]);
 
   const goPrev = useCallback(() => {
     if (currentStep > 0) {
@@ -174,7 +377,7 @@ const OnboardingTutorial: FC<OnboardingTutorialProps> = ({ onComplete }) => {
       }}
       role="dialog"
       aria-modal="true"
-      aria-label="Onboarding tutorial"
+      aria-label={t.ariaDialog}
     >
       {/* Background glow effects */}
       <div
@@ -194,6 +397,39 @@ const OnboardingTutorial: FC<OnboardingTutorialProps> = ({ onComplete }) => {
         }}
       />
 
+      {/* Language toggle (top-left) */}
+      <div
+        className="absolute top-4 left-4 z-10 flex items-center gap-1 p-1 rounded-xl"
+        style={{
+          paddingTop: "env(safe-area-inset-top, 4px)",
+          background: "rgba(255, 255, 255, 0.05)",
+          border: "1px solid rgba(255, 255, 255, 0.08)",
+        }}
+        role="group"
+        aria-label={t.ariaLangGroup}
+      >
+        {LANG_OPTIONS.map((code) => {
+          const active = code === lang;
+          return (
+            <button
+              key={code}
+              onClick={() => changeLang(code)}
+              className="min-w-[40px] min-h-[36px] px-2 rounded-lg text-xs font-bold transition-all"
+              style={{
+                background: active
+                  ? "linear-gradient(135deg, #00C896 0%, #0066FF 100%)"
+                  : "transparent",
+                color: active ? "#060810" : "rgba(255,255,255,0.55)",
+              }}
+              aria-pressed={active}
+              aria-label={LANG_LABEL[code]}
+            >
+              {LANG_LABEL[code]}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Skip button */}
       <button
         onClick={() => onComplete()}
@@ -201,9 +437,9 @@ const OnboardingTutorial: FC<OnboardingTutorialProps> = ({ onComplete }) => {
         style={{
           paddingTop: "env(safe-area-inset-top, 16px)",
         }}
-        aria-label="Skip onboarding tutorial"
+        aria-label={t.skip}
       >
-        Skip
+        {t.skip}
       </button>
 
       {/* Main content area */}
@@ -296,14 +532,14 @@ const OnboardingTutorial: FC<OnboardingTutorialProps> = ({ onComplete }) => {
         <div className="w-full flex flex-col items-center gap-6">
           {/* Dot indicators */}
           <div className="flex items-center gap-2.5" role="tablist" aria-label="Tutorial progress">
-            {STEPS.map((_, i) => (
+            {steps.map((_, i) => (
               <button
                 key={i}
                 onClick={() => goToStep(i)}
                 className="min-w-[44px] min-h-[44px] flex items-center justify-center"
                 role="tab"
                 aria-selected={i === currentStep}
-                aria-label={`Go to step ${i + 1}`}
+                aria-label={`${i + 1}`}
               >
                 <span
                   className="block rounded-full transition-all duration-300"
@@ -331,9 +567,9 @@ const OnboardingTutorial: FC<OnboardingTutorialProps> = ({ onComplete }) => {
                   boxShadow:
                     "0 4px 20px rgba(0, 200, 150, 0.25), 0 8px 40px rgba(0, 102, 255, 0.15)",
                 }}
-                aria-label="Start translating"
+                aria-label={t.startTranslating}
               >
-                Start Translating
+                {t.startTranslating}
               </button>
               <button
                 onClick={() => onComplete("connect")}
@@ -346,9 +582,9 @@ const OnboardingTutorial: FC<OnboardingTutorialProps> = ({ onComplete }) => {
                   boxShadow:
                     "0 4px 16px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
                 }}
-                aria-label="Make a call"
+                aria-label={t.makeCall}
               >
-                Make a Call
+                {t.makeCall}
               </button>
             </div>
           ) : (
@@ -361,9 +597,9 @@ const OnboardingTutorial: FC<OnboardingTutorialProps> = ({ onComplete }) => {
                     background: "rgba(255, 255, 255, 0.04)",
                     border: "1px solid rgba(255, 255, 255, 0.08)",
                   }}
-                  aria-label="Go to previous step"
+                  aria-label={t.back}
                 >
-                  Back
+                  {t.back}
                 </button>
               )}
               <button
@@ -374,9 +610,9 @@ const OnboardingTutorial: FC<OnboardingTutorialProps> = ({ onComplete }) => {
                   boxShadow:
                     "0 4px 20px rgba(0, 200, 150, 0.25), 0 8px 40px rgba(0, 102, 255, 0.15)",
                 }}
-                aria-label={currentStep === 0 ? "Get started" : "Go to next step"}
+                aria-label={currentStep === 0 ? t.getStarted : t.next}
               >
-                {currentStep === 0 ? "Get Started" : "Next"}
+                {currentStep === 0 ? t.getStarted : t.next}
               </button>
             </div>
           )}
