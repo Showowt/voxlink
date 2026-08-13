@@ -38,11 +38,16 @@ import CulturalWhisper from "../../components/CulturalWhisper";
 import { useConversationMemory } from "@/hooks/useConversationMemory";
 import { useVoiceDubbing } from "@/hooks/useVoiceDubbing";
 import { useRemoteTranscription } from "@/hooks/useRemoteTranscription";
+import { setTtsSpeaking, subscribeTtsSpeaking } from "@/lib/tts-gate";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { useCallRecording } from "@/hooks/useCallRecording";
 import RecordingIndicator from "../../components/RecordingIndicator";
 import { saveRecording } from "@/app/lib/recording-storage";
 import LearningMode, { useLearningMode, TappableCaption, LearningInsightCard } from "../../components/LearningMode";
+
+// Half-duplex mic gate: speakText broadcasts when browser TTS is playing so the
+// transcription hook can ignore the mic and avoid re-transcribing our output.
+let ttsSpeakingSafetyTimer: ReturnType<typeof setTimeout> | null = null;
 
 // Text-to-Speech helper — loud and fast
 // iOS Safari: voices load asynchronously; we must wait for them before speaking.
@@ -63,6 +68,23 @@ const speakText = (text: string, lang: string) => {
     const voices = window.speechSynthesis.getVoices();
     const match = voices.find((v) => v.lang.startsWith(speechCode.split("-")[0]));
     if (match) utterance.voice = match;
+
+    // Half-duplex gate: broadcast TTS speaking so the mic ignores our own output
+    const done = () => {
+      if (ttsSpeakingSafetyTimer) {
+        clearTimeout(ttsSpeakingSafetyTimer);
+        ttsSpeakingSafetyTimer = null;
+      }
+      setTtsSpeaking(false);
+    };
+    utterance.onstart = () => {
+      setTtsSpeaking(true);
+      // Safety: never leave the mic gated if onend never fires (iOS quirk).
+      if (ttsSpeakingSafetyTimer) clearTimeout(ttsSpeakingSafetyTimer);
+      ttsSpeakingSafetyTimer = setTimeout(done, 12000);
+    };
+    utterance.onend = done;
+    utterance.onerror = done;
 
     // iOS Safari: small delay after cancel() prevents silent drops
     setTimeout(() => window.speechSynthesis.speak(utterance), 100);
@@ -713,6 +735,12 @@ function VideoCallContent() {
     }
   }, []);
 
+  // Mic half-duplex gate — suppress STT while our own dub/TTS plays back,
+  // so the mic never re-transcribes our own translated output.
+  const [micSuppressed, setMicSuppressed] = useState(false);
+  const [ttsSpeaking, setTtsSpeakingState] = useState(false);
+  useEffect(() => subscribeTtsSpeaking(setTtsSpeakingState), []);
+
   // Transcription hook - handles STT + translation + broadcasting
   // Supports Web Speech API (Chrome/Edge) + Whisper fallback (Safari/Firefox)
   const transcription = useTranscription({
@@ -721,6 +749,7 @@ function VideoCallContent() {
     localStream: lobbyStream || localStreamRef.current,
     sendMessage: sendWebRTCMessage,
     isActive: status === "connected" && hasPartner && !inLobby && translationEnabled,
+    isSuppressed: micSuppressed,
   });
 
   // Sync transcription hook output to UI state — streaming updates
@@ -801,6 +830,12 @@ function VideoCallContent() {
 
   // ── Call Recording ───────────────────────────────────────────────────────
   const callRecording = useCallRecording();
+
+  // Half-duplex: gate the mic whenever our own translated audio is playing
+  // (voice dub OR browser TTS). Prevents the mic re-transcribing our output.
+  useEffect(() => {
+    setMicSuppressed(isDubPlaying || ttsSpeaking);
+  }, [isDubPlaying, ttsSpeaking]);
 
   // ── Remote audio fallback transcription (activates if partner's STT fails) ──
   const remoteTranscription = useRemoteTranscription({
@@ -1458,7 +1493,9 @@ function VideoCallContent() {
       timestamp: new Date(),
       lang,
     };
-    setTranscript((prev) => [...prev, entry]);
+    // Cap history to the last 200 turns — on long (30 min+) calls an unbounded
+    // array makes every re-render progressively slower ("slow after 30 min").
+    setTranscript((prev) => [...prev, entry].slice(-200));
   };
 
   // ═══════════════════════════════════════════════════════════════════════════

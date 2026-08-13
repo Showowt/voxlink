@@ -135,6 +135,9 @@ function TalkContent() {
   const connectionRef = useRef<TalkConnection | null>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const isListeningRef = useRef(false);
+  // Half-duplex: true while our TTS is speaking, so the mic ignores our output.
+  const ttsSpeakingRef = useRef(false);
+  const ttsSafetyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isHandsFreeRef = useRef(false);
   // Partner language ref - keeps current value accessible in callbacks
   const partnerLangRef = useRef<string | null>(null);
@@ -305,7 +308,8 @@ function TalkContent() {
         if (prev.some((e) => e.id === entry.id)) {
           return prev;
         }
-        return [...prev, entry];
+        // Cap to last 200 turns — keeps long calls fast (bounded re-render cost)
+        return [...prev, entry].slice(-200);
       });
 
       vibrate(entry.speaker === "partner" ? 100 : [30, 20, 30]);
@@ -557,6 +561,13 @@ function TalkContent() {
     recognition.onresult = async (event: SpeechRecognitionEvent) => {
       restartCount = 0;
       if (!mountedRef.current) return;
+
+      // Half-duplex gate: ignore the mic while our own TTS is playing so we
+      // don't transcribe & re-send our own translated output ("not said" bug).
+      if (ttsSpeakingRef.current) {
+        setMyLiveText("");
+        return;
+      }
 
       // Get current target language (partner's language or fallback)
       const targetLang = partnerLangRef.current || defaultTargetLang;
@@ -895,6 +906,23 @@ function TalkContent() {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = getSpeechCode(lang);
     utterance.rate = 0.9;
+
+    const done = () => {
+      ttsSpeakingRef.current = false;
+      if (ttsSafetyTimerRef.current) {
+        clearTimeout(ttsSafetyTimerRef.current);
+        ttsSafetyTimerRef.current = null;
+      }
+    };
+    utterance.onstart = () => {
+      ttsSpeakingRef.current = true;
+      // Safety: never leave the mic gated if onend never fires (iOS quirk)
+      if (ttsSafetyTimerRef.current) clearTimeout(ttsSafetyTimerRef.current);
+      ttsSafetyTimerRef.current = setTimeout(done, 12000);
+    };
+    utterance.onend = done;
+    utterance.onerror = done;
+
     speechSynthesis.speak(utterance);
   }, []);
 

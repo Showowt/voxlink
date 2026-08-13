@@ -71,14 +71,14 @@ export function useRemoteTranscription({
 
   // ── Recording control ──────────────────────────────────────────────────
   const stopRecording = useCallback(() => {
+    if (chunkTimerRef.current) {
+      clearTimeout(chunkTimerRef.current);
+      chunkTimerRef.current = null;
+    }
     if (mrRef.current && mrRef.current.state !== "inactive") {
       try { mrRef.current.stop(); } catch { /* already stopped */ }
     }
     mrRef.current = null;
-    if (chunkTimerRef.current) {
-      clearInterval(chunkTimerRef.current);
-      chunkTimerRef.current = null;
-    }
   }, []);
 
   const startRecording = useCallback(() => {
@@ -101,26 +101,36 @@ export function useRemoteTranscription({
       const mr = new MediaRecorder(audioStream, mimeType ? { mimeType } : undefined);
       mrRef.current = mr;
 
-      const chunks: Blob[] = [];
+      // Discrete chunk cycle: record → stop after CHUNK_MS → transcribe → repeat.
+      // (Prior mr.start(timeslice) never fired onstop, so nothing transcribed and
+      // chunks accumulated for the whole call — a leak. This model fixes both.)
+      let chunks: Blob[] = [];
+
+      const scheduleStop = () => {
+        chunkTimerRef.current = setTimeout(() => {
+          if (mrRef.current && mrRef.current.state === "recording") {
+            try { mrRef.current.stop(); } catch { /* already stopped */ }
+          }
+        }, CHUNK_MS);
+      };
 
       mr.ondataavailable = (e) => {
         if (e.data.size > 0) chunks.push(e.data);
       };
 
       mr.onstop = async () => {
-        if (chunks.length === 0) return;
-        const blob = new Blob(chunks, { type: mimeType || "audio/webm" });
-        chunks.length = 0;
+        const localChunks = chunks;
+        chunks = [];
+        const blob = new Blob(localChunks, { type: mimeType || "audio/webm" });
 
-        if (blob.size < MIN_BLOB_SIZE) {
-          // Restart if still running
-          if (isRunningRef.current && mrRef.current) {
-            try { mrRef.current.start(CHUNK_MS); } catch { /* stream ended */ }
-          }
-          return;
+        // Restart the cycle immediately (keep listening) before async work
+        if (isRunningRef.current && mrRef.current?.state === "inactive") {
+          try { mrRef.current.start(); scheduleStop(); } catch { /* stream ended */ }
         }
 
-        // Transcribe via Whisper
+        if (blob.size < MIN_BLOB_SIZE) return;
+
+        // Transcribe via Whisper (server applies confidence + artifact gating)
         try {
           const form = new FormData();
           form.append("audio", blob, "remote.webm");
@@ -132,7 +142,8 @@ export function useRemoteTranscription({
           const data = await res.json();
           const text = (data.text ?? "").trim();
 
-          if (text && text.length > 1) {
+          // Respect server hallucination drop; ignore 1-char noise
+          if (text && !data.dropped && text.length > 1) {
             setRemoteText(text);
 
             // Translate to user's language
@@ -162,14 +173,10 @@ export function useRemoteTranscription({
         } catch {
           // Whisper failed — silent, will retry next chunk
         }
-
-        // Restart recording if still active
-        if (isRunningRef.current && mrRef.current && mrRef.current.state === "inactive") {
-          try { mrRef.current.start(CHUNK_MS); } catch { /* stream ended */ }
-        }
       };
 
-      mr.start(CHUNK_MS);
+      mr.start();
+      scheduleStop();
       console.log("[RemoteSTT] Fallback transcription activated");
     } catch (e) {
       console.warn("[RemoteSTT] Failed to start MediaRecorder:", e);

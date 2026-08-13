@@ -167,9 +167,56 @@ export class PeerConnection {
   private lastNetworkType: string | null = null;
   private isOffline: boolean = false;
 
+  // Colombia relay-first escalation — symmetric NAT (Claro/Tigo/Movistar) can
+  // never connect directly. Start with 'all' (fast on WiFi/fiber); if not
+  // connected after RELAY_ESCALATION_MS, rebuild forcing relay-only so the
+  // browser stops wasting time on doomed direct candidates.
+  private useRelayOnly: boolean = false;
+  private relayEscalationTimer: NodeJS.Timeout | null = null;
+  private static readonly RELAY_ESCALATION_MS = 10000;
+
   constructor(callbacks: PeerCallbacks) {
     this.callbacks = callbacks;
     this.setupNetworkListeners();
+  }
+
+  // Shared RTCPeerConnection config — honors the relay-only escalation flag
+  private buildPeerConfig(iceServers: RTCIceServer[]) {
+    return {
+      iceServers,
+      iceCandidatePoolSize: 10,
+      iceTransportPolicy: (this.useRelayOnly
+        ? "relay"
+        : "all") as RTCIceTransportPolicy,
+      bundlePolicy: "max-bundle" as RTCBundlePolicy,
+      rtcpMuxPolicy: "require" as RTCRtcpMuxPolicy,
+    };
+  }
+
+  private armRelayEscalation(iceServers: RTCIceServer[]): void {
+    if (this.useRelayOnly) return; // already relay-only, nothing to escalate to
+    if (this.relayEscalationTimer) clearTimeout(this.relayEscalationTimer);
+    this.relayEscalationTimer = setTimeout(() => {
+      this.relayEscalationTimer = null;
+      if (this.isDestroyed || this._status === "connected") return;
+      console.log(
+        "[Entrevoz Video] Not connected after 10s — escalating to relay-only (Colombia mode)",
+      );
+      this.useRelayOnly = true;
+      void this.rebuildPeer(iceServers).then(() => {
+        if (this.isDestroyed || this.isHost) return;
+        // Guest must re-drive connection attempts against the rebuilt peer
+        this.connectionAttempts = 0;
+        this.startConnectionAttempts();
+      });
+    }, PeerConnection.RELAY_ESCALATION_MS);
+  }
+
+  private clearRelayEscalation(): void {
+    if (this.relayEscalationTimer) {
+      clearTimeout(this.relayEscalationTimer);
+      this.relayEscalationTimer = null;
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -308,6 +355,7 @@ export class PeerConnection {
     try {
       // Fetch ICE servers (TURN credentials from server)
       const iceServers = await getIceServers();
+      this.useRelayOnly = false; // reset per connection attempt
 
       // ── PHASE 1: Register on PeerJS ──────────────────────────────────────
       // Host tries deterministic ID first (fast), then random ID (always works).
@@ -336,13 +384,7 @@ export class PeerConnection {
               port: server.port,
               secure: server.secure,
               path: server.path,
-              config: {
-                iceServers,
-                iceCandidatePoolSize: 10,
-                iceTransportPolicy: "all",
-                bundlePolicy: "max-bundle",
-                rtcpMuxPolicy: "require",
-              },
+              config: this.buildPeerConfig(iceServers),
               debug: 1,
             });
 
@@ -388,13 +430,7 @@ export class PeerConnection {
               port: server.port,
               secure: server.secure,
               path: server.path,
-              config: {
-                iceServers,
-                iceCandidatePoolSize: 10,
-                iceTransportPolicy: "all",
-                bundlePolicy: "max-bundle",
-                rtcpMuxPolicy: "require",
-              },
+              config: this.buildPeerConfig(iceServers),
               debug: 1,
             });
             await this.waitForPeerOpen();
@@ -453,6 +489,8 @@ export class PeerConnection {
         // Start connection attempts immediately (uses deterministic ID).
         // If Supabase signal arrives with a different ID, attempts will switch target.
         this.startConnectionAttempts();
+        // Colombia: if we can't connect within 10s, force relay-only and retry
+        this.armRelayEscalation(iceServers);
       }
 
       return true;
@@ -1472,13 +1510,8 @@ export class PeerConnection {
         port: PEERJS_SERVERS[0].port,
         secure: PEERJS_SERVERS[0].secure,
         path: PEERJS_SERVERS[0].path,
-        config: {
-          iceServers,
-          iceCandidatePoolSize: 10,
-          iceTransportPolicy: "all",
-          bundlePolicy: "max-bundle",
-          rtcpMuxPolicy: "require",
-        },
+        // Honors useRelayOnly — a relay escalation rebuilds with relay-only ICE
+        config: this.buildPeerConfig(iceServers),
         debug: 1,
       });
 
@@ -1533,6 +1566,7 @@ export class PeerConnection {
     this.clearStreamTimeout();
     this.removeNetworkListeners();
     this.stopSignalingHealthCheck();
+    this.clearRelayEscalation();
 
     // Stop Supabase room signaling
     if (this.roomSignal) {
@@ -1571,6 +1605,8 @@ export class PeerConnection {
   private setStatus(status: ConnectionStatus, message?: string): void {
     if (this.isDestroyed) return;
     this._status = status;
+    // Once connected, cancel the pending relay escalation (we made it)
+    if (status === "connected") this.clearRelayEscalation();
     console.log("[Entrevoz Video] Status:", status, message || "");
     this.callbacks.onStatusChange?.(status, message);
   }

@@ -13,6 +13,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
 // ─── BCP-47 TTS voice map ──────────────────────────────────────────────────
+// Full coverage: every language the app can translate must also be speakable.
+// Missing entries previously fell back to en-US, so e.g. Thai/Vietnamese
+// subtitles were read aloud by an English voice.
 const TTS_LANG_MAP: Record<string, string> = {
   en: "en-US",
   es: "es-ES",
@@ -26,7 +29,34 @@ const TTS_LANG_MAP: Record<string, string> = {
   ar: "ar-SA",
   ru: "ru-RU",
   hi: "hi-IN",
+  nl: "nl-NL",
+  pl: "pl-PL",
+  tr: "tr-TR",
+  vi: "vi-VN",
+  th: "th-TH",
+  id: "id-ID",
+  uk: "uk-UA",
+  el: "el-GR",
+  he: "he-IL",
+  sv: "sv-SE",
+  cs: "cs-CZ",
+  ro: "ro-RO",
+  hu: "hu-HU",
+  fi: "fi-FI",
+  lt: "lt-LT",
+  da: "da-DK",
+  no: "nb-NO",
+  ms: "ms-MY",
+  tl: "fil-PH",
 };
+
+// Resolve any incoming code (e.g. "es-CO", "pt_BR", "ZH") to a BCP-47 tag.
+function resolveTtsLang(language: string): string {
+  if (!language) return "en-US";
+  if (TTS_LANG_MAP[language]) return TTS_LANG_MAP[language];
+  const base = language.toLowerCase().split(/[-_]/)[0];
+  return TTS_LANG_MAP[base] ?? "en-US";
+}
 
 // ─── Preferred voice patterns (feels natural in-ear, not robotic) ──────────
 const PREFERRED_VOICE_PATTERNS = [
@@ -74,7 +104,7 @@ export function useTTS({
   // ── Find best voice ──────────────────────────────────────────────────────
   const findBestVoice = useCallback(() => {
     if (!isSupported) return null;
-    const lang = TTS_LANG_MAP[language] ?? "en-US";
+    const lang = resolveTtsLang(language);
     const voices = window.speechSynthesis.getVoices();
     if (!voices.length) return null;
 
@@ -129,7 +159,7 @@ export function useTTS({
 
     const utter = new SpeechSynthesisUtterance(text);
     if (voiceRef.current) utter.voice = voiceRef.current;
-    utter.lang = TTS_LANG_MAP[language] ?? "en-US";
+    utter.lang = resolveTtsLang(language);
     utter.rate = rate;
     utter.pitch = pitch;
     utter.volume = volume;

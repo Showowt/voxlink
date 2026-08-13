@@ -115,6 +115,10 @@ for (const [phrase, translation] of Object.entries(INSTANT_DICT["en-es"])) {
 
 // Whisper chunk duration
 const WHISPER_CHUNK_MS = 1200;
+// RMS below this over the whole chunk = silence → don't send to Whisper.
+// This is the FIRST line of defense against "translating things not said":
+// silent/near-silent chunks never reach the STT model, so it cannot hallucinate.
+const WHISPER_SILENCE_RMS = 0.012;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type TranscriptionMode = "webspeech" | "whisper" | "unavailable";
@@ -125,6 +129,13 @@ export interface UseTranscriptionOptions {
   localStream: MediaStream | null;
   sendMessage: (message: string) => boolean;
   isActive: boolean;
+  /**
+   * When true, the mic is gated (half-duplex): incoming STT results are ignored.
+   * Drive this from playback state (dub/TTS speaking) so the mic never
+   * re-transcribes our own translated output — the main cause of
+   * "translating things that were not said" on long calls.
+   */
+  isSuppressed?: boolean;
 }
 
 export interface UseTranscriptionReturn {
@@ -210,6 +221,7 @@ export function useTranscription({
   localStream,
   sendMessage,
   isActive,
+  isSuppressed = false,
 }: UseTranscriptionOptions): UseTranscriptionReturn {
   const [localCaption, setLocalCaption] = useState("");
   const [localFinal, setLocalFinal] = useState("");
@@ -222,6 +234,15 @@ export function useTranscription({
   const mrRef = useRef<MediaRecorder | null>(null);
   const isRunRef = useRef(false);
   const langRef = useRef({ my: myLanguage, their: theirLanguage });
+  const suppressRef = useRef(isSuppressed);
+
+  // Whisper (Safari/iOS) chunk-cycle + RMS silence-gate + owned-stream cleanup
+  const whisperOwnStreamRef = useRef<MediaStream | null>(null);
+  const whisperCtxRef = useRef<AudioContext | null>(null);
+  const whisperAnalyserRef = useRef<AnalyserNode | null>(null);
+  const whisperChunkTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const whisperRmsTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const whisperPeakRmsRef = useRef(0);
 
   // Streaming translation state
   const abortRef = useRef<AbortController | null>(null);
@@ -239,6 +260,11 @@ export function useTranscription({
   useEffect(() => {
     langRef.current = { my: myLanguage, their: theirLanguage };
   }, [myLanguage, theirLanguage]);
+
+  // Keep mic-suppression flag fresh (half-duplex gating during playback)
+  useEffect(() => {
+    suppressRef.current = isSuppressed;
+  }, [isSuppressed]);
 
   // ── STREAMING TRANSLATE — translates interim text with cancellation ────────
   const streamingTranslate = useCallback(
@@ -442,6 +468,13 @@ export function useTranscription({
       // Reset backoff counter on successful speech
       restartCountRef.current = 0;
 
+      // Half-duplex gate: while our own dub/TTS is playing, ignore the mic so
+      // we don't transcribe & re-translate our own output ("not said" bug).
+      if (suppressRef.current) {
+        setLocalCaption("");
+        return;
+      }
+
       let interim = "";
       let finalChunk = "";
 
@@ -562,19 +595,66 @@ export function useTranscription({
   }, []);
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // MODE 2: MediaRecorder + Whisper (Safari / Firefox)
+  // MODE 2: MediaRecorder + Whisper (Safari / iOS / Firefox)
+  //
+  // Records discrete ~1.2s clips (start → stop → transcribe → repeat) so each
+  // blob is an independently-decodable file. An AnalyserNode measures peak RMS
+  // per clip: silent clips are dropped locally and never sent to Whisper, which
+  // is the primary fix for hallucinated ("not said") translations on iOS.
+  // Prior version used mr.start(timeslice) whose onstop never fired — the chunk
+  // array grew for the whole call (a 30-min memory leak) and nothing transcribed
+  // until teardown. This cycle model fixes both.
   // ─────────────────────────────────────────────────────────────────────────────
   const startWhisper = useCallback(async () => {
     let stream: MediaStream;
+    let ownsStream = false;
     if (localStream && localStream.getAudioTracks().length > 0) {
+      // Reuse the call's audio tracks — do NOT stop these on cleanup (shared).
       stream = new MediaStream(localStream.getAudioTracks());
     } else {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        ownsStream = true;
+        whisperOwnStreamRef.current = stream;
       } catch {
         setError("Microphone access denied.");
         return;
       }
+    }
+
+    // ── Set up RMS analyser (silence detection) ──────────────────────────────
+    try {
+      const Ctor =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext;
+      if (Ctor) {
+        const ctx = new Ctor();
+        whisperCtxRef.current = ctx;
+        const source = ctx.createMediaStreamSource(stream);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 2048;
+        source.connect(analyser);
+        whisperAnalyserRef.current = analyser;
+
+        const buf = new Float32Array(analyser.fftSize);
+        const sampleRms = () => {
+          const a = whisperAnalyserRef.current;
+          if (!a) return;
+          try {
+            a.getFloatTimeDomainData(buf);
+            let sum = 0;
+            for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+            const rms = Math.sqrt(sum / buf.length);
+            if (rms > whisperPeakRmsRef.current) whisperPeakRmsRef.current = rms;
+          } catch {
+            /* analyser closed */
+          }
+        };
+        whisperRmsTimerRef.current = setInterval(sampleRms, 100);
+      }
+    } catch {
+      // No Web Audio — fall back to server-side confidence gating only
     }
 
     const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
@@ -587,19 +667,45 @@ export function useTranscription({
 
     const mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
     mrRef.current = mr;
+    // Track whether THIS recorder owns the fallback stream (for cleanup)
+    (mr as unknown as { _ownsStream?: boolean })._ownsStream = ownsStream;
 
-    const chunks: Blob[] = [];
+    let chunks: Blob[] = [];
+
+    const scheduleStop = () => {
+      whisperChunkTimerRef.current = setTimeout(() => {
+        if (mrRef.current && mrRef.current.state === "recording") {
+          try { mrRef.current.stop(); } catch { /* already stopped */ }
+        }
+      }, WHISPER_CHUNK_MS);
+    };
 
     mr.ondataavailable = (e) => {
       if (e.data.size > 0) chunks.push(e.data);
     };
 
     mr.onstop = async () => {
-      if (chunks.length === 0) return;
-      const blob = new Blob(chunks, { type: mimeType || "audio/webm" });
-      chunks.length = 0;
+      const peakRms = whisperPeakRmsRef.current;
+      whisperPeakRmsRef.current = 0;
+      const localChunks = chunks;
+      chunks = [];
 
-      if (blob.size < 1024) return;
+      const blob = new Blob(localChunks, { type: mimeType || "audio/webm" });
+
+      // Restart the cycle immediately (keep listening) before the async fetch
+      if (isRunRef.current && mrRef.current?.state === "inactive") {
+        try { mrRef.current.start(); scheduleStop(); } catch { /* stream ended */ }
+      }
+
+      // Half-duplex gate: drop clips recorded while our own dub/TTS was playing
+      if (suppressRef.current) return;
+
+      // Local silence gate — skip empty/silent clips entirely (no API, no hallucination)
+      if (blob.size < 1400) return;
+      if (whisperAnalyserRef.current && peakRms < WHISPER_SILENCE_RMS) {
+        // Analyser is active and the whole clip was below the speech floor
+        return;
+      }
 
       try {
         const form = new FormData();
@@ -616,29 +722,53 @@ export function useTranscription({
 
         const data = await res.json();
         const text = (data.text ?? "").trim();
-        if (text) {
+        // Server may flag a dropped hallucination — respect it
+        if (text && !data.dropped) {
           setLocalFinal(text);
           translateFinal(text);
         }
       } catch (e) {
         console.warn("[STT] Whisper chunk failed:", e);
       }
-
-      if (isRunRef.current && mrRef.current?.state !== "recording") {
-        try { mrRef.current?.start(WHISPER_CHUNK_MS); } catch { /* stream ended */ }
-      }
     };
 
     mr.onstart = () => { setIsListening(true); setError(null); };
     mr.onerror = () => { setError("Recording error. Please reload."); };
-    mr.start(WHISPER_CHUNK_MS);
+    mr.start();
+    scheduleStop();
   }, [localStream, translateFinal]);
 
   const stopWhisper = useCallback(() => {
-    if (mrRef.current && mrRef.current.state !== "inactive") {
-      try { mrRef.current.stop(); } catch { /* already stopped */ }
+    // Stop the chunk-cycle timers first so onstop won't reschedule
+    if (whisperChunkTimerRef.current) {
+      clearTimeout(whisperChunkTimerRef.current);
+      whisperChunkTimerRef.current = null;
+    }
+    if (whisperRmsTimerRef.current) {
+      clearInterval(whisperRmsTimerRef.current);
+      whisperRmsTimerRef.current = null;
+    }
+
+    const mr = mrRef.current;
+    if (mr && mr.state !== "inactive") {
+      try { mr.stop(); } catch { /* already stopped */ }
     }
     mrRef.current = null;
+
+    // Only stop tracks WE acquired — never kill the shared call audio stream
+    if (whisperOwnStreamRef.current) {
+      whisperOwnStreamRef.current.getTracks().forEach((t) => t.stop());
+      whisperOwnStreamRef.current = null;
+    }
+
+    // Close the RMS AnalyserNode / AudioContext (leak fix)
+    whisperAnalyserRef.current = null;
+    if (whisperCtxRef.current) {
+      try { whisperCtxRef.current.close(); } catch { /* already closed */ }
+      whisperCtxRef.current = null;
+    }
+    whisperPeakRmsRef.current = 0;
+
     setIsListening(false);
     setLocalCaption("");
     if (abortRef.current) abortRef.current.abort();
