@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, useCallback, useRef, type FC, type TouchEvent } from "react";
+import {
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  type FC,
+  type TouchEvent,
+} from "react";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ONBOARDING TUTORIAL - First-time user walkthrough
@@ -276,6 +283,18 @@ const OnboardingTutorial: FC<OnboardingTutorialProps> = ({ onComplete }) => {
   const touchStartX = useRef(0);
   const touchEndX = useRef(0);
 
+  // Track animation timers so we can clear them if unmounted mid-animation
+  const timersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const rafRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      timersRef.current.forEach((id) => clearTimeout(id));
+      timersRef.current = [];
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    },
+    [],
+  );
+
   const steps = STEPS_BY_LANG[lang];
   const t = UI[lang];
   const isLastStep = currentStep === steps.length - 1;
@@ -297,16 +316,18 @@ const OnboardingTutorial: FC<OnboardingTutorialProps> = ({ onComplete }) => {
       setSlideDirection(direction);
 
       // Wait for exit animation, then swap content and enter
-      setTimeout(() => {
+      const t1 = setTimeout(() => {
         callback();
         setSlideDirection(direction === "left" ? "right" : "left");
 
         // Trigger enter animation on next frame
-        requestAnimationFrame(() => {
+        rafRef.current = requestAnimationFrame(() => {
           setSlideDirection(null);
-          setTimeout(() => setIsAnimating(false), 300);
+          const t2 = setTimeout(() => setIsAnimating(false), 300);
+          timersRef.current.push(t2);
         });
       }, 200);
+      timersRef.current.push(t1);
     },
     [isAnimating],
   );
@@ -414,7 +435,7 @@ const OnboardingTutorial: FC<OnboardingTutorialProps> = ({ onComplete }) => {
             <button
               key={code}
               onClick={() => changeLang(code)}
-              className="min-w-[40px] min-h-[36px] px-2 rounded-lg text-xs font-bold transition-all"
+              className="min-w-[44px] min-h-[44px] px-2 rounded-lg text-xs font-bold transition-all"
               style={{
                 background: active
                   ? "linear-gradient(135deg, #00C896 0%, #0066FF 100%)"
