@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
         fpEarned: 2,
         sessionId: body.sessionId || crypto.randomUUID(),
         error: "AI_UNAVAILABLE",
-        debug: `HTTP ${response.status} | key=${apiKey.slice(0, 10)}... | ${errorBody.slice(0, 200)}`,
+        debug: `HTTP ${response.status} | ${errorBody.slice(0, 200)}`,
       });
     }
 

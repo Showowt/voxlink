@@ -1,6 +1,64 @@
 import { NextRequest, NextResponse } from "next/server";
 import { losClient } from "@/app/lib/language-os/supabase-client";
 import { getInitialCard } from "@/app/lib/language-os/algorithms/sm2";
+import type { VocabWord } from "@/app/lib/language-os/types";
+
+// Sync imported call-vocab into language_os_progress so it shows in the "Vocab"
+// tab and bumps the counters (this is what makes "vocab from your real calls
+// feeds in automatically" actually visible — cards alone only power SRS review).
+async function syncImportedVocab(
+  userId: string,
+  languagePair: string,
+  createdVocab: VocabWord[],
+  cardsCreated: number,
+): Promise<void> {
+  if (!losClient || cardsCreated === 0) return;
+  try {
+    const { data: existing } = await losClient
+      .from("language_os_progress")
+      .select("vocab_bank, words_learned, real_vocab_imports")
+      .eq("user_id", userId)
+      .eq("language_pair", languagePair)
+      .single();
+
+    if (!existing) {
+      // No progress row yet (user made a call before opening Language OS) — create it
+      await losClient.from("language_os_progress").insert({
+        user_id: userId,
+        language_pair: languagePair,
+        vocab_bank: createdVocab.slice(-500),
+        words_learned: cardsCreated,
+        real_vocab_imports: 1,
+        last_active_date: new Date().toISOString().split("T")[0],
+      });
+      return;
+    }
+
+    // Merge into existing bank, dedupe by word (newest wins), cap at 500
+    const existingBank: VocabWord[] = Array.isArray(existing.vocab_bank)
+      ? existing.vocab_bank
+      : [];
+    const byWord = new Map<string, VocabWord>();
+    for (const v of existingBank) {
+      if (v && typeof v.word === "string") byWord.set(v.word.toLowerCase(), v);
+    }
+    for (const v of createdVocab) byWord.set(v.word.toLowerCase(), v);
+    const mergedBank = Array.from(byWord.values()).slice(-500);
+
+    await losClient
+      .from("language_os_progress")
+      .update({
+        vocab_bank: mergedBank,
+        words_learned: (existing.words_learned || 0) + cardsCreated,
+        real_vocab_imports: (existing.real_vocab_imports || 0) + 1,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", userId)
+      .eq("language_pair", languagePair);
+  } catch (e) {
+    console.error("[LangOS Entrevoz Bridge] progress vocab sync failed:", e);
+  }
+}
 
 const limiter = new Map<string, { count: number; reset: number }>();
 function checkLimit(ip: string, max: number): boolean {
@@ -38,6 +96,21 @@ async function translateWord(word: string, from: string, to: string): Promise<st
   }
 }
 
+// Map a raw call language pair (nativeLang, foreignLang) to a SUPPORTED
+// Language OS config key, so imported vocab is stored under the same key the
+// practice UI reads (e.g. a call "en"+"es-CO" → "en-es-CO", not "en-es-CO"≠"en-es").
+// Without this, cards/vocab land under an orphan key and never appear in practice.
+const SUPPORTED_PAIRS = ["en-es-CO", "en-lt", "es-en-US"];
+function resolvePairKey(source: string, target: string): string {
+  const s = (source || "").split("-")[0].toLowerCase();
+  const t = (target || "").split("-")[0].toLowerCase();
+  const match = SUPPORTED_PAIRS.find((k) => {
+    const [native, foreign] = k.split("-");
+    return native === s && foreign === t;
+  });
+  return match ?? `${source}-${target}`;
+}
+
 // Common stop words to filter out
 const STOP_WORDS = new Set([
   "el", "la", "los", "las", "un", "una", "de", "en", "que", "y", "a",
@@ -69,7 +142,10 @@ export async function POST(req: NextRequest) {
       };
 
       const userId = deviceId || "anonymous";
-      const languagePair = `${sourceLang}-${targetLang}`;
+      const nativeBase = (sourceLang || "en").split("-")[0].toLowerCase();
+      const foreignBase = (targetLang || "es").split("-")[0].toLowerCase();
+      // Store under a supported Language OS key so it shows up in practice
+      const languagePair = resolvePairKey(sourceLang, targetLang);
       const wordsToProcess = (words || [])
         .filter((w: string) => typeof w === "string" && w.length >= 2)
         .slice(0, 10);
@@ -78,9 +154,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ wordsImported: 0, cardsCreated: 0, sampleWords: [] });
       }
 
-      // Translate all words
+      // Translate all words (foreign → native), using base codes Google accepts
       const translationResults = await Promise.allSettled(
-        wordsToProcess.map((word: string) => translateWord(word, targetLang, sourceLang))
+        wordsToProcess.map((word: string) => translateWord(word, foreignBase, nativeBase))
       );
 
       const translatedWords: Map<string, string> = new Map();
@@ -93,11 +169,13 @@ export async function POST(req: NextRequest) {
 
       let cardsCreated = 0;
       const sampleWords: string[] = [];
+      const createdVocab: VocabWord[] = [];
 
       if (losClient) {
         const sm2Defaults = getInitialCard();
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
+        const nextReview = tomorrow.toISOString().split("T")[0];
 
         for (const word of wordsToProcess) {
           const translation = translatedWords.get(word);
@@ -115,16 +193,47 @@ export async function POST(req: NextRequest) {
               ease_factor: sm2Defaults.easeFactor,
               interval_days: sm2Defaults.intervalDays,
               repetitions: sm2Defaults.repetitions,
-              next_review_date: tomorrow.toISOString().split("T")[0],
+              next_review_date: nextReview,
             });
 
             if (!error) {
               cardsCreated++;
               if (sampleWords.length < 3) sampleWords.push(word);
+              createdVocab.push({
+                word,
+                translation,
+                language: foreignBase,
+                phonetic: "",
+                learnedAt: new Date().toISOString(),
+                nextReview,
+                intervalDays: sm2Defaults.intervalDays,
+                easeFactor: sm2Defaults.easeFactor,
+                repetitions: sm2Defaults.repetitions,
+              });
             }
           } catch {
             // Continue on individual card failure
           }
+        }
+
+        // Surface the imported vocab in the Vocab tab + bump counters
+        await syncImportedVocab(userId, languagePair, createdVocab, cardsCreated);
+
+        // Audit trail (best-effort)
+        if (cardsCreated > 0) {
+          await losClient
+            .from("los_entrevoz_imports")
+            .insert({
+              user_id: userId,
+              language_pair: languagePair,
+              entrevoz_conversation_id: null,
+              vocab_words: createdVocab.map((v) => v.word),
+              duration_seconds: 0,
+              partner_language: targetLang,
+              processed: true,
+              srs_cards_created: cardsCreated,
+            })
+            .then(undefined, () => {});
         }
       }
 
@@ -200,9 +309,11 @@ export async function POST(req: NextRequest) {
     // Create SRS cards for discovered words
     let cardsCreated = 0;
     const sampleWords: string[] = [];
+    const createdVocab: VocabWord[] = [];
     const sm2Defaults = getInitialCard();
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
+    const nextReview = tomorrow.toISOString().split("T")[0];
 
     if (losClient) {
       for (const word of wordsToProcess) {
@@ -222,12 +333,23 @@ export async function POST(req: NextRequest) {
             ease_factor: sm2Defaults.easeFactor,
             interval_days: sm2Defaults.intervalDays,
             repetitions: sm2Defaults.repetitions,
-            next_review_date: tomorrow.toISOString().split("T")[0],
+            next_review_date: nextReview,
           });
 
           if (!error) {
             cardsCreated++;
             if (sampleWords.length < 3) sampleWords.push(word);
+            createdVocab.push({
+              word,
+              translation,
+              language: targetLang,
+              phonetic: "",
+              learnedAt: new Date().toISOString(),
+              nextReview,
+              intervalDays: sm2Defaults.intervalDays,
+              easeFactor: sm2Defaults.easeFactor,
+              repetitions: sm2Defaults.repetitions,
+            });
           }
         } catch {
           // Continue on individual card failure
@@ -251,14 +373,8 @@ export async function POST(req: NextRequest) {
         srs_cards_created: cardsCreated,
       });
 
-      // Update progress
-      await losClient
-        .from("language_os_progress")
-        .update({
-          updated_at: new Date().toISOString(),
-        })
-        .eq("user_id", userId)
-        .eq("language_pair", languagePair);
+      // Surface imported vocab in the Vocab tab + bump counters
+      await syncImportedVocab(userId, languagePair, createdVocab, cardsCreated);
     }
 
     return NextResponse.json({

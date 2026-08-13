@@ -4,6 +4,10 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 
 // Pages where the bottom nav should be HIDDEN (full-screen experiences)
+// NOTE: "/language-os/" (trailing slash) hides the nav on the practice chat
+// (/language-os/[lang]) and SRS review (/language-os/[lang]/review) — where a
+// bottom-anchored input/controls would otherwise sit UNDER the fixed nav — but
+// keeps it on the "/language-os" landing (the "Learn" tab destination).
 const HIDDEN_ROUTES = [
   "/call/",
   "/talk/",
@@ -11,6 +15,7 @@ const HIDDEN_ROUTES = [
   "/face-to-face",
   "/wingman",
   "/proximity",
+  "/language-os/",
   "/auth",
 ];
 
