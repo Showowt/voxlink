@@ -27,8 +27,8 @@ export default function LanguageOSPage() {
         <BackButton href="/" label="Home" />
       </div>
 
-      {/* Content */}
-      <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-6 pb-8">
+      {/* Content — pb clears the fixed bottom nav (56px) so the last card isn't covered */}
+      <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-6 pt-8 pb-24">
         {/* Title section */}
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#00C896]/10 border border-[#00C896]/20 mb-5">
