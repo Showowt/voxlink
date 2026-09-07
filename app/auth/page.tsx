@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsNativeApp } from "@/hooks/useIsNativeApp";
 
 function AuthContent() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -15,6 +16,7 @@ function AuthContent() {
 
   const { user, signInWithGoogle, signInWithEmail, signUpWithEmail } =
     useAuth();
+  const isNativeApp = useIsNativeApp();
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next") ?? "/dashboard";
@@ -86,6 +88,10 @@ function AuthContent() {
             ))}
           </div>
 
+          {/* Apple 4.8: third-party login inside the iOS shell would require
+              Sign in with Apple — email/password only in the native app */}
+          {!isNativeApp && (
+          <>
           <button
             onClick={handleGoogle}
             disabled={googleLoading}
@@ -117,6 +123,8 @@ function AuthContent() {
             <span className="text-white/25 text-xs">or</span>
             <div className="flex-1 h-px bg-white/8" />
           </div>
+          </>
+          )}
 
           <div className="flex flex-col gap-3">
             {mode === "signup" && (

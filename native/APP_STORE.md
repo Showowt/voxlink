@@ -85,6 +85,8 @@ Not collected: location, contacts (address book), browsing history, purchases (i
 
 ## Native shell notes
 
+- Guideline 4.8: "Continue with Google" is hidden inside the shell (email/password only), so Sign in with Apple is not required for v1. If Google login is ever shown in-app, Sign in with Apple must ship alongside it (AuthModal.tsx has an unused Apple handler; Supabase Apple provider is NOT configured).
+
 - `capacitor.config.ts` points the WKWebView at https://www.entrevoz.co and appends `EntrevozApp/1.0` to the UA; `hooks/useIsNativeApp.ts` keys on this to hide purchase surfaces (Guideline 3.1.1)
 - Camera/mic permission strings live in `ios/App/App/Info.plist`; Capacitor auto-grants the WKWebView per-origin media prompt, so users only see the native iOS dialogs
 - `ITSAppUsesNonExemptEncryption=false` set — no export-compliance question on upload

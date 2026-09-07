@@ -28,7 +28,7 @@ async function probe(ua, path, label) {
   const url = page.url();
   const text = await page.evaluate(() => document.body.innerText);
   console.log(
-    `${label}: final=${url} gate=${text.includes("access code")} pricingCopy=${text.includes("Pick your power")} textLen=${text.length}`,
+    `${label}: final=${url} gate=${text.includes("access code")} pricingCopy=${text.includes("Pick your power")} googleBtn=${text.includes("Continue with Google")} textLen=${text.length}`,
   );
   await page.close();
 }
@@ -36,5 +36,8 @@ async function probe(ua, path, label) {
 await probe(SAFARI_UA, "/", "HOME/safari");
 await probe(SAFARI_UA, "/pricing", "PRICING/safari");
 await probe(NATIVE_UA, "/pricing", "PRICING/native");
+// Apple 4.8: Google login must be visible on web, absent in the native shell
+await probe(SAFARI_UA, "/auth", "AUTH/safari");
+await probe(NATIVE_UA, "/auth", "AUTH/native");
 
 await browser.close();
