@@ -103,3 +103,7 @@ Not collected: location, contacts (address book), browsing history, purchases (i
 - Camera/mic permission strings live in `ios/App/App/Info.plist`; Capacitor auto-grants the WKWebView per-origin media prompt, so users only see the native iOS dialogs
 - `ITSAppUsesNonExemptEncryption=false` set — no export-compliance question on upload
 - Icon/splash sources: `native/assets/*.svg`, re-render with `node native/assets/render-ios-assets.mjs`
+
+## SUBMITTED TO APP REVIEW — Sep 7, 2026, 22:11 UTC
+Review submission db70bae4-878a-4fda-9356-281ce25f064c — state WAITING_FOR_REVIEW.
+Version 1.0.0, build 9. Price: Free (USA base, API-set). Content rights, privacy URL, age ratings, listing, screenshots: all complete.

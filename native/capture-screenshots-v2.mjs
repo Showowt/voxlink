@@ -20,7 +20,7 @@ const browser = await puppeteer.launch({
 });
 const page = await browser.newPage();
 await page.setUserAgent(UA);
-await page.setViewport({ width: 440, height: 956, deviceScaleFactor: 3 });
+await page.setViewport({ width: 428, height: 926, deviceScaleFactor: 3 });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const shot = async (name) => {
   await page.screenshot({ path: `${OUT}${name}.png` });
