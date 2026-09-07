@@ -1,0 +1,29 @@
+<svg width="2732" height="2732" viewBox="0 0 2732 2732" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="tile" x1="1216" y1="1216" x2="1516" y2="1516" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00DBA8"/>
+      <stop offset="100%" stop-color="#FF3B7A"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00DBA8" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#00DBA8" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="2732" height="2732" fill="#030507"/>
+  <circle cx="1366" cy="1366" r="700" fill="url(#halo)"/>
+
+  <!-- Centered brand tile -->
+  <rect x="1216" y="1216" width="300" height="300" rx="72" fill="url(#tile)"/>
+
+  <!-- Mark: two bubbles + soundwave, scaled into tile -->
+  <g transform="translate(1216 1216) scale(0.293)">
+    <path d="M232 300C232 253.6 269.6 216 316 216H500C546.4 216 584 253.6 584 300V488C584 534.4 546.4 572 500 572H420L348 640V572H316C269.6 572 232 534.4 232 488V300Z" fill="white" fill-opacity="0.28"/>
+    <path d="M440 356C440 309.6 477.6 272 524 272H692C738.4 272 776 309.6 776 356V544C776 590.4 738.4 628 692 628H640V692L568 628H524C477.6 628 440 590.4 440 544V356Z" fill="white" fill-opacity="0.5"/>
+    <line x1="482" y1="410" x2="482" y2="522" stroke="white" stroke-width="20" stroke-linecap="round" stroke-opacity="0.9"/>
+    <line x1="530" y1="374" x2="530" y2="558" stroke="white" stroke-width="24" stroke-linecap="round"/>
+    <line x1="578" y1="398" x2="578" y2="534" stroke="white" stroke-width="20" stroke-linecap="round" stroke-opacity="0.9"/>
+    <line x1="626" y1="424" x2="626" y2="508" stroke="white" stroke-width="18" stroke-linecap="round" stroke-opacity="0.7"/>
+    <line x1="672" y1="440" x2="672" y2="492" stroke="white" stroke-width="16" stroke-linecap="round" stroke-opacity="0.5"/>
+  </g>
+</svg>
