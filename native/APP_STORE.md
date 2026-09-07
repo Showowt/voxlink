@@ -77,7 +77,9 @@ Not collected: location, contacts (address book), browsing history, purchases (i
 
 ## Pre-submission checklist
 
-- [ ] Create `reviewer@entrevoz.co` demo account (email+password signup at /auth), verify it can run Face-to-Face mode
+- [x] Demo account CREATED Sep 7 via live signup: `reviewer@entrevoz.co` / `EntrevozReview2026!` (script: native/create-review-account.mjs)
+- [ ] BLOCKED on Phil: account shows "Email not confirmed" — confirm the user in Supabase dashboard (Auth → Users → reviewer@entrevoz.co → Confirm email), then re-run `node native/create-review-account.mjs reviewer@entrevoz.co 'EntrevozReview2026!'` to verify SUCCESS
+- [ ] Verify the demo account can run Face-to-Face mode
 - [ ] Consider marking the demo account Pro in Supabase so all modes are reviewable
 - [ ] Screenshots: 6.9" (1320×2868) required; 6.5" (1242×2688) optional-but-recommended — capture dashboard, video call, face-to-face, language selector
 - [ ] Verify /privacy page mentions account deletion + audio processing
