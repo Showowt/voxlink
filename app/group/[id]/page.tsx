@@ -5,22 +5,9 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useGroupCall } from '@/hooks/useGroupCall';
 import type { SlotIndex } from '@/app/lib/group-call/types';
 import LearningMode, { useLearningMode, TappableCaption, LearningInsightCard } from '@/app/components/LearningMode';
-
-const LANGUAGES = [
-  { code: 'en', name: 'English', flag: '\u{1F1FA}\u{1F1F8}' },
-  { code: 'es', name: 'Spanish', flag: '\u{1F1EA}\u{1F1F8}' },
-  { code: 'fr', name: 'French', flag: '\u{1F1EB}\u{1F1F7}' },
-  { code: 'de', name: 'German', flag: '\u{1F1E9}\u{1F1EA}' },
-  { code: 'it', name: 'Italian', flag: '\u{1F1EE}\u{1F1F9}' },
-  { code: 'pt', name: 'Portuguese', flag: '\u{1F1E7}\u{1F1F7}' },
-  { code: 'zh', name: 'Mandarin', flag: '\u{1F1E8}\u{1F1F3}' },
-  { code: 'ja', name: 'Japanese', flag: '\u{1F1EF}\u{1F1F5}' },
-  { code: 'ko', name: 'Korean', flag: '\u{1F1F0}\u{1F1F7}' },
-  { code: 'ar', name: 'Arabic', flag: '\u{1F1F8}\u{1F1E6}' },
-  { code: 'ru', name: 'Russian', flag: '\u{1F1F7}\u{1F1FA}' },
-  { code: 'hi', name: 'Hindi', flag: '\u{1F1EE}\u{1F1F3}' },
-  { code: 'lt', name: 'Lithuanian', flag: '\u{1F1F1}\u{1F1F9}' },
-];
+// Master list — a hardcoded 13-language subset here silently discarded the
+// language picked on the landing page for the other 18.
+import { LANGUAGES } from '@/app/lib/languages';
 
 function getDeviceId(): string {
   try {
@@ -106,6 +93,7 @@ export default function GroupCallPage() {
   // Video refs
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRefs = useRef<(HTMLVideoElement | null)[]>([null, null, null, null]);
+  const remoteAudioRefs = useRef<(HTMLAudioElement | null)[]>([null, null, null, null]);
 
   // Attach local stream
   useEffect(() => {
@@ -120,6 +108,13 @@ export default function GroupCallPage() {
       const el = remoteVideoRefs.current[idx];
       if (el && p?.stream && el.srcObject !== p.stream) {
         el.srcObject = p.stream;
+      }
+      // Audio plays through the ALWAYS-mounted audio element — the <video>
+      // is conditional (camera-off / audio-only unmounts it), which silenced
+      // those participants entirely.
+      const au = remoteAudioRefs.current[idx];
+      if (au && p?.stream && au.srcObject !== p.stream) {
+        au.srcObject = p.stream;
       }
     });
   }, [gc.participants]);
@@ -442,11 +437,19 @@ export default function GroupCallPage() {
                 participant.isSpeaking ? 'ring-2 ring-[#00C896] ring-offset-0' : ''
               }`}
             >
+              {/* Always-mounted audio path — survives camera-off/audio-only */}
+              <audio
+                ref={el => { if (globalSlot >= 0) remoteAudioRefs.current[globalSlot] = el; }}
+                autoPlay
+                playsInline
+                className="hidden"
+              />
               {callType === 'video' && !participant.isCameraOff && participant.stream ? (
                 <video
                   ref={el => { if (globalSlot >= 0) remoteVideoRefs.current[globalSlot] = el; }}
                   autoPlay
                   playsInline
+                  muted
                   className="w-full h-full object-cover"
                 />
               ) : (

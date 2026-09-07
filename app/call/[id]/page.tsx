@@ -1741,6 +1741,7 @@ function VideoCallContent() {
         roomCode={roomCode}
         userName={userName}
         userLang={userLang}
+        initialPartnerLang={expectedPartnerLang}
         isHost={isHost}
         onJoin={handleLobbyJoin}
         onBack={handleLobbyBack}

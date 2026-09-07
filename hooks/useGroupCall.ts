@@ -310,15 +310,28 @@ export function useGroupCall(): UseGroupCallReturn {
     } else if (msg.type === 'camera') {
       dispatch({ type: 'PARTICIPANT_STATE', slotIndex: fromSlot, cameraOff: msg.off });
     } else if (msg.type === 'presence') {
-      // Update participant info
+      // Update participant info — or ADD them if we don't know them yet
+      // (late joiner announcing themselves to an earlier participant)
       const existing = participantsRef.current[msg.slotIndex];
-      if (existing) {
-        dispatch({
-          type: 'PARTICIPANT_ADD',
-          slotIndex: msg.slotIndex,
-          participant: { ...existing, displayName: msg.displayName, language: msg.language },
-        });
-      }
+      dispatch({
+        type: 'PARTICIPANT_ADD',
+        slotIndex: msg.slotIndex,
+        participant: existing
+          ? { ...existing, displayName: msg.displayName, language: msg.language }
+          : {
+              slotIndex: msg.slotIndex as SlotIndex,
+              deviceId: '',
+              displayName: msg.displayName,
+              language: msg.language,
+              peerId: '',
+              status: 'active',
+              isSpeaking: false,
+              isMuted: false,
+              isCameraOff: false,
+              stream: null,
+              connectionQuality: 3,
+            },
+      });
     } else if (msg.type === 'ping') {
       const dc = dataConnsRef.current.get(fromSlot);
       if (dc?.open) dc.send(JSON.stringify({ type: 'pong', ts: msg.ts }));
@@ -504,6 +517,29 @@ export function useGroupCall(): UseGroupCallReturn {
       if (meta?.type !== 'group' || meta?.roomCode !== roomCodeRef.current) return;
 
       const remoteSlot = meta.slotIndex as number;
+
+      // Register the NEWCOMER in our roster — without this, participants who
+      // joined earlier never see, hear, or list anyone who joins after them
+      // (their streams dispatched into a slot with no participant).
+      if (!participantsRef.current[remoteSlot]) {
+        dispatch({
+          type: 'PARTICIPANT_ADD',
+          slotIndex: remoteSlot,
+          participant: {
+            slotIndex: remoteSlot as SlotIndex,
+            deviceId: '',
+            displayName: (meta.displayName as string) || 'Guest',
+            language: (meta.language as string) || 'en',
+            peerId: dc.peer,
+            status: 'connecting',
+            isSpeaking: false,
+            isMuted: false,
+            isCameraOff: false,
+            stream: null,
+            connectionQuality: 2,
+          },
+        });
+      }
 
       dc.on('open', () => {
         dataConnsRef.current.set(remoteSlot, dc);

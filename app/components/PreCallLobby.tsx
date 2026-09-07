@@ -14,6 +14,7 @@ interface PreCallLobbyProps {
   roomCode: string;
   userName: string;
   userLang: string;
+  initialPartnerLang?: string;
   isHost: boolean;
   onJoin: (settings: {
     stream: MediaStream;
@@ -31,6 +32,7 @@ export default function PreCallLobby({
   roomCode,
   userName,
   userLang: initialUserLang,
+  initialPartnerLang,
   isHost,
   onJoin,
   onBack,
@@ -48,8 +50,10 @@ export default function PreCallLobby({
 
   // Settings state
   const [userLang, setUserLang] = useState(initialUserLang);
+  // Seed from the join link's hostLang hint — the en/es guess was clobbering
+  // the real partner language for 29 of the 31 supported languages.
   const [partnerLang, setPartnerLang] = useState(
-    initialUserLang === "en" ? "es" : "en",
+    initialPartnerLang || (initialUserLang === "en" ? "es" : "en"),
   );
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [cyranoEnabled, setCyranoEnabled] = useState(false);

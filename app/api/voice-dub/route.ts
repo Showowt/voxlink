@@ -72,6 +72,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Empty translation" }, { status: 400 });
   }
 
+  // eleven_flash_v2_5 does NOT support these languages — it produces garbled
+  // audio, not an error. Hand them to the client's browser-TTS fallback.
+  const FLASH_UNSUPPORTED = new Set(["th", "he", "lt"]);
+  if (FLASH_UNSUPPORTED.has((targetLang || "en").split("-")[0])) {
+    return NextResponse.json(
+      { error: "unsupported_language", translatedText, fallback: true },
+      { status: 422 },
+    );
+  }
+
   // Step 2: ElevenLabs TTS — Flash v2.5 for ALL languages (fastest multilingual model)
   const ttsPayload = {
     text: translatedText,

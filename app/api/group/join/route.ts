@@ -68,8 +68,19 @@ export async function POST(req: NextRequest) {
       ? room.participant_slots
       : [null, null, null, null];
 
-    // Find first empty slot
-    const slotIndex = slots.findIndex(s => s === null);
+    // Idempotent rejoin: if this device already holds a slot (refresh,
+    // reconnect, flaky network), reuse it — otherwise every retry consumed a
+    // fresh slot and ghost entries filled the room.
+    const existingIndex = slots.findIndex(
+      (s) =>
+        s !== null &&
+        typeof s === 'object' &&
+        (s as { deviceId?: string }).deviceId === deviceId,
+    );
+
+    // Find first empty slot (or reclaim our own)
+    const slotIndex =
+      existingIndex !== -1 ? existingIndex : slots.findIndex(s => s === null);
     if (slotIndex === -1) {
       return NextResponse.json({ error: 'Room is full (max 4 participants)' }, { status: 409 });
     }

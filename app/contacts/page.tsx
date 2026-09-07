@@ -79,7 +79,15 @@ export default function ContactsPage() {
 
   const callContact = (c: Contact, type: 'video' | 'audio') => {
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-    router.push(type === 'video' ? `/call/${code}?lang=${c.language}` : `/talk/${code}?lang=${c.language}`);
+    // lang = MY language (drives my STT); the contact's language is only a
+    // hint for the expected partner. Presetting lang to the contact's
+    // language ran speech recognition in the wrong language.
+    const myLang = localStorage.getItem('entrevoz_lang') || 'en';
+    router.push(
+      type === 'video'
+        ? `/call/${code}?lang=${myLang}&hostLang=${c.language}&host=true`
+        : `/talk/${code}?lang=${myLang}&partnerLang=${c.language}&host=true`,
+    );
   };
 
   const shareInvite = (c: Contact) => {

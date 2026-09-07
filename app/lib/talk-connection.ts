@@ -84,6 +84,8 @@ export class TalkConnection {
   private reconnectTimeout: NodeJS.Timeout | null = null;
   private keepAliveInterval: NodeJS.Timeout | null = null;
   private connectionAttemptInterval: NodeJS.Timeout | null = null;
+  private attemptLoopActive = false;
+  private connectionAttemptCount = 0;
   private isDestroyed = false;
 
   // Supabase room signaling
@@ -309,8 +311,18 @@ export class TalkConnection {
     this.peer.on("connection", (conn) => {
       console.log("[Entrevoz] Incoming connection from:", conn.peer);
 
-      // Check if host already has a connected partner
-      if (this._isHost && this.dataConnection?.open && this.connectionHealthy) {
+      // Check if host already has a connected partner. A connection from the
+      // SAME peer is our partner's retry/reconnect — rejecting it with
+      // room_full locked the guest on a "Room Full" screen. Let it through
+      // as a replacement connection instead.
+      const isPartnerReconnect =
+        this.dataConnection && conn.peer === this.dataConnection.peer;
+      if (
+        this._isHost &&
+        this.dataConnection?.open &&
+        this.connectionHealthy &&
+        !isPartnerReconnect
+      ) {
         console.log(
           "[Entrevoz] Room full - rejecting new connection:",
           conn.peer,
@@ -372,9 +384,14 @@ export class TalkConnection {
 
   // Guest repeatedly tries to connect to host
   private startConnectionAttempts(): void {
+    // The RoomSignal heartbeat re-calls this every ~3s while unconnected —
+    // restarting reset the attempt counter forever, so the "failed" screen
+    // was unreachable dead code. If a loop is already running, let it run.
+    if (this.attemptLoopActive) return;
     this.stopConnectionAttempts();
+    this.attemptLoopActive = true;
+    this.connectionAttemptCount = 0;
 
-    let attempts = 0;
     const maxAttempts = 30;
     const FAST_RETRIES = 6; // First 6 at 500ms
     const FAST_DELAY = 500;
@@ -386,8 +403,10 @@ export class TalkConnection {
         return;
       }
 
-      attempts++;
+      this.connectionAttemptCount++;
+      const attempts = this.connectionAttemptCount;
       if (attempts > maxAttempts) {
+        this.attemptLoopActive = false;
         this.setStatus("failed", "Could not find host - ask them to refresh");
         return;
       }
@@ -405,6 +424,7 @@ export class TalkConnection {
   }
 
   private stopConnectionAttempts(): void {
+    this.attemptLoopActive = false;
     if (this.connectionAttemptInterval) {
       clearTimeout(this.connectionAttemptInterval);
       this.connectionAttemptInterval = null;
