@@ -3,7 +3,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 // iOS shell loads the live site; bundled webDir is only the offline fallback.
 // "EntrevozApp" in the UA is what useIsNativeApp() keys on — keep in sync.
 const config: CapacitorConfig = {
-  appId: "co.entrevoz.app",
+  appId: "com.entrevoz.app",
   appName: "Entrevoz",
   webDir: "native/www",
   server: {

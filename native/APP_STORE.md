@@ -1,6 +1,6 @@
 # Entrevoz — App Store Submission Pack
 
-Bundle ID: `co.entrevoz.app` · Vercel: voxlink-v14 · Web: https://www.entrevoz.co
+Bundle ID: `com.entrevoz.app` · Vercel: voxlink-v14 · Web: https://www.entrevoz.co
 
 ## Listing
 
