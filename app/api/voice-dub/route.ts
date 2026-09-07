@@ -1,25 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 15;
 
-// Rate limit: 60 dubs per minute per IP
-const limiter = new Map<string, { count: number; reset: number }>();
-function checkLimit(ip: string): boolean {
-  const now = Date.now();
-  const e = limiter.get(ip);
-  if (!e || now > e.reset) {
-    limiter.set(ip, { count: 1, reset: now + 60000 });
-    return true;
-  }
-  if (e.count >= 60) return false;
-  e.count++;
-  return true;
-}
+// ElevenLabs bills per character — cap what one request can burn.
+const MAX_TEXT_LENGTH = 500;
 
 export async function POST(req: NextRequest) {
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
-  if (!checkLimit(ip)) {
+  // Redis-backed (shared across serverless instances) — the old per-instance
+  // Map reset on every cold start, making it trivially bypassable.
+  const rl = await checkRateLimit(`voice-dub:${ip}`, 60, 60000);
+  if (!rl.allowed) {
     return NextResponse.json({ error: "Rate limited" }, { status: 429 });
   }
 
@@ -41,6 +34,15 @@ export async function POST(req: NextRequest) {
       { error: "Missing text or voiceId" },
       { status: 400 },
     );
+  }
+  if (text.length > MAX_TEXT_LENGTH) {
+    return NextResponse.json(
+      { error: `Text too long (max ${MAX_TEXT_LENGTH} chars)`, fallback: true },
+      { status: 413 },
+    );
+  }
+  if (!/^[A-Za-z0-9]{10,40}$/.test(voiceId)) {
+    return NextResponse.json({ error: "Invalid voiceId" }, { status: 400 });
   }
 
   // Step 1: Translate text (skip if caller already translated)

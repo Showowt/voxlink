@@ -103,6 +103,39 @@ export async function POST(req: NextRequest) {
   formData.append("labels", JSON.stringify({ use_case: "real_time_dubbing", quality: "high" }));
 
   try {
+    // Reap stale clones BEFORE creating — ElevenLabs plans cap stored voices;
+    // without cleanup every call permanently consumes a slot until the
+    // account is full and cloning fails for everyone. Clone names embed
+    // their creation timestamp (entrevoz-<ms>).
+    try {
+      const listRes = await fetch("https://api.elevenlabs.io/v1/voices", {
+        headers: { "xi-api-key": apiKey },
+      });
+      if (listRes.ok) {
+        const { voices } = (await listRes.json()) as {
+          voices: Array<{ voice_id: string; name: string }>;
+        };
+        const cutoff = Date.now() - 2 * 60 * 60 * 1000;
+        const stale = (voices ?? []).filter((v) => {
+          const m = /^entrevoz-(\d{10,})$/.exec(v.name ?? "");
+          return m && Number(m[1]) < cutoff;
+        });
+        await Promise.all(
+          stale.slice(0, 10).map((v) =>
+            fetch(
+              `https://api.elevenlabs.io/v1/voices/${encodeURIComponent(v.voice_id)}`,
+              { method: "DELETE", headers: { "xi-api-key": apiKey } },
+            ).catch(() => {}),
+          ),
+        );
+        if (stale.length > 0) {
+          console.warn(`[VoiceClone] Reaped ${Math.min(stale.length, 10)} stale clones`);
+        }
+      }
+    } catch (reapErr) {
+      console.error("[VoiceClone] Reaper failed (non-fatal):", reapErr);
+    }
+
     const cloneRes = await fetch("https://api.elevenlabs.io/v1/voices/add", {
       method: "POST",
       headers: { "xi-api-key": apiKey },

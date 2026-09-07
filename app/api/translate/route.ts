@@ -382,9 +382,17 @@ async function translateMyMemory(
         translated.toUpperCase().includes("LIMIT")
       )
         return null;
-      // Reject if MyMemory returned the same text (unsupported language pair)
-      if (translated.trim().toLowerCase() === text.trim().toLowerCase())
-        return null;
+      // Reject if MyMemory echoed the input (unsupported language pair).
+      // Compare punctuation/whitespace-insensitively — MyMemory often adds a
+      // trailing period or tweaks spacing, which defeated an exact match and
+      // let untranslated English through labeled as a translation.
+      const echoNorm = (s: string) =>
+        s
+          .trim()
+          .toLowerCase()
+          .replace(/[\s]+/g, " ")
+          .replace(/[.!?¿¡,;:…]+$/g, "");
+      if (echoNorm(translated) === echoNorm(text)) return null;
       return translated;
     }
     return null;

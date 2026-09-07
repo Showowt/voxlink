@@ -4,23 +4,13 @@ import { buildPersonaPrompt } from "@/app/lib/language-os/persona-prompt";
 import { parseAIResponse } from "@/app/lib/language-os/parse-response";
 import { getFPForMessage } from "@/app/lib/language-os/algorithms/fluency";
 import type { ChatAPIRequest } from "@/app/lib/language-os/types";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
-// Rate limiter per userId
-const rateLimiter = new Map<string, { count: number; resetAt: number }>();
-
-function isRateLimited(userId: string): boolean {
-  const now = Date.now();
-  const entry = rateLimiter.get(userId);
-  if (!entry || now > entry.resetAt) {
-    rateLimiter.set(userId, { count: 1, resetAt: now + 60000 });
-    return false;
-  }
-  if (entry.count >= 60) return true;
-  entry.count++;
-  return false;
-}
+// Claude is billed per token — bound what one request can send.
+const MAX_MESSAGE_CHARS = 1000;
+const MAX_TOTAL_CHARS = 12000;
 
 export async function POST(req: NextRequest) {
   try {
@@ -32,8 +22,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "MISSING_REQUIRED_FIELD" }, { status: 400 });
     }
 
-    if (isRateLimited(userId)) {
+    // Limit by IP (server-observed), not the client-supplied userId — a
+    // caller can mint a fresh userId per request. Keep a per-user limit too
+    // as a secondary brake for shared IPs.
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
+    const [ipLimit, userLimit] = await Promise.all([
+      checkRateLimit(`los-chat:ip:${ip}`, 60, 60000),
+      checkRateLimit(`los-chat:user:${userId}`, 40, 60000),
+    ]);
+    if (!ipLimit.allowed || !userLimit.allowed) {
       return NextResponse.json({ error: "RATE_LIMITED", retryAfter: 60 }, { status: 429 });
+    }
+
+    const totalChars = (messages || []).reduce(
+      (n, m) => n + (m.content?.length ?? 0),
+      0,
+    );
+    if (
+      totalChars > MAX_TOTAL_CHARS ||
+      (messages || []).some((m) => (m.content?.length ?? 0) > MAX_MESSAGE_CHARS) ||
+      (getCorrectionFor?.length ?? 0) > MAX_MESSAGE_CHARS
+    ) {
+      return NextResponse.json({ error: "MESSAGE_TOO_LONG" }, { status: 413 });
     }
 
     const config = getLanguageConfig(languagePair);
