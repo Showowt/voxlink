@@ -14,6 +14,7 @@ import type {
   CaptionData,
 } from "../../lib/speech-types";
 import PreCallLobby from "../../components/PreCallLobby";
+import ShareJoinLink from "../../components/ShareJoinLink";
 import {
   BrowserUnsupportedScreen,
   PermissionDeniedScreen,
@@ -684,7 +685,6 @@ function VideoCallContent() {
   );
 
   // UI state
-  const [copied, setCopied] = useState(false);
   const [iceState, setIceState] = useState<IceConnectionState | null>(null);
 
   // Text Input Fallback state
@@ -1624,14 +1624,6 @@ function VideoCallContent() {
     }
   };
 
-  const copyLink = () => {
-    // Pass host language so guest defaults to opposite, but guest can change in lobby
-    const url = `${window.location.origin}/call/${roomCode}?hostLang=${userLang}`;
-    navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   const retry = () => {
     window.location.reload();
   };
@@ -1833,12 +1825,10 @@ function VideoCallContent() {
                         <p className="text-[#00C896] text-2xl md:text-3xl font-mono font-bold tracking-wider">
                           {roomCode}
                         </p>
-                        <button
-                          onClick={copyLink}
-                          className="mt-3 px-4 py-2 bg-[#00C896]/20 text-[#00C896] text-sm min-w-[44px] min-h-[44px]"
-                        >
-                          {copied ? "✓ Link Copied" : "🔗 Copy Join Link"}
-                        </button>
+                        <ShareJoinLink
+                          url={`${typeof window !== "undefined" ? window.location.origin : "https://www.entrevoz.co"}/call/${roomCode}?hostLang=${userLang}`}
+                          message="Join my Entrevoz video call:"
+                        />
                       </div>
                     )}
                 </>

@@ -20,6 +20,7 @@ import {
 } from "../../components/ErrorScreens";
 import ReconnectingOverlay from "../../components/ReconnectingOverlay";
 import { useBrowserSupport } from "../../lib/browser-support";
+import { shareJoinLink } from "../../lib/share-link";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
 import LearningMode, { useLearningMode, TappableCaption, LearningInsightCard } from "../../components/LearningMode";
 
@@ -871,15 +872,16 @@ function TalkContent() {
     }
   }, [isHandsFree, isListening, startListening, vibrate]);
 
-  const copyJoinLink = useCallback(() => {
+  const copyJoinLink = useCallback(async () => {
     // Normalize room ID to uppercase for consistency
     const normalizedId = roomId.toUpperCase();
-    navigator.clipboard.writeText(
-      `${window.location.origin}/?join=talk&id=${normalizedId}`,
-    );
-    setCopied(true);
-    vibrate(50);
-    setTimeout(() => setCopied(false), 2000);
+    const url = `${window.location.origin}/?join=talk&id=${normalizedId}`;
+    const result = await shareJoinLink(url, "Join my Entrevoz conversation:");
+    if (result !== "failed") {
+      setCopied(true);
+      vibrate(50);
+      setTimeout(() => setCopied(false), 2000);
+    }
   }, [roomId, vibrate]);
 
   const endSession = useCallback(() => {
