@@ -75,9 +75,8 @@ interface WhisperSegment {
 // Deliberately tight: YouTube caption residue + pure filler that Whisper emits
 // on silence. We only drop when the WHOLE transcript equals one of these, so
 // real conversation is never affected.
-const HALLUCINATION_PHRASES = new Set<string>([
-  "thank you",
-  "thank you.",
+// Phrases that are NEVER real conversation — safe to drop unconditionally.
+const ARTIFACT_PHRASES = new Set<string>([
   "thanks for watching",
   "thanks for watching!",
   "thank you for watching",
@@ -90,16 +89,6 @@ const HALLUCINATION_PHRASES = new Set<string>([
   "transcription by",
   "amara.org",
   "www.",
-  ".",
-  "..",
-  "...",
-  "you",
-  "you.",
-  "bye",
-  "bye.",
-  "bye bye",
-  "the end",
-  "the end.",
   "♪",
   "♪♪",
   "[music]",
@@ -107,13 +96,24 @@ const HALLUCINATION_PHRASES = new Set<string>([
   "(silence)",
   "[applause]",
   "[blank_audio]",
-  "音",
-  "はい",
   "ご視聴ありがとうございました",
   "字幕",
   "感谢观看",
   "请不吝点赞",
   "subscribe to my channel",
+]);
+
+// Phrases Whisper emits on silence but that people ALSO genuinely say.
+// Only dropped when segment confidence corroborates silence — otherwise a
+// real "Thank you." or "Bye" vanishes from the conversation.
+const AMBIGUOUS_FILLER_PHRASES = new Set<string>([
+  "thank you",
+  "you",
+  "bye",
+  "bye bye",
+  "the end",
+  "音",
+  "はい",
 ]);
 
 // Multilingual subtitle-credit hallucinations (Whisper training-data residue).
@@ -134,17 +134,21 @@ function normalize(t: string): string {
   return t.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-function isHallucinationPhrase(text: string): boolean {
+function isSubtitleArtifact(text: string): boolean {
   const n = normalize(text);
   if (!n) return true;
-  if (HALLUCINATION_PHRASES.has(n)) return true;
+  if (ARTIFACT_PHRASES.has(n)) return true;
   if (HALLUCINATION_PATTERNS.some((re) => re.test(n))) return true;
-  // Strip trailing punctuation and retry
   const stripped = n.replace(/[.!?。！？\s]+$/g, "");
-  if (HALLUCINATION_PHRASES.has(stripped)) return true;
+  if (ARTIFACT_PHRASES.has(stripped)) return true;
   // Pure punctuation / symbols only
   if (/^[\s.,!?…♪·・。！？]+$/.test(n)) return true;
   return false;
+}
+
+function isAmbiguousFiller(text: string): boolean {
+  const stripped = normalize(text).replace(/[.!?。！？\s]+$/g, "");
+  return AMBIGUOUS_FILLER_PHRASES.has(stripped);
 }
 
 export async function POST(req: NextRequest) {
@@ -237,7 +241,14 @@ export async function POST(req: NextRequest) {
         if (noSpeech >= NO_SPEECH_HARD) return false; // clearly silence
         if (noSpeech >= NO_SPEECH_SOFT && logprob < AVG_LOGPROB_MIN) return false; // quiet + unsure
         if (compression > COMPRESSION_MAX) return false; // repetition loop
-        if (isHallucinationPhrase(s.text ?? "")) return false; // known artifact
+        if (isSubtitleArtifact(s.text ?? "")) return false; // never real speech
+        // "Thank you"/"Bye"/etc are real speech too — drop only when the
+        // segment's own confidence corroborates a silence hallucination.
+        if (
+          isAmbiguousFiller(s.text ?? "") &&
+          (noSpeech >= 0.3 || logprob < -0.6)
+        )
+          return false;
         return true;
       });
       text = kept.map((s) => s.text ?? "").join(" ").trim();
@@ -247,8 +258,9 @@ export async function POST(req: NextRequest) {
       text = (data.text ?? "").trim();
     }
 
-    // Final whole-transcript artifact guard
-    if (text && isHallucinationPhrase(text)) {
+    // Final whole-transcript artifact guard (subtitle credits only — the
+    // ambiguous fillers were already confidence-gated per segment)
+    if (text && isSubtitleArtifact(text)) {
       text = "";
       reason = "artifact";
     }

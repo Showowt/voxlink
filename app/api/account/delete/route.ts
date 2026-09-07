@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@/lib/supabase-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -113,7 +114,40 @@ export async function POST(req: NextRequest) {
       srsCards: srsDel.data?.length ?? 0,
       entrevozImports: importsDel.data?.length ?? 0,
       contacts: contactsDel.data?.length ?? 0,
+      accountDeleted: false,
     };
+
+    // If a user is signed in (cookie session), delete the ACCOUNT itself —
+    // profile, subscription, limits, usage rows, then the auth user via the
+    // Admin API. Apple 5.1.1(v) requires real account deletion, not just
+    // device data.
+    try {
+      const authClient = await createServerClient();
+      const user = authClient
+        ? (await authClient.auth.getUser()).data.user
+        : null;
+
+      if (user) {
+        await Promise.all([
+          supabase.from("subscriptions").delete().eq("user_id", user.id),
+          supabase.from("user_limits").delete().eq("user_id", user.id),
+          supabase.from("feature_usage").delete().eq("user_id", user.id),
+          supabase.from("profiles").delete().eq("id", user.id),
+        ]);
+        const { error: adminError } =
+          await supabase.auth.admin.deleteUser(user.id);
+        if (adminError) {
+          console.error("[Account Delete] auth user delete failed:", adminError.message);
+          return NextResponse.json(
+            { error: "Account deletion failed. Please contact support." },
+            { status: 500 },
+          );
+        }
+        deletedCounts.accountDeleted = true;
+      }
+    } catch (authErr) {
+      console.error("[Account Delete] auth resolution failed:", authErr);
+    }
 
     // Log any errors (non-fatal -- some tables might not exist)
     const errors: string[] = [];

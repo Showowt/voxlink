@@ -123,13 +123,30 @@ function ChevronIcon({
 }
 
 function PricingCard({ tier }: { tier: PricingTier }) {
+  const [upgradeError, setUpgradeError] = useState("");
+
   const handleUpgrade = async () => {
-    // Navigate to checkout - will POST to create session
-    const form = document.createElement("form");
-    form.method = "POST";
-    form.action = "/api/stripe/checkout";
-    document.body.appendChild(form);
-    form.submit();
+    setUpgradeError("");
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan: "pro" }),
+      });
+      const data = await res.json();
+      if (res.status === 401) {
+        // Must be signed in to subscribe — send through auth and back
+        window.location.href = "/auth?next=/pricing";
+        return;
+      }
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setUpgradeError(data.error || "Checkout unavailable. Try again.");
+      }
+    } catch {
+      setUpgradeError("Network error. Please try again.");
+    }
   };
 
   return (
@@ -192,6 +209,7 @@ function PricingCard({ tier }: { tier: PricingTier }) {
           </GlowButton>
         ) : (
           <Link href="/" className="block">
+            {/* free tier goes home */}
             <GlowButton
               variant="secondary"
               size="lg"
@@ -201,6 +219,11 @@ function PricingCard({ tier }: { tier: PricingTier }) {
               {tier.cta}
             </GlowButton>
           </Link>
+        )}
+        {upgradeError && (
+          <p className="text-red-400 text-xs text-center mt-3" role="alert">
+            {upgradeError}
+          </p>
         )}
       </GlassCard>
     </div>

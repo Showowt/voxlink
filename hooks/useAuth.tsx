@@ -52,7 +52,8 @@ export interface AuthState {
     email: string,
     password: string,
     name?: string,
-  ) => Promise<{ error?: string }>;
+  ) => Promise<{ error?: string; needsConfirmation?: boolean }>;
+  resendConfirmation: (email: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   canUse: (
@@ -172,11 +173,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUpWithEmail = useCallback(
     async (email: string, password: string, name?: string) => {
       if (!supabase) return { error: "Auth not configured" };
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: { data: { full_name: name } },
       });
+      // With email confirmation ON, signUp succeeds with a null session —
+      // the caller must show a "check your email" state, not redirect.
+      return {
+        error: error?.message,
+        needsConfirmation: !error && !!data.user && !data.session,
+      };
+    },
+    [supabase],
+  );
+
+  const resendConfirmation = useCallback(
+    async (email: string) => {
+      if (!supabase) return { error: "Auth not configured" };
+      const { error } = await supabase.auth.resend({ type: "signup", email });
       return { error: error?.message };
     },
     [supabase],
@@ -201,6 +216,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signInWithGoogle,
         signInWithEmail,
         signUpWithEmail,
+        resendConfirmation,
         signOut,
         refreshProfile,
         canUse,
@@ -227,6 +243,7 @@ export function useAuth(): AuthState {
       signInWithGoogle: async () => {},
       signInWithEmail: async () => ({ error: "Not in auth context" }),
       signUpWithEmail: async () => ({ error: "Not in auth context" }),
+      resendConfirmation: async () => ({ error: "Not in auth context" }),
       signOut: async () => {},
       refreshProfile: async () => {},
       canUse: () => true,

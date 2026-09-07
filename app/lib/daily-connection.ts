@@ -313,6 +313,19 @@ export class DailyConnection {
     }
   }
 
+  // Daily publishes its own tracks (audioSource: true) — muting the lobby
+  // stream does NOT stop what the partner receives. These control the
+  // actually-published tracks.
+  setLocalAudio(enabled: boolean): void {
+    if (this.isDestroyed || !this.call) return;
+    this.call.setLocalAudio(enabled);
+  }
+
+  setLocalVideo(enabled: boolean): void {
+    if (this.isDestroyed || !this.call) return;
+    this.call.setLocalVideo(enabled);
+  }
+
   disconnect(): void {
     console.log("[Daily] Disconnecting...");
     this.isDestroyed = true;

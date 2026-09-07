@@ -101,6 +101,12 @@ export function useVoiceDubbing(
   const onFallbackRef = useRef(onFallback);
   onFallbackRef.current = onFallback;
 
+  // Tracks whether we've started learning the PARTNER's voice. enable() can
+  // run before the remote stream exists (auto-enable on connect) — in that
+  // case we fall back to a default voice but must NOT consider the clone
+  // attempted, so stream arrival below can upgrade to the real mimic.
+  const cloneAttemptedRef = useRef(false);
+
   // Keep remoteStream ref in sync (arrives later than hook mount)
   useEffect(() => {
     remoteStreamRef.current = remoteStream;
@@ -363,6 +369,21 @@ export function useVoiceDubbing(
     [stopSamplingAndClone],
   );
 
+  // Upgrade to the real mimic when the partner's stream arrives AFTER
+  // enable() already ran (auto-enable-on-connect race): we were on a default
+  // voice; start learning the partner's voice now.
+  useEffect(() => {
+    if (
+      remoteStream &&
+      remoteStream.getAudioTracks().length > 0 &&
+      enabledRef.current &&
+      !cloneAttemptedRef.current
+    ) {
+      cloneAttemptedRef.current = true;
+      startSampling(remoteStream);
+    }
+  }, [remoteStream, startSampling]);
+
   // ─── Process incoming transcript ─────────────────────────────────────────
 
   const processTranscript = useCallback(
@@ -450,10 +471,12 @@ export function useVoiceDubbing(
     // Use ref instead of stale closure prop — remoteStream may arrive after hook mounts
     const stream = remoteStreamRef.current;
     if (stream && stream.getAudioTracks().length) {
+      cloneAttemptedRef.current = true;
       startSampling(stream);
     } else {
-      // No remote audio yet — use default voice immediately
-      console.log("[VoiceDub] No remote stream, using default voice");
+      // No remote audio yet — use default voice immediately; the stream-arrival
+      // effect above will start sampling (and upgrade to the mimic) later.
+      console.log("[VoiceDub] No remote stream yet, default voice until it arrives");
       const defaultVoice = DEFAULT_VOICES[targetLangRef.current.split("-")[0]] || DEFAULT_VOICES.en;
       voiceIdRef.current = defaultVoice;
       setState((s) => ({ ...s, phase: "ready", voiceId: defaultVoice, samplingProgress: 100 }));

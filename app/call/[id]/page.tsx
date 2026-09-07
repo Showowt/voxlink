@@ -1540,23 +1540,21 @@ function VideoCallContent() {
   // ═══════════════════════════════════════════════════════════════════════════
 
   const toggleMute = () => {
-    if (localStreamRef.current) {
-      const audioTrack = localStreamRef.current.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        setIsMuted(!audioTrack.enabled);
-      }
-    }
+    const next = !isMuted;
+    // Stop the PUBLISHED audio (what the partner hears) — Daily publishes
+    // its own tracks; the lobby stream below only feeds local STT/preview.
+    peerRef.current?.setLocalAudio(!next);
+    const audioTrack = localStreamRef.current?.getAudioTracks()[0];
+    if (audioTrack) audioTrack.enabled = !next;
+    setIsMuted(next);
   };
 
   const toggleVideo = () => {
-    if (localStreamRef.current) {
-      const videoTrack = localStreamRef.current.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = !videoTrack.enabled;
-        setIsVideoOff(!videoTrack.enabled);
-      }
-    }
+    const next = !isVideoOff;
+    peerRef.current?.setLocalVideo(!next);
+    const videoTrack = localStreamRef.current?.getVideoTracks()[0];
+    if (videoTrack) videoTrack.enabled = !next;
+    setIsVideoOff(next);
   };
 
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user");

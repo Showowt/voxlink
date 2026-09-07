@@ -13,9 +13,18 @@ function AuthContent() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
+  const [resendState, setResendState] = useState<
+    "idle" | "sending" | "sent" | "error"
+  >("idle");
 
-  const { user, signInWithGoogle, signInWithEmail, signUpWithEmail } =
-    useAuth();
+  const {
+    user,
+    signInWithGoogle,
+    signInWithEmail,
+    signUpWithEmail,
+    resendConfirmation,
+  } = useAuth();
   const isNativeApp = useIsNativeApp();
   const router = useRouter();
   const params = useSearchParams();
@@ -41,9 +50,20 @@ function AuthContent() {
     if (result.error) {
       setError(result.error);
       setLoading(false);
+    } else if ("needsConfirmation" in result && result.needsConfirmation) {
+      // Email confirmation is ON — no session yet. Redirecting would bounce
+      // the user back here with zero feedback. Show the check-email state.
+      setAwaitingConfirmation(true);
+      setLoading(false);
     } else {
       router.replace(next);
     }
+  };
+
+  const handleResend = async () => {
+    setResendState("sending");
+    const { error: resendError } = await resendConfirmation(email);
+    setResendState(resendError ? "error" : "sent");
   };
 
   const handleGoogle = async () => {
@@ -67,6 +87,48 @@ function AuthContent() {
           </p>
         </div>
 
+        {awaitingConfirmation ? (
+          <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-6 text-center">
+            <div className="text-4xl mb-4">📬</div>
+            <h2 className="text-white font-bold text-lg mb-2">
+              Check your email
+            </h2>
+            <p className="text-white/60 text-sm mb-1">
+              We sent a confirmation link to
+            </p>
+            <p className="text-[#00E5A0] text-sm font-semibold mb-4 break-all">
+              {email}
+            </p>
+            <p className="text-white/40 text-xs mb-6">
+              Tap the link, then come back here and sign in.
+              <br />
+              Confirma tu correo y luego inicia sesión aquí.
+            </p>
+            <button
+              onClick={handleResend}
+              disabled={resendState === "sending" || resendState === "sent"}
+              className="w-full bg-white/10 text-white/80 font-semibold py-3 rounded-xl text-sm min-h-[48px] disabled:opacity-50 mb-3"
+            >
+              {resendState === "sent"
+                ? "✓ Sent again — check spam too"
+                : resendState === "sending"
+                  ? "Sending..."
+                  : resendState === "error"
+                    ? "Failed — try again"
+                    : "Resend email / Reenviar correo"}
+            </button>
+            <button
+              onClick={() => {
+                setAwaitingConfirmation(false);
+                setMode("signin");
+                setResendState("idle");
+              }}
+              className="w-full bg-[#00E5A0] text-black font-bold py-3 rounded-xl text-sm min-h-[48px]"
+            >
+              I confirmed — Sign In
+            </button>
+          </div>
+        ) : (
         <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-6">
           <div className="flex bg-white/5 rounded-xl p-1 mb-6">
             {(["signin", "signup"] as const).map((m) => (
@@ -182,6 +244,7 @@ function AuthContent() {
             </p>
           )}
         </div>
+        )}
 
         <p className="text-center text-white/25 text-sm mt-6">
           <a href="/" className="hover:text-white/50 transition-colors">

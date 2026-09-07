@@ -49,36 +49,45 @@ export default function RecordingsPage() {
     setLoaded(true);
   }, []);
 
-  const handlePlay = useCallback(async (id: string) => {
-    try {
-      const blob = await getRecordingBlob(id);
-      if (!blob) return;
+  // Inline playback — window.open is a silent no-op in the iOS shell
+  // (Capacitor cancels it) and popup-blocked in iOS Safari post-await.
+  const [playerUrl, setPlayerUrl] = useState<string | null>(null);
 
-      const url = URL.createObjectURL(blob);
-      // Open in new tab for playback
-      const w = window.open("", "_blank");
-      if (w) {
-        w.document.title = "Entrevoz Recording";
-        w.document.body.style.cssText = "margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh;";
-        const video = w.document.createElement("video");
-        video.src = url;
-        video.controls = true;
-        video.autoplay = true;
-        video.style.cssText = "max-width:100%;max-height:100vh;";
-        w.document.body.appendChild(video);
-        // Revoke object URL after video loads to prevent memory leak
-        video.onloadeddata = () => setTimeout(() => URL.revokeObjectURL(url), 1000);
-      } else {
-        URL.revokeObjectURL(url);
+  const handlePlay = useCallback(
+    async (id: string) => {
+      try {
+        const blob = await getRecordingBlob(id);
+        if (!blob) return;
+        if (playerUrl) URL.revokeObjectURL(playerUrl);
+        setPlayerUrl(URL.createObjectURL(blob));
+        setPlayingId(id);
+      } catch (err) {
+        console.error("[Recordings] Playback failed:", err);
       }
-    } catch (err) {
-      console.error("[Recordings] Playback failed:", err);
-    }
-  }, []);
+    },
+    [playerUrl],
+  );
+
+  const closePlayer = useCallback(() => {
+    if (playerUrl) URL.revokeObjectURL(playerUrl);
+    setPlayerUrl(null);
+    setPlayingId(null);
+  }, [playerUrl]);
 
   const handleDownload = useCallback(async (id: string) => {
     try {
-      await downloadRecordingById(id);
+      const blob = await getRecordingBlob(id);
+      if (!blob) return;
+      const file = new File([blob], `entrevoz-recording-${id}.webm`, {
+        type: blob.type || "video/webm",
+      });
+      // iOS shell/Safari: share sheet gives native "Save to Files";
+      // anchor-download blob: navigation is cancelled by the WebView.
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file] }).catch(() => {});
+      } else {
+        await downloadRecordingById(id);
+      }
     } catch (err) {
       console.error("[Recordings] Download failed:", err);
     }
@@ -100,6 +109,29 @@ export default function RecordingsPage() {
 
   return (
     <div className="min-h-[100dvh] bg-[#030507]">
+      {/* Inline player overlay */}
+      {playerUrl && (
+        <div
+          className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4"
+          onClick={closePlayer}
+        >
+          <video
+            src={playerUrl}
+            controls
+            autoPlay
+            playsInline
+            className="max-w-full max-h-[80vh] rounded-lg"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            onClick={closePlayer}
+            className="mt-4 px-6 py-3 bg-white/10 text-white rounded-xl text-sm min-h-[44px]"
+          >
+            ✕ Close
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div
         className="sticky top-0 z-10 px-4 py-4 flex items-center gap-3"
@@ -202,7 +234,7 @@ export default function RecordingsPage() {
                 <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M8 5v14l11-7z" />
                 </svg>
-                {playingId === rec.id ? "Opening..." : "Play"}
+                {playingId === rec.id ? "Playing" : "Play"}
               </button>
 
               {/* Download */}
