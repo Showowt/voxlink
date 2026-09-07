@@ -44,7 +44,7 @@ const STEPS_BY_LANG: Record<OnboardingLang, OnboardingStep[]> = {
       subtitle: "Your Voice. Any Language. Instantly.",
       details: [
         "Real-time translation for conversations",
-        "Works in your browser — no download needed",
+        "Works on phone, tablet, and desktop",
         "50+ languages supported",
       ],
     },
@@ -97,7 +97,7 @@ const STEPS_BY_LANG: Record<OnboardingLang, OnboardingStep[]> = {
       subtitle: "Tu voz. Cualquier idioma. Al instante.",
       details: [
         "Traducción en tiempo real para conversaciones",
-        "Funciona en tu navegador — sin descargas",
+        "Funciona en tu teléfono, tablet y computadora",
         "Más de 50 idiomas disponibles",
       ],
     },
@@ -151,7 +151,7 @@ const STEPS_BY_LANG: Record<OnboardingLang, OnboardingStep[]> = {
       subtitle: "Sua voz. Qualquer idioma. Na hora.",
       details: [
         "Tradução em tempo real para conversas",
-        "Funciona no navegador — sem baixar nada",
+        "Funciona no celular, tablet e computador",
         "Mais de 50 idiomas disponíveis",
       ],
     },
