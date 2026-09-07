@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import ErrorBoundary from "./ErrorBoundary";
 import BottomNav from "./BottomNav";
 
@@ -13,11 +14,16 @@ interface AppShellProps {
 }
 
 export default function AppShell({ children }: AppShellProps) {
+  const pathname = usePathname();
+
   // iOS shell: stop the webview drawing under the system status bar (content
   // was sliding beneath the clock/battery). The plugin ships in the app
   // binary; this call reaches it through the injected Capacitor bridge.
+  // Also activates the fixed-shell scroller (see globals.css .native-shell):
+  // the document never scrolls, so rubber-band sway is impossible.
   useEffect(() => {
     if (!navigator.userAgent.includes("EntrevozApp")) return;
+    document.documentElement.classList.add("native-shell");
     import("@capacitor/status-bar")
       .then(({ StatusBar, Style }) => {
         StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
@@ -25,6 +31,12 @@ export default function AppShell({ children }: AppShellProps) {
       })
       .catch(() => {});
   }, []);
+
+  // With the inner scroller, Next's window-based scroll restoration is a
+  // no-op — reset the scroller ourselves on every route change.
+  useEffect(() => {
+    document.getElementById("app-scroll")?.scrollTo(0, 0);
+  }, [pathname]);
 
   useEffect(() => {
     let healthInterval: NodeJS.Timeout | null = null;
@@ -87,7 +99,7 @@ export default function AppShell({ children }: AppShellProps) {
   return (
     <ErrorBoundary>
       <OfflineIndicator />
-      {children}
+      <div id="app-scroll">{children}</div>
       <BottomNav />
     </ErrorBoundary>
   );
