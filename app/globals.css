@@ -19,6 +19,10 @@ html {
   height: 100%;
   height: 100dvh;
   background: #030507;
+  /* Kill the iOS rubber-band "sway": the root scroller must carry
+     overscroll-behavior (body alone doesn't catch it in WKWebView) */
+  overscroll-behavior-y: none;
+  overflow-x: hidden;
   color: white;
   font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;

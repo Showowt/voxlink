@@ -13,6 +13,19 @@ interface AppShellProps {
 }
 
 export default function AppShell({ children }: AppShellProps) {
+  // iOS shell: stop the webview drawing under the system status bar (content
+  // was sliding beneath the clock/battery). The plugin ships in the app
+  // binary; this call reaches it through the injected Capacitor bridge.
+  useEffect(() => {
+    if (!navigator.userAgent.includes("EntrevozApp")) return;
+    import("@capacitor/status-bar")
+      .then(({ StatusBar, Style }) => {
+        StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
+        StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     let healthInterval: NodeJS.Timeout | null = null;
 
