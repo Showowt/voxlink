@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState, ReactNode } from "react";
+import { useEffect, ReactNode } from "react";
 import ErrorBoundary from "./ErrorBoundary";
-import AccessGate, { STORAGE_KEY } from "./AccessGate";
 import BottomNav from "./BottomNav";
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -74,59 +73,10 @@ export default function AppShell({ children }: AppShellProps) {
 
   return (
     <ErrorBoundary>
-      <AccessGate>
-        <OfflineIndicator />
-        <LogoutButton />
-        {children}
-        <BottomNav />
-      </AccessGate>
+      <OfflineIndicator />
+      {children}
+      <BottomNav />
     </ErrorBoundary>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// LOGOUT BUTTON - Sign out and clear auth token
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function LogoutButton() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-  useEffect(() => {
-    // Check if user is authenticated
-    const token = localStorage.getItem(STORAGE_KEY);
-    setIsAuthenticated(token !== null && token.length === 64);
-  }, []);
-
-  const handleLogout = () => {
-    localStorage.removeItem(STORAGE_KEY);
-    window.location.reload();
-  };
-
-  // Only show when authenticated
-  if (!isAuthenticated) return null;
-
-  return (
-    <button
-      onClick={handleLogout}
-      className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 min-h-[44px] text-sm font-medium text-gray-400 hover:text-white bg-[#1a1a2e] hover:bg-[#252538] border border-gray-700 hover:border-gray-600 rounded-lg transition-all"
-      title="Sign Out"
-    >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        className="h-4 w-4"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        strokeWidth={2}
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-        />
-      </svg>
-      <span className="hidden sm:inline">Sign Out</span>
-    </button>
   );
 }
 
