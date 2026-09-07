@@ -804,7 +804,11 @@ function VideoCallContent() {
     }
   }, [transcription.error]);
 
-  // ── Voice Dubbing (additive — does not affect subtitle system) ──────────
+  // ── Voice Dubbing — the DEFAULT voice for translations (ElevenLabs mimic).
+  // Auto-enabled on connect; the toggle turns ALL translated voice off.
+  // Browser TTS survives only as a fallback while the clone is being built
+  // or when the dub API fails.
+  const voiceOutputRef = useRef(true);
   const {
     state: dubbingState,
     enable: enableDubbing,
@@ -812,7 +816,9 @@ function VideoCallContent() {
     processTranscript: processDub,
     cleanup: cleanupDubbing,
     isDubPlaying,
-  } = useVoiceDubbing(remoteStreamRef.current, userLang);
+  } = useVoiceDubbing(remoteStreamRef.current, userLang, (text) => {
+    if (voiceOutputRef.current) speakText(text, userLang);
+  });
 
   // Mute partner's raw voice when dub is playing (no overlapping voices)
   useEffect(() => {
@@ -860,7 +866,7 @@ function VideoCallContent() {
     if (remoteTranscription.isFallbackActive && remoteTranscription.remoteTranslation) {
       setTheirLiveTranslation(remoteTranscription.remoteTranslation);
       // Speak the translation
-      speakText(remoteTranscription.remoteTranslation, userLang);
+      speakTranslation(remoteTranscription.remoteTranslation, partnerLang || expectedPartnerLang);
     }
   }, [remoteTranscription.remoteTranslation, remoteTranscription.isFallbackActive]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -871,6 +877,32 @@ function VideoCallContent() {
     processDubRef.current = processDub;
     dubbingEnabledRef.current = dubbingState.isEnabled;
   }, [processDub, dubbingState.isEnabled]);
+
+  // Single voice-output chokepoint for partner translations:
+  // mimic voice when the clone machinery is up, browser TTS until then,
+  // and SILENCE when the user turned voice off.
+  const speakTranslation = useCallback(
+    (text: string, sourceLang: string) => {
+      if (!text || !voiceOutputRef.current) return;
+      if (dubbingEnabledRef.current) {
+        processDubRef.current(text, sourceLang, userLang);
+      } else {
+        speakText(text, userLang);
+      }
+    },
+    [userLang],
+  );
+
+  const toggleVoiceOutput = useCallback(() => {
+    if (voiceOutputRef.current) {
+      voiceOutputRef.current = false;
+      disableDubbing();
+      window.speechSynthesis.cancel();
+    } else {
+      voiceOutputRef.current = true;
+      enableDubbing();
+    }
+  }, [disableDubbing, enableDubbing]);
 
   // Quality monitoring state
   const [quality, setQuality] = useState<ConnectionQuality | null>(null);
@@ -894,6 +926,17 @@ function VideoCallContent() {
 
   // Enable controls when connected - either hasPartner OR we have remote video stream
   const isConnected = status === "connected" && (hasPartner || hasRemoteStream);
+
+  // Voice mimic ON by default: start learning the partner's voice as soon as
+  // the call connects (once — respects a later manual off-toggle).
+  const autoDubStartedRef = useRef(false);
+  useEffect(() => {
+    if (isConnected && !autoDubStartedRef.current && voiceOutputRef.current) {
+      autoDubStartedRef.current = true;
+      enableDubbing();
+    }
+  }, [isConnected, enableDubbing]);
+
   const statusColor =
     status === "connected"
       ? "bg-green-500"
@@ -1310,15 +1353,9 @@ function VideoCallContent() {
         setTheirLiveText(displayOriginal);
         setTheirLiveTranslation(displayTranslation);
 
-        // Voice output: either ElevenLabs dubbing OR browser TTS (never both)
-        if (isFinal) {
-          if (dubbingEnabledRef.current && text) {
-            // Voice dubbing: pass the ALREADY TRANSLATED text (skip re-translation for speed)
-            processDubRef.current(text, resolvedFrom, userLang);
-          } else {
-            // Fallback: browser TTS
-            speakText(text, userLang);
-          }
+        // Voice output through the single chokepoint (mimic → TTS → silence)
+        if (isFinal && text) {
+          speakTranslation(text, resolvedFrom);
         }
 
         // Add to transcript only on final
@@ -1389,7 +1426,7 @@ function VideoCallContent() {
       if (captionData.translation) {
         setTheirLiveTranslation(captionData.translation);
         if (captionData.isFinal) {
-          speakText(captionData.translation, userLang);
+          speakTranslation(captionData.translation, captionData.lang || "auto");
         }
       } else {
         // Translate partner's text to OUR language
@@ -1410,7 +1447,7 @@ function VideoCallContent() {
               result.translation || result.translated || captionData.text;
             setTheirLiveTranslation(translation);
             if (captionData.isFinal) {
-              speakText(translation, userLang);
+              speakTranslation(translation, captionData.lang || "auto");
             }
           } catch (err) {
             console.error("Translation failed:", err);
@@ -1420,7 +1457,7 @@ function VideoCallContent() {
           // Same language, no translation needed
           setTheirLiveTranslation(captionData.text);
           if (captionData.isFinal) {
-            speakText(captionData.text, userLang);
+            speakTranslation(captionData.text, captionData.lang || "auto");
           }
         }
       }
@@ -2473,7 +2510,7 @@ function VideoCallContent() {
           {/* Voice Dubbing Toggle */}
           {isConnected && (
             <button
-              onClick={() => dubbingState.isEnabled ? disableDubbing() : enableDubbing()}
+              onClick={toggleVoiceOutput}
               className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center text-lg md:text-xl transition-all relative ${
                 dubbingState.isEnabled
                   ? dubbingState.phase === "ready"

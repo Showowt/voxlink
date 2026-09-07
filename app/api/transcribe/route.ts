@@ -116,6 +116,20 @@ const HALLUCINATION_PHRASES = new Set<string>([
   "subscribe to my channel",
 ]);
 
+// Multilingual subtitle-credit hallucinations (Whisper training-data residue).
+// "amara.org" anywhere is safe to drop — no real conversation contains it.
+// The rest are whole-transcript prefix matches per language.
+const HALLUCINATION_PATTERNS: RegExp[] = [
+  /amara\s*\.\s*org/i,
+  /^subt[ií]tulos?\s+(realizados?\s+)?(por|creados)/i, // es
+  /^legendas\s+(pela|por|feitas)/i, // pt
+  /^sous[-\s]?titr(es|age)\s+(r[ée]alis[ée]s?\s+)?par/i, // fr
+  /^untertitel\s+(von|der|im\s+auftrag)/i, // de
+  /^sottotitoli\s+(creati|a\s+cura)/i, // it
+  /^(sub|subs|subtitles|captions|transcription|transcribed)\s+by\b/i, // en
+  /^перевод\s+субтитров/i, // ru
+];
+
 function normalize(t: string): string {
   return t.trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -124,6 +138,7 @@ function isHallucinationPhrase(text: string): boolean {
   const n = normalize(text);
   if (!n) return true;
   if (HALLUCINATION_PHRASES.has(n)) return true;
+  if (HALLUCINATION_PATTERNS.some((re) => re.test(n))) return true;
   // Strip trailing punctuation and retry
   const stripped = n.replace(/[.!?。！？\s]+$/g, "");
   if (HALLUCINATION_PHRASES.has(stripped)) return true;

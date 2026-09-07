@@ -65,6 +65,9 @@ const DEFAULT_VOICES: Record<string, string> = {
 export function useVoiceDubbing(
   remoteStream: MediaStream | null,
   targetLang: string,
+  // Called with the text when dubbed audio can't play (clone not ready yet,
+  // API failure, late response) so the caller can voice it another way.
+  onFallback?: (text: string) => void,
 ): UseVoiceDubbingReturn {
   const [state, setState] = useState<VoiceDubbingState>({
     phase: "idle",
@@ -93,6 +96,10 @@ export function useVoiceDubbing(
   const processingRef = useRef(false);
   const remoteStreamRef = useRef<MediaStream | null>(remoteStream);
   const queueRef = useRef<Array<{text: string; sourceLang: string; targetLang: string}>>([]);
+  const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const onFallbackRef = useRef(onFallback);
+  onFallbackRef.current = onFallback;
 
   // Keep remoteStream ref in sync (arrives later than hook mount)
   useEffect(() => {
@@ -107,6 +114,9 @@ export function useVoiceDubbing(
   // ─── Audio playback ──────────────────────────────────────────────────────
 
   const playAudioBase64 = useCallback(async (base64: string) => {
+    // User turned dubbing off — never start audio after that
+    if (!enabledRef.current) return;
+
     // Fallback: create AudioContext here only if enable() didn't create one
     if (!audioContextRef.current) {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -131,26 +141,30 @@ export function useVoiceDubbing(
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
         audio.volume = Math.min(DUB_GAIN / 3, 1); // Normalize for HTML audio (0-1 range)
+        currentAudioRef.current = audio;
 
         setState((s) => ({ ...s, isPlaying: true }));
         isPlayingRef.current = true;
 
         audio.onended = () => {
           URL.revokeObjectURL(url);
+          currentAudioRef.current = null;
           isPlayingRef.current = false;
           setState((s) => ({ ...s, isPlaying: false }));
-          if (audioQueueRef.current.length > 0) {
+          if (enabledRef.current && audioQueueRef.current.length > 0) {
             const next = audioQueueRef.current.shift()!;
             playAudioBase64(next);
           }
         };
         audio.onerror = () => {
           URL.revokeObjectURL(url);
+          currentAudioRef.current = null;
           isPlayingRef.current = false;
           setState((s) => ({ ...s, isPlaying: false }));
         };
         await audio.play().catch(() => {
           URL.revokeObjectURL(url);
+          currentAudioRef.current = null;
           isPlayingRef.current = false;
           setState((s) => ({ ...s, isPlaying: false }));
         });
@@ -167,15 +181,17 @@ export function useVoiceDubbing(
 
       source.buffer = audioBuffer;
       source.connect(gainNodeRef.current);
+      currentSourceRef.current = source;
 
       setState((s) => ({ ...s, isPlaying: true }));
       isPlayingRef.current = true;
 
       source.start();
       source.onended = () => {
+        currentSourceRef.current = null;
         isPlayingRef.current = false;
         setState((s) => ({ ...s, isPlaying: false }));
-        if (audioQueueRef.current.length > 0) {
+        if (enabledRef.current && audioQueueRef.current.length > 0) {
           const next = audioQueueRef.current.shift()!;
           playAudioBase64(next);
         }
@@ -352,9 +368,13 @@ export function useVoiceDubbing(
   const processTranscript = useCallback(
     async (text: string, sourceLang: string, targetLang: string) => {
       if (!enabledRef.current) return;
-      if (!voiceIdRef.current) return;
       if (!text?.trim() || text.length < MIN_TEXT_LENGTH) return;
       if (text.length > MAX_TEXT_LENGTH) return;
+      if (!voiceIdRef.current) {
+        // Clone not ready yet (still sampling) — voice it another way
+        onFallbackRef.current?.(text);
+        return;
+      }
 
       // If already processing, queue the transcript instead of dropping it
       if (processingRef.current) {
@@ -380,6 +400,9 @@ export function useVoiceDubbing(
 
         const data = await res.json();
 
+        // User turned dubbing off while the request was in flight — drop it
+        if (!enabledRef.current) return;
+
         if (data.translatedText) {
           setState((s) => ({ ...s, lastTranslation: data.translatedText }));
         }
@@ -392,9 +415,12 @@ export function useVoiceDubbing(
           } else {
             playAudioBase64(data.audioBase64);
           }
+        } else {
+          onFallbackRef.current?.(data.translatedText || text);
         }
       } catch (e) {
         console.warn("[VoiceDub] Dub request failed:", e);
+        if (enabledRef.current) onFallbackRef.current?.(text);
       } finally {
         processingRef.current = false;
 
@@ -443,6 +469,20 @@ export function useVoiceDubbing(
 
     if (samplingTimerRef.current) clearTimeout(samplingTimerRef.current);
     if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+
+    // HARD STOP anything currently playing — off means silent NOW
+    if (currentSourceRef.current) {
+      try { currentSourceRef.current.stop(); } catch { /* already stopped */ }
+      currentSourceRef.current = null;
+    }
+    if (currentAudioRef.current) {
+      try {
+        currentAudioRef.current.pause();
+        currentAudioRef.current.src = "";
+      } catch { /* ignore */ }
+      currentAudioRef.current = null;
+    }
+    isPlayingRef.current = false;
 
     audioQueueRef.current = [];
     queueRef.current = [];
