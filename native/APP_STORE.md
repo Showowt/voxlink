@@ -2,6 +2,16 @@
 
 Bundle ID: `com.entrevoz.app` · Vercel: voxlink-v14 · Web: https://www.entrevoz.co
 
+## ASC state (Sep 7, 2026 — via API, key AuthKey_U23PJ7SP52.p8 in ~/.appstoreconnect/private_keys/)
+
+- App ID **6760318172** (name ENTREVOZ, SKU voxlink-001, reused from Mar 2026 Expo record)
+- Version 1.0.0 id `5e20b3ad-392d-478b-990a-6d55c2582de6` — PREPARE_FOR_SUBMISSION, **build 9 attached** (`9276c00c-f536-437d-b5ff-513edd96cddb`, VALID)
+- Localizations: en-US `05c99b5b-…1575` + es-MX `eeeaf939-…374a`, both with new copy + 5 screenshots each
+- Review details: demo account + notes set (Phil contact pre-filled from Mar)
+- Categories SOCIAL_NETWORKING/TRAVEL set · age rating OK · copyright set
+- TestFlight: internal group "MachineMind" has all-builds access → build 9 available
+- API client: `native/asc-api.mjs` (GET/POST/PATCH/DELETE) · screenshots: `native/upload-screenshots.mjs` (6.9" = 1320×2868; create sets as APP_IPHONE_67, legacy APP_IPHONE_69 set exists on en-US)
+
 ## Listing
 
 **Name:** Entrevoz
