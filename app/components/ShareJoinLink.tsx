@@ -51,7 +51,7 @@ export default function ShareJoinLink({
       <div className="flex items-center justify-center gap-2">
         <button
           onClick={handleShare}
-          className="px-4 py-2 bg-[#00C896] text-black text-sm font-bold rounded-lg min-h-[44px] active:scale-95 transition-transform"
+          className="px-4 py-2 bg-[#00C896] text-black text-sm font-bold rounded-lg min-h-[44px] whitespace-nowrap active:scale-95 transition-transform"
         >
           🔗 Share Link
         </button>
@@ -59,13 +59,13 @@ export default function ShareJoinLink({
           href={whatsappShareUrl(url, message)}
           target="_blank"
           rel="noopener noreferrer"
-          className="px-4 py-2 bg-[#25D366]/20 text-[#25D366] text-sm font-bold rounded-lg min-h-[44px] flex items-center active:scale-95 transition-transform"
+          className="px-4 py-2 bg-[#25D366]/20 text-[#25D366] text-sm font-bold rounded-lg min-h-[44px] whitespace-nowrap flex items-center active:scale-95 transition-transform"
         >
           WhatsApp
         </a>
         <button
           onClick={handleCopy}
-          className="px-4 py-2 bg-white/10 text-white/70 text-sm rounded-lg min-h-[44px] active:scale-95 transition-transform"
+          className="px-4 py-2 bg-white/10 text-white/70 text-sm rounded-lg min-h-[44px] whitespace-nowrap active:scale-95 transition-transform"
         >
           Copy
         </button>
