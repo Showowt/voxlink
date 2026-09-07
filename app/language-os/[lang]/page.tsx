@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { getLanguageConfig } from "@/app/lib/language-os/engine";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { getLevelFromScore } from "@/app/lib/language-os/algorithms/fluency";
+import { playTtsBase64 } from "@/app/lib/language-os/play-tts";
 import type { CorrectionResult, Persona, UserProgress, DEFAULT_PROGRESS } from "@/app/lib/language-os/types";
 
 interface SessionMessage {
@@ -177,26 +178,16 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
       const res = await fetch("/api/language-os/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, voiceId }),
+        body: JSON.stringify({ text, voiceId, lang: config.targetLanguage }),
       });
 
       const data = await res.json();
       if (!data.audioBase64) throw new Error("No audio");
 
-      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
-      const ctx = audioCtxRef.current;
-      if (ctx.state === "suspended") await ctx.resume();
-
-      const binary = atob(data.audioBase64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-
-      const audioBuffer = await ctx.decodeAudioData(bytes.buffer.slice(0));
-      const source = ctx.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(ctx.destination);
-      source.start();
-      source.onended = () => setSpeakingId(null);
+      // decodeAudioData rejects MP3 on iOS — persona voices were silently
+      // degrading to the robot fallback. Play via <audio> element instead.
+      await playTtsBase64(data.audioBase64);
+      setSpeakingId(null);
     } catch {
       // Fallback to browser SpeechSynthesis
       setSpeakingId(null);

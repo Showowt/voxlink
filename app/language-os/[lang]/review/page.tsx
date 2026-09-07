@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { getLanguageConfig } from "@/app/lib/language-os/engine";
+import { playTtsBase64 } from "@/app/lib/language-os/play-tts";
 import type { SRSCard } from "@/app/lib/language-os/types";
 
 export default function SRSReviewPage() {
@@ -31,23 +32,17 @@ export default function SRSReviewPage() {
       const res = await fetch("/api/language-os/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, voiceId: defaultVoiceId }),
+        body: JSON.stringify({
+          text,
+          voiceId: defaultVoiceId,
+          lang: config?.targetLanguage,
+        }),
       });
       const data = await res.json();
       if (!data.audioBase64) throw new Error("No audio");
 
-      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
-      const ctx = audioCtxRef.current;
-      if (ctx.state === "suspended") await ctx.resume();
-
-      const binary = atob(data.audioBase64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      const audioBuffer = await ctx.decodeAudioData(bytes.buffer.slice(0));
-      const source = ctx.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(ctx.destination);
-      source.start();
+      // decodeAudioData rejects MP3 on iOS — play via <audio> element
+      await playTtsBase64(data.audioBase64);
     } catch {
       if (typeof window !== "undefined" && "speechSynthesis" in window && config) {
         const u = new SpeechSynthesisUtterance(text);

@@ -29,10 +29,24 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}) as Record<string, unknown>);
-  const { text, voiceId } = body as { text?: string; voiceId?: string };
+  const { text, voiceId, lang } = body as {
+    text?: string;
+    voiceId?: string;
+    lang?: string;
+  };
 
   if (!text?.trim() || !voiceId) {
     return NextResponse.json({ error: "Missing text or voiceId" }, { status: 400 });
+  }
+
+  // eleven_flash_v2_5 garbles these languages (no support) — tell the client
+  // to use the device voice instead of returning broken audio.
+  const FLASH_UNSUPPORTED = new Set(["lt", "th", "he"]);
+  if (lang && FLASH_UNSUPPORTED.has(lang.split("-")[0].toLowerCase())) {
+    return NextResponse.json(
+      { error: "unsupported_language", fallback: true },
+      { status: 422 },
+    );
   }
 
   // Cap text length
