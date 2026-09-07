@@ -245,11 +245,17 @@ export async function POST(req: NextRequest) {
     }
 
     // Original format
-    const { userId, languagePair, transcript, conversationId, durationSeconds } = body;
+    const { userId, languagePair: rawPair, transcript, conversationId, durationSeconds } = body;
 
-    if (!userId || !languagePair || !transcript) {
+    if (!userId || !rawPair || !transcript) {
       return NextResponse.json({ error: "Missing fields" }, { status: 400 });
     }
+
+    // Calls send bare ISO pairs ("en-es") but Language OS courses are keyed
+    // with regions ("en-es-CO") — without canonicalizing, call vocab was
+    // stored under a key no course ever reads, so it never surfaced.
+    const [rawNative, rawTarget] = String(rawPair).split("-");
+    const languagePair = resolvePairKey(rawNative || "en", rawTarget || "es");
 
     // Idempotency check
     if (conversationId && losClient) {
