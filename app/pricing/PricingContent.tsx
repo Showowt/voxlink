@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useIsNativeApp } from "@/hooks/useIsNativeApp";
 import { GlassCard } from "../components/ui/GlassCard";
 import { GlowButton } from "../components/ui/GlowButton";
 import { VoxxoLogo } from "../components/ui/VoxxoLogo";
@@ -252,6 +254,16 @@ function FAQSection() {
 }
 
 export default function PricingContent() {
+  const router = useRouter();
+  const isNativeApp = useIsNativeApp();
+
+  // Apple Guideline 3.1.1 — no external purchase surfaces inside the iOS shell
+  useEffect(() => {
+    if (isNativeApp) router.replace("/dashboard");
+  }, [isNativeApp, router]);
+
+  if (isNativeApp) return null;
+
   return (
     <AnimatedBackground
       variant="mesh"

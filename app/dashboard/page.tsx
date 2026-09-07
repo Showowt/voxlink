@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useAnalytics } from "@/hooks/useAnalytics";
+import { useIsNativeApp } from "@/hooks/useIsNativeApp";
 import { BackButton } from "@/app/components/ui/BackButton";
 
 const MODES = [
@@ -151,6 +152,7 @@ function DashboardContent() {
   const { streak } = useAnalytics();
   const router = useRouter();
   const params = useSearchParams();
+  const isNativeApp = useIsNativeApp();
 
   const [showUpgradeToast, setShowUpgradeToast] = useState(false);
 
@@ -272,12 +274,14 @@ function DashboardContent() {
               />
             </div>
 
-            <button
-              onClick={() => router.push("/pricing")}
-              className="w-full mt-4 bg-[#00E5A0] text-black font-bold py-3 rounded-xl text-sm hover:bg-[#00E5A0]/90 active:scale-95 transition-all min-h-[48px]"
-            >
-              Upgrade to Pro — Unlimited everything
-            </button>
+            {!isNativeApp && (
+              <button
+                onClick={() => router.push("/pricing")}
+                className="w-full mt-4 bg-[#00E5A0] text-black font-bold py-3 rounded-xl text-sm hover:bg-[#00E5A0]/90 active:scale-95 transition-all min-h-[48px]"
+              >
+                Upgrade to Pro — Unlimited everything
+              </button>
+            )}
           </div>
         )}
 
@@ -287,16 +291,20 @@ function DashboardContent() {
               <div className="text-yellow-400 font-bold text-sm">
                 {trialDaysLeft} days left in your trial
               </div>
-              <div className="text-white/40 text-xs mt-0.5">
-                Upgrade now to keep Pro access
-              </div>
+              {!isNativeApp && (
+                <div className="text-white/40 text-xs mt-0.5">
+                  Upgrade now to keep Pro access
+                </div>
+              )}
             </div>
-            <button
-              onClick={() => router.push("/pricing")}
-              className="bg-yellow-400 text-black font-bold px-4 py-2 rounded-xl text-xs whitespace-nowrap min-h-[44px]"
-            >
-              Upgrade →
-            </button>
+            {!isNativeApp && (
+              <button
+                onClick={() => router.push("/pricing")}
+                className="bg-yellow-400 text-black font-bold px-4 py-2 rounded-xl text-xs whitespace-nowrap min-h-[44px]"
+              >
+                Upgrade →
+              </button>
+            )}
           </div>
         )}
 
@@ -309,9 +317,13 @@ function DashboardContent() {
             return (
               <button
                 key={mode.id}
-                onClick={() =>
-                  locked ? router.push("/pricing") : router.push(mode.href)
-                }
+                onClick={() => {
+                  if (!locked) {
+                    router.push(mode.href);
+                  } else if (!isNativeApp) {
+                    router.push("/pricing");
+                  }
+                }}
                 className={[
                   "relative text-left bg-white/[0.04] border rounded-2xl p-4 transition-all active:scale-95 min-h-[100px]",
                   locked
@@ -332,7 +344,7 @@ function DashboardContent() {
           })}
         </div>
 
-        {isPro && (
+        {isPro && !isNativeApp && (
           <div className="text-center">
             <button
               onClick={async () => {
