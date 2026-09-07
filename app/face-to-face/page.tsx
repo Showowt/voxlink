@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { getFlag, getSpeechCode, LANGUAGES } from "../lib/languages";
+import { playTtsBase64, stopTtsPlayback } from "../lib/language-os/play-tts";
 import { LanguageSelector } from "../components/LanguageSelector";
 import { BackButton } from "@/app/components/ui/BackButton";
 import type {
@@ -107,16 +108,68 @@ export default function FaceToFacePage() {
     [],
   );
 
-  // Text-to-Speech function
-  const speak = useCallback((text: string, lang: string) => {
-    if (!text.trim() || typeof window === "undefined") return;
+  // Voice output: natural ElevenLabs voices by default, cycleable to the
+  // device voice or fully OFF (captions only). Persisted per device.
+  const VOICE_IDS: Record<string, string> = {
+    premiumF: "21m00Tcm4TlvDq8ikWAM", // Rachel — warm female, multilingual
+    premiumM: "ErXwobaYiN019PkySvjV", // Antoni — natural male, multilingual
+  };
+  const [voiceMode, setVoiceMode] = useState<
+    "premiumF" | "premiumM" | "device" | "off"
+  >("premiumF");
+  const voiceModeRef = useRef(voiceMode);
+  useEffect(() => {
+    const saved = localStorage.getItem("entrevoz_f2f_voice");
+    if (saved === "premiumF" || saved === "premiumM" || saved === "device" || saved === "off") {
+      setVoiceMode(saved);
+    }
+  }, []);
+  useEffect(() => {
+    voiceModeRef.current = voiceMode;
+    localStorage.setItem("entrevoz_f2f_voice", voiceMode);
+  }, [voiceMode]);
+
+  const cycleVoiceMode = useCallback(() => {
+    setVoiceMode((m) => {
+      const order = ["premiumF", "premiumM", "device", "off"] as const;
+      const next = order[(order.indexOf(m) + 1) % order.length];
+      if (next === "off") {
+        stopTtsPlayback();
+        window.speechSynthesis.cancel();
+      }
+      return next;
+    });
+  }, []);
+
+  // Text-to-Speech: premium voice first, device voice as fallback
+  const speak = useCallback(async (text: string, lang: string) => {
+    const mode = voiceModeRef.current;
+    if (!text.trim() || typeof window === "undefined" || mode === "off") return;
+
+    if (mode === "premiumF" || mode === "premiumM") {
+      try {
+        const res = await fetch("/api/language-os/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, voiceId: VOICE_IDS[mode], lang }),
+        });
+        const data = await res.json();
+        if (data.audioBase64) {
+          await playTtsBase64(data.audioBase64);
+          return;
+        }
+      } catch {
+        /* fall through to device voice */
+      }
+    }
 
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = getSpeechCode(lang);
-    utterance.rate = 0.9;
+    utterance.rate = 1.0;
     utterance.pitch = 1;
     window.speechSynthesis.speak(utterance);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Create speech recognition for a speaker
@@ -479,6 +532,26 @@ export default function FaceToFacePage() {
             <span className="text-white/70 text-xs">✏️</span>
           </button>
           <div className="flex items-center gap-2">
+            <button
+              onClick={cycleVoiceMode}
+              className={`px-3 py-1.5 rounded-lg text-sm transition min-h-[44px] ${
+                voiceMode === "off"
+                  ? "bg-white/5 text-white/40"
+                  : voiceMode === "device"
+                    ? "bg-white/10 text-white"
+                    : "bg-[#00C896]/20 text-[#00C896]"
+              }`}
+              aria-label="Change voice output"
+              title="Tap to change voice"
+            >
+              {voiceMode === "premiumF"
+                ? "✨ Voz F"
+                : voiceMode === "premiumM"
+                  ? "✨ Voz M"
+                  : voiceMode === "device"
+                    ? "📱 Voz"
+                    : "🔇 Off"}
+            </button>
             <button
               onClick={swapLanguages}
               className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm transition min-h-[44px]"
