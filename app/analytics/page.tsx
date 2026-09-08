@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import "@/app/lib/admin-theme.css";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -54,26 +55,24 @@ function MetricCard({
   icon: string;
 }) {
   return (
-    <div className="bg-[#12121a] border border-white/[0.06] rounded-xl p-4 sm:p-5 hover:border-white/[0.12] transition-colors">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm text-white/50">{label}</span>
-        <span className="text-lg">{icon}</span>
+    <div className="aa-panel aa-rise p-5">
+      <div className="flex items-center justify-between mb-2.5">
+        <span className="aa-kicker">{label}</span>
+        <span className="text-lg opacity-80">{icon}</span>
       </div>
-      <div className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+      <div className="aa-stat" style={{ fontSize: "32px" }}>
         {typeof value === "number" ? value.toLocaleString() : value}
       </div>
-      <div className="flex items-center gap-2 mt-1">
+      <div className="flex items-center gap-2 mt-1.5">
         {subValue && (
-          <span className="text-xs text-white/40">{subValue}</span>
+          <span className="text-[12px]" style={{ color: "var(--label-3)" }}>{subValue}</span>
         )}
         {trend !== undefined && trend !== 0 && (
           <span
-            className={`text-xs font-medium ${
-              trend > 0 ? "text-[#00C896]" : "text-[#ef4444]"
-            }`}
+            className="text-[12px] font-semibold"
+            style={{ color: trend > 0 ? "var(--sys-green)" : "var(--sys-red)" }}
           >
-            {trend > 0 ? "+" : ""}
-            {trend}% vs yesterday
+            {trend > 0 ? "↑" : "↓"} {Math.abs(trend)}%
           </span>
         )}
       </div>
@@ -109,11 +108,12 @@ function BarChart({
           </div>
           {/* Bar */}
           <div
-            className="w-full rounded-t-sm transition-all duration-300"
+            className="w-full rounded-t-[4px] transition-all duration-500"
             style={{
               height: `${Math.max((item.value / safeMax) * 100, 2)}%`,
-              background: "linear-gradient(to top, #0066FF, #00C896)",
-              opacity: item.value === 0 ? 0.15 : 1,
+              background: "linear-gradient(to top, var(--sys-blue), var(--sys-teal))",
+              opacity: item.value === 0 ? 0.12 : 1,
+              boxShadow: item.value === 0 ? "none" : "0 0 12px rgba(10,132,255,0.3)",
             }}
           />
           {/* Date label - show every 3rd */}
@@ -180,8 +180,8 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-[#12121a] border border-white/[0.06] rounded-xl p-4 sm:p-5">
-      <h3 className="text-sm font-medium text-white/60 mb-4">{title}</h3>
+    <div className="aa-panel aa-rise p-5">
+      <h3 className="aa-kicker mb-4">{title}</h3>
       {children}
     </div>
   );
@@ -275,30 +275,24 @@ export default function AnalyticsDashboard() {
   ];
 
   return (
-    <div className="min-h-[100dvh] bg-[#060810] text-white safe-top safe-bottom">
-      {/* Header */}
-      <header className="border-b border-white/[0.06] bg-[#060810]/80 backdrop-blur-xl sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4 py-3 sm:py-4">
+    <div className="apple-admin safe-top safe-bottom">
+      {/* Frosted navigation */}
+      <header className="aa-nav">
+        <div className="max-w-5xl mx-auto px-5 py-3.5">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <BackButton />
-              <div className="w-px h-5 bg-white/10" />
-              <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                Entrevoz Analytics
-              </h1>
+              <div className="w-px h-5" style={{ background: "var(--hairline-strong)" }} />
+              <h1 className="text-[17px] font-semibold tracking-tight">Analytics</h1>
             </div>
 
-            {/* Date Range Selector */}
-            <div className="flex gap-1 sm:gap-1.5 bg-white/[0.04] rounded-lg p-0.5 sm:p-1">
+            {/* Segmented date range */}
+            <div className="aa-seg">
               {ranges.map((r) => (
                 <button
                   key={r.id}
                   onClick={() => setRange(r.id)}
-                  className={`px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                    range === r.id
-                      ? "bg-white/[0.12] text-white"
-                      : "text-white/40 hover:text-white/60"
-                  }`}
+                  data-active={range === r.id}
                 >
                   {r.label}
                 </button>

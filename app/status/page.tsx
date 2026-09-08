@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import "@/app/lib/admin-theme.css";
 
 interface ServiceStatus {
   status: "ok" | "error" | "degraded";
@@ -51,27 +52,16 @@ export default function StatusPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const getStatusColor = (status: string) => {
+  // Apple system semantic color for a status
+  const sysColor = (status: string) => {
     switch (status) {
       case "healthy":
       case "ok":
-        return "bg-green-500";
+        return "var(--sys-green)";
       case "degraded":
-        return "bg-yellow-500";
+        return "var(--sys-yellow)";
       default:
-        return "bg-red-500";
-    }
-  };
-
-  const getStatusBg = (status: string) => {
-    switch (status) {
-      case "healthy":
-      case "ok":
-        return "bg-green-500/10 border-green-500/20";
-      case "degraded":
-        return "bg-yellow-500/10 border-yellow-500/20";
-      default:
-        return "bg-red-500/10 border-red-500/20";
+        return "var(--sys-red)";
     }
   };
 
@@ -108,172 +98,146 @@ export default function StatusPage() {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-zinc-950 text-white safe-top safe-bottom">
-      {/* Header */}
-      <header className="border-b border-zinc-800">
-        <div className="max-w-4xl mx-auto px-4 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center font-bold text-lg">
-                V
-              </div>
-              <div>
-                <h1 className="text-xl font-bold">Entrevoz Status</h1>
-                <p className="text-sm text-zinc-400">Real-time system status</p>
+    <div className="apple-admin safe-top safe-bottom">
+      {/* Frosted navigation */}
+      <header className="aa-nav">
+        <div className="max-w-3xl mx-auto px-5 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-9 h-9 rounded-[11px] flex items-center justify-center font-bold text-base"
+              style={{
+                background: "linear-gradient(135deg, var(--sys-blue), var(--sys-indigo))",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.3), 0 4px 14px rgba(10,132,255,0.35)",
+              }}
+            >
+              E
+            </div>
+            <div>
+              <div className="font-semibold text-[15px]">Entrevoz System</div>
+              <div className="aa-kicker" style={{ letterSpacing: "0.06em" }}>
+                Live Status
               </div>
             </div>
-            {health && (
-              <div className="text-right text-sm text-zinc-400">
-                <div>v{health.version}</div>
-                <div>Uptime: {formatUptime(health.uptime)}</div>
-              </div>
-            )}
           </div>
+          {health && (
+            <div className="text-right">
+              <div className="text-[13px]" style={{ color: "var(--label-2)" }}>
+                v{health.version}
+              </div>
+              <div className="text-[12px]" style={{ color: "var(--label-3)" }}>
+                {formatUptime(health.uptime)} uptime
+              </div>
+            </div>
+          )}
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 py-8">
+      <main className="max-w-3xl mx-auto px-5 py-8">
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <div className="flex items-center justify-center py-24">
+            <div
+              className="w-7 h-7 rounded-full animate-spin"
+              style={{ border: "2.5px solid var(--hairline)", borderTopColor: "var(--sys-blue)" }}
+            />
           </div>
         ) : error ? (
-          <div className="bg-red-500/10 border border-red-500/20 p-6 text-center">
-            <div className="text-red-400 text-lg font-medium">
+          <div className="aa-panel p-7 text-center aa-rise">
+            <div className="text-lg font-semibold" style={{ color: "var(--sys-red)" }}>
               Unable to fetch status
             </div>
-            <div className="text-zinc-400 mt-2">{error}</div>
+            <div className="mt-2 text-sm" style={{ color: "var(--label-2)" }}>
+              {error}
+            </div>
             <button
               onClick={fetchHealth}
-              className="mt-4 px-4 py-2 bg-red-500 hover:bg-red-600 transition-colors"
+              className="aa-press mt-5 px-5 py-2.5 rounded-full font-semibold text-sm text-white"
+              style={{ background: "var(--sys-red)" }}
             >
               Retry
             </button>
           </div>
         ) : health ? (
           <>
-            {/* Main Status Banner */}
-            <div className={`p-6 border ${getStatusBg(health.status)} mb-8`}>
+            {/* Hero status */}
+            <div className="aa-hero aa-rise" style={{ animationDelay: "0ms" }}>
               <div className="flex items-center gap-4">
-                <div
-                  className={`w-4 h-4 ${getStatusColor(health.status)} rounded-full animate-pulse`}
-                />
+                <div className="aa-dot" style={{ color: sysColor(health.status), background: sysColor(health.status), width: 16, height: 16 }} />
                 <div>
-                  <div className="text-2xl font-bold">
-                    {getStatusText(health.status)}
-                  </div>
-                  <div className="text-zinc-400 text-sm mt-1">
-                    {health.summary.ok}/{health.summary.total} services
-                    operational
+                  <div className="aa-title">{getStatusText(health.status)}</div>
+                  <div className="mt-1.5 text-[15px]" style={{ color: "var(--label-2)" }}>
+                    {health.summary.ok} of {health.summary.total} services operational
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Key Features Status */}
-            <div className="grid grid-cols-2 gap-4 mb-8">
-              <div
-                className={`p-4 border ${health.summary.translationAvailable ? "border-green-500/20 bg-green-500/5" : "border-red-500/20 bg-red-500/5"}`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">🌐</span>
-                  <div>
-                    <div className="font-medium">Translation</div>
-                    <div
-                      className={`text-sm ${health.summary.translationAvailable ? "text-green-400" : "text-red-400"}`}
-                    >
-                      {health.summary.translationAvailable
-                        ? "Operational"
-                        : "Down"}
-                    </div>
+            {/* Feature tiles */}
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              {[
+                { icon: "🌐", name: "Translation", ok: health.summary.translationAvailable, delay: 60 },
+                { icon: "📹", name: "Video Calls", ok: health.summary.videoCallAvailable, delay: 120 },
+              ].map((f) => (
+                <div key={f.name} className="aa-panel aa-rise p-5" style={{ animationDelay: `${f.delay}ms` }}>
+                  <div className="text-2xl">{f.icon}</div>
+                  <div className="mt-3 font-semibold text-[15px]">{f.name}</div>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <span
+                      className="aa-dot"
+                      style={{ width: 8, height: 8, color: f.ok ? "var(--sys-green)" : "var(--sys-red)", background: f.ok ? "var(--sys-green)" : "var(--sys-red)" }}
+                    />
+                    <span className="text-[13px] font-medium" style={{ color: f.ok ? "var(--sys-green)" : "var(--sys-red)" }}>
+                      {f.ok ? "Operational" : "Down"}
+                    </span>
                   </div>
                 </div>
-              </div>
-              <div
-                className={`p-4 border ${health.summary.videoCallAvailable ? "border-green-500/20 bg-green-500/5" : "border-red-500/20 bg-red-500/5"}`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">📹</span>
-                  <div>
-                    <div className="font-medium">Video Calls</div>
-                    <div
-                      className={`text-sm ${health.summary.videoCallAvailable ? "text-green-400" : "text-red-400"}`}
-                    >
-                      {health.summary.videoCallAvailable
-                        ? "Operational"
-                        : "Down"}
-                    </div>
-                  </div>
-                </div>
-              </div>
+              ))}
             </div>
 
-            {/* Services List */}
-            <div className="border border-zinc-800">
-              <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-900/50">
-                <h2 className="font-medium">Services</h2>
-              </div>
-              <div className="divide-y divide-zinc-800">
-                {Object.entries(health.services).map(([key, service]) => {
-                  const label = serviceLabels[key] || {
-                    name: key,
-                    description: "",
-                  };
-                  return (
-                    <div
-                      key={key}
-                      className="px-4 py-4 flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-2 h-2 ${getStatusColor(service.status)} rounded-full`}
-                        />
-                        <div>
-                          <div className="font-medium">{label.name}</div>
-                          <div className="text-sm text-zinc-500">
-                            {label.description}
-                          </div>
+            {/* Services — grouped inset list */}
+            <div className="aa-kicker mt-8 mb-2.5 px-1">Services</div>
+            <div className="aa-list aa-rise" style={{ animationDelay: "180ms" }}>
+              {Object.entries(health.services).map(([key, service]) => {
+                const label = serviceLabels[key] || { name: key, description: "" };
+                return (
+                  <div key={key} className="aa-row">
+                    <div className="flex items-center gap-3">
+                      <span
+                        className="aa-dot"
+                        style={{ width: 9, height: 9, color: sysColor(service.status), background: sysColor(service.status) }}
+                      />
+                      <div>
+                        <div className="font-medium text-[15px]">{label.name}</div>
+                        <div className="text-[12px]" style={{ color: "var(--label-3)" }}>
+                          {label.description}
                         </div>
                       </div>
-                      <div className="text-right">
-                        {service.status === "ok" ? (
-                          <div className="text-green-400 text-sm">
-                            {service.latency}ms
-                          </div>
-                        ) : (
-                          <div className="text-red-400 text-sm">
-                            {service.error || "Error"}
-                          </div>
-                        )}
-                      </div>
                     </div>
-                  );
-                })}
-              </div>
+                    <div
+                      className="text-[13px] font-medium tabular-nums"
+                      style={{ color: service.status === "ok" ? "var(--label-2)" : "var(--sys-red)" }}
+                    >
+                      {service.status === "ok" ? `${service.latency} ms` : service.error || "Error"}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
-            {/* Last Updated */}
-            <div className="mt-6 text-center text-sm text-zinc-500">
-              Last checked: {lastChecked?.toLocaleTimeString()} • Auto-refreshes
-              every 30s
-              <br />
-              Response time: {health.responseTime}
+            <div className="mt-7 text-center text-[12px]" style={{ color: "var(--label-3)" }}>
+              Updated {lastChecked?.toLocaleTimeString()} · auto-refreshes every 30s · {health.responseTime}
             </div>
           </>
         ) : null}
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-zinc-800 mt-12">
-        <div className="max-w-4xl mx-auto px-4 py-6 text-center text-sm text-zinc-500">
-          <a href="/" className="text-blue-400 hover:underline">
-            ← Back to Entrevoz
-          </a>
-          <span className="mx-3">•</span>
-          <a href="/api/health" className="text-zinc-400 hover:text-white">
-            API
-          </a>
-        </div>
+      <footer className="max-w-3xl mx-auto px-5 py-8 text-center text-[13px]" style={{ color: "var(--label-3)" }}>
+        <a href="/" style={{ color: "var(--sys-blue)" }} className="hover:opacity-80">
+          Entrevoz
+        </a>
+        <span className="mx-3 opacity-40">·</span>
+        <a href="/api/health" className="hover:opacity-80" style={{ color: "var(--label-2)" }}>
+          API
+        </a>
       </footer>
     </div>
   );
