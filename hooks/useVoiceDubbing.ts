@@ -22,7 +22,8 @@ export interface VoiceDubbingState {
 
 export interface UseVoiceDubbingReturn {
   state: VoiceDubbingState;
-  enable: () => void;
+  enable: (mimic?: boolean) => void;
+  startMimic: () => void;
   disable: () => void;
   processTranscript: (
     text: string,
@@ -106,6 +107,7 @@ export function useVoiceDubbing(
   // case we fall back to a default voice but must NOT consider the clone
   // attempted, so stream arrival below can upgrade to the real mimic.
   const cloneAttemptedRef = useRef(false);
+  const mimicRef = useRef(false);
 
   // Keep remoteStream ref in sync (arrives later than hook mount)
   useEffect(() => {
@@ -377,6 +379,7 @@ export function useVoiceDubbing(
       remoteStream &&
       remoteStream.getAudioTracks().length > 0 &&
       enabledRef.current &&
+      mimicRef.current &&
       !cloneAttemptedRef.current
     ) {
       cloneAttemptedRef.current = true;
@@ -457,8 +460,12 @@ export function useVoiceDubbing(
 
   // ─── Enable / Disable ────────────────────────────────────────────────────
 
-  const enable = useCallback(() => {
+  // Voice mimic is OPT-IN. enable() turns on spoken translations with a
+  // natural DEFAULT voice; the partner's voice is only sampled/cloned when
+  // the user explicitly calls startMimic(). mimicRef gates the sampling.
+  const enable = useCallback((mimic = false) => {
     enabledRef.current = true;
+    mimicRef.current = mimic;
     setState((s) => ({ ...s, isEnabled: true }));
 
     // Create AudioContext NOW — inside user gesture (button click) so iOS won't block it
@@ -468,18 +475,27 @@ export function useVoiceDubbing(
     }
     audioContextRef.current.resume();
 
-    // Use ref instead of stale closure prop — remoteStream may arrive after hook mounts
     const stream = remoteStreamRef.current;
-    if (stream && stream.getAudioTracks().length) {
+    if (mimic && stream && stream.getAudioTracks().length) {
       cloneAttemptedRef.current = true;
       startSampling(stream);
     } else {
-      // No remote audio yet — use default voice immediately; the stream-arrival
-      // effect above will start sampling (and upgrade to the mimic) later.
-      console.log("[VoiceDub] No remote stream yet, default voice until it arrives");
+      // Default voice immediately. If mimic is on and the stream arrives
+      // later, the stream-arrival effect upgrades to the clone.
       const defaultVoice = DEFAULT_VOICES[targetLangRef.current.split("-")[0]] || DEFAULT_VOICES.en;
       voiceIdRef.current = defaultVoice;
       setState((s) => ({ ...s, phase: "ready", voiceId: defaultVoice, samplingProgress: 100 }));
+    }
+  }, [startSampling]);
+
+  // Explicitly begin learning the partner's voice (user tapped "Mimic").
+  const startMimic = useCallback(() => {
+    if (!enabledRef.current) return;
+    mimicRef.current = true;
+    const stream = remoteStreamRef.current;
+    if (stream && stream.getAudioTracks().length && !cloneAttemptedRef.current) {
+      cloneAttemptedRef.current = true;
+      startSampling(stream);
     }
   }, [startSampling]);
 
@@ -543,5 +559,5 @@ export function useVoiceDubbing(
 
   useEffect(() => () => cleanup(), []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { state, enable, disable, processTranscript, cleanup, isDubPlaying: state.isPlaying };
+  return { state, enable, startMimic, disable, processTranscript, cleanup, isDubPlaying: state.isPlaying };
 }

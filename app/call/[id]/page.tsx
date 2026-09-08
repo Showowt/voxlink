@@ -809,9 +809,11 @@ function VideoCallContent() {
   // Browser TTS survives only as a fallback while the clone is being built
   // or when the dub API fails.
   const voiceOutputRef = useRef(true);
+  const [mimicOn, setMimicOn] = useState(false);
   const {
     state: dubbingState,
     enable: enableDubbing,
+    startMimic,
     disable: disableDubbing,
     processTranscript: processDub,
     cleanup: cleanupDubbing,
@@ -898,11 +900,31 @@ function VideoCallContent() {
       voiceOutputRef.current = false;
       disableDubbing();
       window.speechSynthesis.cancel();
+      setMimicOn(false);
     } else {
       voiceOutputRef.current = true;
-      enableDubbing();
+      enableDubbing(false); // default voice, mimic stays opt-in
     }
   }, [disableDubbing, enableDubbing]);
+
+  // Opt-in mimic: user taps to start learning the partner's voice.
+  const toggleMimic = useCallback(() => {
+    if (mimicOn) {
+      setMimicOn(false);
+      // Fall back to default voice (disable clears the clone reference)
+      disableDubbing();
+      voiceOutputRef.current = true;
+      enableDubbing(false);
+    } else {
+      setMimicOn(true);
+      if (!voiceOutputRef.current) {
+        voiceOutputRef.current = true;
+        enableDubbing(true);
+      } else {
+        startMimic();
+      }
+    }
+  }, [mimicOn, disableDubbing, enableDubbing, startMimic]);
 
   // Quality monitoring state
   const [quality, setQuality] = useState<ConnectionQuality | null>(null);
@@ -927,13 +949,14 @@ function VideoCallContent() {
   // Enable controls when connected - either hasPartner OR we have remote video stream
   const isConnected = status === "connected" && (hasPartner || hasRemoteStream);
 
-  // Voice mimic ON by default: start learning the partner's voice as soon as
-  // the call connects (once — respects a later manual off-toggle).
+  // On connect: enable spoken translations with a natural DEFAULT voice.
+  // Voice mimic (learning the partner's voice) is OPT-IN — the user taps
+  // the 🎭 Mimic control to start it, so we never sample without consent.
   const autoDubStartedRef = useRef(false);
   useEffect(() => {
     if (isConnected && !autoDubStartedRef.current && voiceOutputRef.current) {
       autoDubStartedRef.current = true;
-      enableDubbing();
+      enableDubbing(false);
     }
   }, [isConnected, enableDubbing]);
 
@@ -2322,8 +2345,8 @@ function VideoCallContent() {
 
       {/* Controls - Mobile optimized with flex wrap */}
       <div className="bg-black/80 backdrop-blur-xl border-t border-white/10 px-2 md:px-4 py-3 md:py-4 safe-area-bottom">
-        {/* Voice dubbing status */}
-        {dubbingState.isEnabled && dubbingState.phase !== "idle" && (
+        {/* Voice mimic status (only while mimic is on) */}
+        {mimicOn && dubbingState.phase !== "idle" && dubbingState.phase !== "ready" && (
           <div className="flex items-center justify-center gap-2 mb-3 pb-3 border-b border-white/10">
             {dubbingState.phase === "sampling" && (
               <>
@@ -2339,19 +2362,12 @@ function VideoCallContent() {
                 <span className="text-zinc-400 text-xs">Creating voice clone...</span>
               </>
             )}
-            {dubbingState.phase === "ready" && (
-              <>
-                <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-                <span className="text-zinc-400 text-xs">
-                  Voice dubbing active
-                  {dubbingState.isPlaying && " · Speaking..."}
-                </span>
-              </>
-            )}
             {dubbingState.phase === "error" && (
               <>
                 <div className="w-1.5 h-1.5 rounded-full bg-zinc-500" />
-                <span className="text-zinc-500 text-xs">Voice dubbing error</span>
+                <span className="text-zinc-500 text-xs">
+                  Mimic unavailable — using default voice
+                </span>
               </>
             )}
           </div>
@@ -2506,45 +2522,60 @@ function VideoCallContent() {
             savedWords={learning.savedWords}
           />
 
-          {/* Voice Dubbing Toggle */}
+          {/* Voice output on/off (speaker) */}
           {isConnected && (
             <button
               onClick={toggleVoiceOutput}
-              className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center text-lg md:text-xl transition-all relative ${
-                dubbingState.isEnabled
-                  ? dubbingState.phase === "ready"
-                    ? "bg-green-600 text-white"
-                    : dubbingState.phase === "error"
-                      ? "bg-zinc-800 text-zinc-500"
-                      : "bg-amber-600 text-white"
-                  : "bg-white/10 text-white hover:bg-white/20"
+              className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center transition-all ${
+                voiceOutputRef.current
+                  ? "bg-green-600 text-white"
+                  : "bg-white/10 text-white/60 hover:bg-white/20"
               }`}
-              title={
-                dubbingState.phase === "sampling"
-                  ? `Learning voice... ${dubbingState.samplingProgress}%`
-                  : dubbingState.phase === "cloning"
-                    ? "Creating voice clone..."
-                    : dubbingState.phase === "ready"
-                      ? "Voice dubbing active"
-                      : dubbingState.phase === "error"
-                        ? "Voice dubbing error"
-                        : "Enable voice dubbing"
-              }
+              title={voiceOutputRef.current ? "Voice on — tap to mute" : "Voice off — tap to enable"}
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
+                {voiceOutputRef.current ? (
+                  <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                ) : (
+                  <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
+                )}
               </svg>
-              {dubbingState.phase === "sampling" && (
+            </button>
+          )}
+
+          {/* Voice Mimic — OPT-IN (learn partner's voice) */}
+          {isConnected && (
+            <button
+              onClick={toggleMimic}
+              className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center text-lg md:text-xl transition-all relative ${
+                mimicOn
+                  ? dubbingState.phase === "ready"
+                    ? "bg-amber-500 text-white"
+                    : "bg-amber-600 text-white"
+                  : "bg-white/10 text-white/70 hover:bg-white/20"
+              }`}
+              title={
+                !mimicOn
+                  ? "Mimic off — tap to speak translations in their voice"
+                  : dubbingState.phase === "sampling"
+                    ? `Learning voice… ${dubbingState.samplingProgress}%`
+                    : dubbingState.phase === "cloning"
+                      ? "Creating voice…"
+                      : "Mimic on — tap to turn off"
+              }
+            >
+              🎭
+              {mimicOn && dubbingState.phase === "sampling" && (
                 <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-400 flex items-center justify-center">
                   <div className="w-2 h-2 rounded-full bg-amber-800 animate-ping" />
                 </div>
               )}
-              {dubbingState.phase === "cloning" && (
+              {mimicOn && dubbingState.phase === "cloning" && (
                 <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-blue-400">
                   <div className="w-4 h-4 rounded-full border-2 border-blue-800 border-t-transparent animate-spin" />
                 </div>
               )}
-              {dubbingState.phase === "ready" && (
+              {mimicOn && dubbingState.phase === "ready" && (
                 <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-green-400 animate-pulse" />
               )}
             </button>

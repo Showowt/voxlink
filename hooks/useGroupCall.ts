@@ -11,6 +11,7 @@ import type {
   SpeechRecognitionEvent as SREvent,
   SpeechRecognitionErrorEvent as SRErrorEvent,
 } from '@/app/lib/speech-types';
+import { SPEECH_AUDIO } from '@/app/lib/audio-constraints';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -28,12 +29,12 @@ const PEERJS_SERVERS = [
 const GROUP_VIDEO_CONSTRAINTS: MediaStreamConstraints = {
   video: { width: { ideal: 640, max: 1280 }, height: { ideal: 360, max: 720 },
            frameRate: { ideal: 24, max: 30 } },
-  audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+  audio: { ...SPEECH_AUDIO },
 };
 
 const GROUP_AUDIO_CONSTRAINTS: MediaStreamConstraints = {
   video: false,
-  audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+  audio: { ...SPEECH_AUDIO },
 };
 
 // ─── State ────────────────────────────────────────────────────────────────────

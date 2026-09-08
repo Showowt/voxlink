@@ -1,5 +1,6 @@
 import Peer, { MediaConnection, DataConnection } from "peerjs";
 import { RoomSignal } from "./room-signal";
+import { SPEECH_AUDIO } from "./audio-constraints";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // NETWORK CONNECTION TYPE (Navigator.connection API)
@@ -1629,11 +1630,9 @@ export async function getCamera(
         frameRate: { ideal: 24, max: 30 },
       },
       audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-        // sampleRate and channelCount removed — iOS Safari doesn't support
-        // these constraints reliably and can produce silent audio tracks
+        ...SPEECH_AUDIO,
+        // sampleRate removed — iOS Safari doesn't support it reliably and
+        // can produce silent audio tracks
       },
     },
     // Lower quality fallback
@@ -1644,12 +1643,12 @@ export async function getCamera(
         height: { ideal: 360 },
         frameRate: { ideal: 20 },
       },
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      audio: { ...SPEECH_AUDIO },
     },
     // Minimum video + audio
     { video: true, audio: { echoCancellation: true, noiseSuppression: true } },
     // Audio only (no camera)
-    { video: false, audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } },
+    { video: false, audio: { ...SPEECH_AUDIO } },
     // Minimum audio only
     { video: false, audio: true },
   ];
