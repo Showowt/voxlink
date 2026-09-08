@@ -430,6 +430,10 @@ export function useGroupCall(): UseGroupCallReturn {
 
       dc.on('close', () => {
         dataConnsRef.current.delete(remoteSlot);
+        mediaConnsRef.current.delete(remoteSlot);
+        // Remove the ghost tile — a dropped peer was leaving a permanent
+        // dead slot that also blocked "Room is full" from ever clearing.
+        dispatch({ type: 'PARTICIPANT_REMOVE', slotIndex: remoteSlot });
       });
 
       dc.on('error', () => {
@@ -557,7 +561,11 @@ export function useGroupCall(): UseGroupCallReturn {
         handleDCMessage(typeof data === 'string' ? data : JSON.stringify(data), remoteSlot);
       });
 
-      dc.on('close', () => dataConnsRef.current.delete(remoteSlot));
+      dc.on('close', () => {
+        dataConnsRef.current.delete(remoteSlot);
+        mediaConnsRef.current.delete(remoteSlot);
+        dispatch({ type: 'PARTICIPANT_REMOVE', slotIndex: remoteSlot });
+      });
     });
 
     peer.on('call', (mc: MediaConnection) => {
@@ -796,6 +804,9 @@ export function useGroupCall(): UseGroupCallReturn {
         return;
       }
       if (phaseRef.current !== 'active') return;
+      // WebKit auto-suspends the AudioContext on background and does NOT
+      // auto-resume — without this the "is speaking" rings freeze off.
+      audioCtxRef.current?.resume().catch(() => {});
       startVAD();
       // iOS kills SpeechRecognition on background and r.onend->r.start()
       // throws on the dead instance — rebuild a fresh one so transcription

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LANGUAGES as MASTER_LANGUAGES } from '../lib/languages';
+import { getDeviceId } from '../lib/language-os/device-id';
 
 // Use master language list — all 31 languages
 const LANGUAGES = MASTER_LANGUAGES.map((l) => ({
@@ -11,17 +12,6 @@ const LANGUAGES = MASTER_LANGUAGES.map((l) => ({
   flag: l.flag,
 }));
 
-function getDeviceId(): string {
-  try {
-    const stored = localStorage.getItem('entrevoz_device_id');
-    if (stored) return stored;
-    const id = crypto.randomUUID();
-    localStorage.setItem('entrevoz_device_id', id);
-    return id;
-  } catch {
-    return `device-${Date.now()}`;
-  }
-}
 
 export default function GroupLandingPage() {
   const router = useRouter();

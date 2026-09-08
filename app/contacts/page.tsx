@@ -3,6 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { BackButton } from '@/app/components/ui/BackButton';
+// Unified device id — contacts are SAVED by call/talk under los_device_id;
+// the old inline entrevoz_device_id read a different id so the list was
+// always empty.
+import { getDeviceId } from '@/app/lib/language-os/device-id';
 
 interface Contact {
   id: string;
@@ -20,16 +24,6 @@ const FLAGS: Record<string, string> = {
   zh: '\u{1F1E8}\u{1F1F3}', ja: '\u{1F1EF}\u{1F1F5}', ko: '\u{1F1F0}\u{1F1F7}',
   ar: '\u{1F1F8}\u{1F1E6}', ru: '\u{1F1F7}\u{1F1FA}', hi: '\u{1F1EE}\u{1F1F3}',
 };
-
-function getDeviceId(): string {
-  try {
-    const s = localStorage.getItem('entrevoz_device_id');
-    if (s) return s;
-    const id = crypto.randomUUID();
-    localStorage.setItem('entrevoz_device_id', id);
-    return id;
-  } catch { return `dev-${Date.now()}`; }
-}
 
 function timeAgo(dateStr: string): string {
   const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);

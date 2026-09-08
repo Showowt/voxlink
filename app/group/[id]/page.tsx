@@ -3,21 +3,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useGroupCall } from '@/hooks/useGroupCall';
+import { getDeviceId } from '@/app/lib/language-os/device-id';
 import type { SlotIndex } from '@/app/lib/group-call/types';
 import LearningMode, { useLearningMode, TappableCaption, LearningInsightCard } from '@/app/components/LearningMode';
 // Master list — a hardcoded 13-language subset here silently discarded the
 // language picked on the landing page for the other 18.
 import { LANGUAGES } from '@/app/lib/languages';
-
-function getDeviceId(): string {
-  try {
-    const stored = localStorage.getItem('entrevoz_device_id');
-    if (stored) return stored;
-    const id = crypto.randomUUID();
-    localStorage.setItem('entrevoz_device_id', id);
-    return id;
-  } catch { return `device-${Date.now()}`; }
-}
 
 function getBrowserLanguage(): string {
   const lang = navigator.language?.split('-')[0] ?? 'en';
@@ -124,8 +115,15 @@ export default function GroupCallPage() {
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
-      const vids = [localVideoRef.current, ...remoteVideoRefs.current];
-      vids.forEach((v) => { if (v && v.paused) v.play().catch(() => {}); });
+      // Include the always-mounted <audio> elements — remote video tiles are
+      // muted, so ALL remote sound comes from these; replaying only video
+      // left every participant silent after a background cycle.
+      const media = [
+        localVideoRef.current,
+        ...remoteVideoRefs.current,
+        ...remoteAudioRefs.current,
+      ];
+      media.forEach((m) => { if (m && m.paused) m.play().catch(() => {}); });
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);

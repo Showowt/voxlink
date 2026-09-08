@@ -4,20 +4,17 @@ import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ConfirmDeleteModal } from "@/app/components/ConfirmDeleteModal";
+import { getDeviceId } from "@/app/lib/language-os/device-id";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ACCOUNT & PRIVACY — GDPR Data Export + Delete Account
 // Compliant with GDPR Article 15 (Right of Access) and Article 17 (Right to Erasure)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function getDeviceId(): string {
-  if (typeof window === "undefined") return "";
-  const stored = localStorage.getItem("entrevoz_device_id");
-  if (stored) return stored;
-  const id = crypto.randomUUID();
-  localStorage.setItem("entrevoz_device_id", id);
-  return id;
-}
+// Unified device id — MUST match what call/talk/language-os save under
+// (los_device_id). The old inline "entrevoz_device_id" pointed at a
+// different id, so account deletion + GDPR export targeted the wrong
+// device's server rows and never erased anything.
 
 interface ExportData {
   deviceId: string;
@@ -26,6 +23,7 @@ interface ExportData {
     settings: Record<string, string | null>;
     translationHistory: unknown[];
     callHistory: unknown[];
+    conversationMemory: unknown[];
   };
   serverData: {
     languageProgress: unknown[];
@@ -37,7 +35,7 @@ interface ExportData {
 
 function gatherClientData(): ExportData["clientData"] {
   if (typeof window === "undefined") {
-    return { settings: {}, translationHistory: [], callHistory: [] };
+    return { settings: {}, translationHistory: [], callHistory: [], conversationMemory: [] };
   }
 
   // Gather all localStorage keys related to Entrevoz
@@ -54,25 +52,23 @@ function gatherClientData(): ExportData["clientData"] {
     settings[key] = localStorage.getItem(key);
   }
 
-  // Translation history from localStorage
-  let translationHistory: unknown[] = [];
-  try {
-    const raw = localStorage.getItem("entrevoz_translations");
-    if (raw) translationHistory = JSON.parse(raw);
-  } catch {
-    // Ignore parse errors
-  }
+  // Read the REAL keys these features write under (the old
+  // entrevoz_translations / entrevoz_call_history keys never existed, so the
+  // export shipped empty).
+  const readJson = (key: string): unknown[] => {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  };
 
-  // Call history from localStorage
-  let callHistory: unknown[] = [];
-  try {
-    const raw = localStorage.getItem("entrevoz_call_history");
-    if (raw) callHistory = JSON.parse(raw);
-  } catch {
-    // Ignore parse errors
-  }
+  const translationHistory = readJson("entrevoz_history");
+  const callHistory = readJson("entrevoz_summaries");
+  const conversationMemory = readJson("entrevoz_conversation_memory");
 
-  return { settings, translationHistory, callHistory };
+  return { settings, translationHistory, callHistory, conversationMemory };
 }
 
 async function clearAllIndexedDB(): Promise<void> {
