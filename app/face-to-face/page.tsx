@@ -392,6 +392,7 @@ export default function FaceToFacePage() {
         // Ignore
       }
       window.speechSynthesis.cancel();
+      stopTtsPlayback(); // premium voice kept playing after leaving
     };
   }, []);
 

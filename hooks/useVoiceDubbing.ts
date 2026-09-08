@@ -501,6 +501,10 @@ export function useVoiceDubbing(
 
   const disable = useCallback(() => {
     enabledRef.current = false;
+    // Reset mimic latches so a later re-enable can sample the voice again —
+    // without this, toggling 🎭 off then on kept the default voice forever.
+    mimicRef.current = false;
+    cloneAttemptedRef.current = false;
 
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       try { mediaRecorderRef.current.stop(); } catch { /* ignore */ }

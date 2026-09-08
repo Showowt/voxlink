@@ -12,6 +12,13 @@ export function playTtsBase64(base64: string): Promise<void> {
 
   if (!sharedAudio) sharedAudio = new Audio();
   const audio = sharedAudio;
+  // Stop any prior clip cleanly before starting a new one — overlapping
+  // taps otherwise left a dangling promise and cut-off/overlapping audio.
+  try {
+    audio.pause();
+    audio.onended = null;
+    audio.onerror = null;
+  } catch { /* ignore */ }
   audio.src = url;
 
   return new Promise<void>((resolve, reject) => {

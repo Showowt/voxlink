@@ -134,6 +134,15 @@ export class DailyConnection {
       if (this.isDestroyed || !event) return;
       const participant = event.participant;
       if (participant.local) return; // Ignore ourselves
+      // Enforce the 1:1 cap — a 3rd person opening the link would otherwise
+      // corrupt the two-way call. Only bind the FIRST remote participant.
+      const remotes = Object.values(this.call?.participants() ?? {}).filter(
+        (p) => !p.local,
+      );
+      if (remotes.length > 1) {
+        console.warn("[Daily] Room already full — ignoring extra participant");
+        return;
+      }
       this.handleParticipantJoined(participant);
     });
 

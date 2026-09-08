@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { getLanguageConfig } from "@/app/lib/language-os/engine";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { getLevelFromScore } from "@/app/lib/language-os/algorithms/fluency";
-import { playTtsBase64 } from "@/app/lib/language-os/play-tts";
+import { playTtsBase64, stopTtsPlayback } from "@/app/lib/language-os/play-tts";
 import type { CorrectionResult, Persona, UserProgress, DEFAULT_PROGRESS } from "@/app/lib/language-os/types";
 
 interface SessionMessage {
@@ -246,6 +246,9 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
       vv.removeEventListener("scroll", onResize);
     };
   }, []);
+
+  // Stop persona TTS when leaving the page — it kept playing after nav away.
+  useEffect(() => () => stopTtsPlayback(), []);
 
   const level = progress ? getLevelFromScore(progress.fluencyScore, config.ui.levelNames) : config.ui.levelNames[0];
 
