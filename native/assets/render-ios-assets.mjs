@@ -5,10 +5,10 @@ import { dirname, join } from "path";
 const here = dirname(fileURLToPath(import.meta.url));
 const iosAssets = join(here, "..", "..", "ios", "App", "App", "Assets.xcassets");
 
-// App Store icon: 1024x1024, opaque, no alpha channel
-await sharp(join(here, "app-icon.svg"))
+// App Store icon: 1024x1024, opaque, no alpha channel (canonical two-bubble mark)
+await sharp(join(here, "entrevoz-icon.svg"))
   .resize(1024, 1024)
-  .flatten({ background: "#00DBA8" })
+  .flatten({ background: "#0D0D0D" })
   .removeAlpha()
   .png()
   .toFile(join(iosAssets, "AppIcon.appiconset", "AppIcon-512@2x.png"));
