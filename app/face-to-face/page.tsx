@@ -342,6 +342,44 @@ export default function FaceToFacePage() {
     clearAll();
   }, [topLang, bottomLang, clearAll]);
 
+  // Background/foreground recovery: iOS suspends SpeechRecognition when the
+  // tab/app loses focus and the onend→start() retry dies. On return, rebuild
+  // a fresh recognition instance for whichever side was listening.
+  const wasListeningRef = useRef<Speaker | null>(null);
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        wasListeningRef.current = topListeningRef.current
+          ? "top"
+          : bottomListeningRef.current
+            ? "bottom"
+            : null;
+        return;
+      }
+      const side = wasListeningRef.current;
+      if (!side) return;
+      wasListeningRef.current = null;
+
+      // Kill the dead instance and start a fresh one after the OS releases
+      // the audio resource.
+      const recRef = side === "top" ? topRecognitionRef : bottomRecognitionRef;
+      const listenRef = side === "top" ? topListeningRef : bottomListeningRef;
+      try { recRef.current?.abort?.(); } catch { /* ignore */ }
+      recRef.current = null;
+      setTimeout(() => {
+        if (document.visibilityState !== "visible") return;
+        const lang = side === "top" ? topLang : bottomLang;
+        const fresh = createRecognition(side, lang);
+        if (!fresh) return;
+        recRef.current = fresh;
+        listenRef.current = true;
+        try { fresh.start(); } catch { listenRef.current = false; }
+      }, 500);
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [topLang, bottomLang, createRecognition]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {

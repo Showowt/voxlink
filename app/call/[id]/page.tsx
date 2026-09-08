@@ -1090,9 +1090,12 @@ function VideoCallContent() {
 
         localStreamRef.current = localStream;
 
-        // Show local video
+        // Show local video — force play(). If the user backgrounded during
+        // the connect wait, autoPlay won't fire and the camera stays black
+        // until an explicit play() on return.
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = localStream;
+          localVideoRef.current.play().catch(() => {});
         }
 
         setStatusMessage(isHost ? "Creating room..." : "Joining room...");
@@ -1221,14 +1224,24 @@ function VideoCallContent() {
     const handleVisibilityChange = async () => {
       if (document.hidden || !mountedRef.current) return;
 
-      // Page is visible again — check if media tracks are still alive
+      // iOS pauses <video> elements on background — force them to play again,
+      // and resume the audio context. This alone fixes the frozen-video and
+      // "left before connect → camera never turned on" cases.
+      [localVideoRef.current, remoteVideoRef.current].forEach((v) => {
+        if (v && v.paused) v.play().catch(() => {});
+      });
+
       const stream = localStreamRef.current;
       if (!stream) return;
 
+      // A track can be readyState "live" yet muted/frozen after backgrounding.
+      // Recover if any track is dead OR the video track is muted (frozen).
+      const videoTrack = stream.getVideoTracks()[0];
       const tracksAlive = stream.getTracks().some((t) => t.readyState === "live");
-      if (tracksAlive) return; // Tracks still good, no recovery needed
+      const videoFrozen = videoTrack ? videoTrack.muted : false;
+      if (tracksAlive && !videoFrozen) return; // healthy — nothing to do
 
-      console.log("[Entrevoz] Media tracks died (phone call?) — re-acquiring camera");
+      console.log("[Entrevoz] Media frozen/died after background — re-acquiring camera");
       try {
         const newStream = await getCamera("user");
         localStreamRef.current = newStream;
