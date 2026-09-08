@@ -43,7 +43,7 @@ function gatherClientData(): ExportData["clientData"] {
   const entrevozKeys = [
     "entrevoz_name",
     "entrevoz_lang",
-    "entrevoz_device_id",
+    "los_device_id", // the real device id (entrevoz_device_id is dead)
     "entrevoz_theme",
     "entrevoz_notifications",
     "entrevoz_onboarding_done",
