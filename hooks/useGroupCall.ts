@@ -793,9 +793,18 @@ export function useGroupCall(): UseGroupCallReturn {
     const onVisibility = () => {
       if (document.hidden) {
         if (vadTimerRef.current) clearInterval(vadTimerRef.current);
-      } else if (phaseRef.current === 'active') {
-        startVAD();
+        return;
       }
+      if (phaseRef.current !== 'active') return;
+      startVAD();
+      // iOS kills SpeechRecognition on background and r.onend->r.start()
+      // throws on the dead instance — rebuild a fresh one so transcription
+      // resumes instead of staying silently dead.
+      try { (recognitionRef.current as SpeechRecognitionInstance)?.abort?.(); } catch { /* ignore */ }
+      recognitionRef.current = null;
+      setTimeout(() => {
+        if (phaseRef.current === 'active') startSTT();
+      }, 400);
     };
 
     window.addEventListener('beforeunload', onUnload);

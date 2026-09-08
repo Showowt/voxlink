@@ -119,6 +119,18 @@ export default function GroupCallPage() {
     });
   }, [gc.participants]);
 
+  // iOS pauses <video> elements on background — force local + all remote
+  // videos to play again when returning to foreground.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      const vids = [localVideoRef.current, ...remoteVideoRefs.current];
+      vids.forEach((v) => { if (v && v.paused) v.play().catch(() => {}); });
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
+
   const handleJoin = async () => {
     if (!displayName.trim()) { setLobbyErr('Enter your name to join'); return; }
     setIsJoining(true);
