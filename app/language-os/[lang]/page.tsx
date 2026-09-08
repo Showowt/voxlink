@@ -42,6 +42,9 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
   const [activeTab, setActiveTab] = useState<Tab>("talk");
   const [activePersona, setActivePersona] = useState<Persona>(config.personas[0]);
   const [messages, setMessages] = useState<SessionMessage[]>([]);
+  // Active mission (if this conversation was started from the Missions tab).
+  // Completed after a few successful exchanges so the ✓ can be earned.
+  const activeMissionRef = useRef<string | null>(null);
   const [inputText, setInputText] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const [showTranslations, setShowTranslations] = useState(true);
@@ -140,6 +143,22 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
         });
       }
 
+      // Complete the active mission after a few real exchanges (count this
+      // turn: messages already has prior turns + the just-added assistant msg).
+      const userTurns = messages.filter((m) => m.role === "user").length + 1;
+      const completeMissionId =
+        activeMissionRef.current && userTurns >= 4
+          ? activeMissionRef.current
+          : undefined;
+      if (completeMissionId) {
+        activeMissionRef.current = null;
+        setProgress((p) =>
+          p && !p.completedMissions.includes(completeMissionId)
+            ? { ...p, completedMissions: [...p.completedMissions, completeMissionId], missionsCompleted: p.missionsCompleted + 1 }
+            : p,
+        );
+      }
+
       // Async progress sync (fire and forget)
       fetch("/api/language-os/progress", {
         method: "POST",
@@ -151,6 +170,7 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
             fluencyPoints: data.fpEarned || 0,
             messagesSent: 1,
             correctionsReceived: data.correction && !data.correction.isCorrect ? 1 : 0,
+            ...(completeMissionId ? { completeMissionId } : {}),
           },
         }),
       }).catch(() => {});
@@ -200,17 +220,40 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
     }
   }, [config.targetLocale]);
 
-  const startNewConversation = (persona: Persona) => {
+  const startNewConversation = (persona: Persona, missionId?: string) => {
     setActivePersona(persona);
     setMessages([]);
     setSessionId(null);
+    activeMissionRef.current = missionId ?? null;
     setActiveTab("talk");
   };
+
+  // iOS keyboard covers the bottom-pinned input (no viewport resize in
+  // WKWebView). Lift the whole column by the keyboard height via
+  // visualViewport so the input stays visible above it.
+  const [kbInset, setKbInset] = useState(0);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onResize = () => {
+      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      setKbInset(inset);
+    };
+    vv.addEventListener("resize", onResize);
+    vv.addEventListener("scroll", onResize);
+    return () => {
+      vv.removeEventListener("resize", onResize);
+      vv.removeEventListener("scroll", onResize);
+    };
+  }, []);
 
   const level = progress ? getLevelFromScore(progress.fluencyScore, config.ui.levelNames) : config.ui.levelNames[0];
 
   return (
-    <div className="min-h-[100dvh] bg-[#06060a] flex flex-col">
+    <div
+      className="min-h-[100dvh] bg-[#06060a] flex flex-col"
+      style={{ paddingBottom: kbInset ? `${kbInset}px` : undefined }}
+    >
       {/* Header */}
       <header className="flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 border-b border-white/[0.06]" style={{ background: "linear-gradient(180deg, rgba(0,200,150,0.03) 0%, transparent 100%)" }}>
         <button onClick={() => router.push("/language-os")} className="text-white/50 hover:text-white/80 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl active:scale-95 transition-all hover:bg-white/[0.06]">
@@ -458,7 +501,7 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
                   key={mission.id}
                   onClick={() => {
                     const persona = config.personas.find((p) => p.id === mission.linkedPersonaId);
-                    if (persona) startNewConversation(persona);
+                    if (persona) startNewConversation(persona, mission.id);
                   }}
                   className="w-full text-left p-4 bg-white/[0.03] border border-white/8 rounded-xl transition-all hover:border-white/15"
                 >
@@ -488,6 +531,15 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
               </div>
             ) : (
               <div className="space-y-2">
+                {/* Entry point to the SRS flashcard review \u2014 was orphaned
+                    (no navigation reached /review, so imported call vocab
+                    was never reviewable). */}
+                <button
+                  onClick={() => router.push(`/language-os/${langCode}/review`)}
+                  className="w-full mb-3 bg-[#00C896] text-black font-bold py-3 rounded-xl text-sm active:scale-95 transition-transform"
+                >
+                  \uD83C\uDFB4 Review {progress.vocabBank.length} cards
+                </button>
                 {progress.vocabBank.slice(0, 50).map((word, i) => (
                   <div key={i} className="flex items-center justify-between p-3 bg-white/[0.03] border border-white/8 rounded-xl">
                     <div>

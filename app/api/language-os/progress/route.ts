@@ -133,13 +133,24 @@ export async function POST(req: NextRequest) {
     if (delta.wordsLearned) {
       updates.words_learned = (existing.words_learned || 0) + delta.wordsLearned;
     }
+    // Mission completion — add the id (deduped) and bump the counter so the
+    // ✓ shows and fluency reflects it.
+    if (delta.completeMissionId) {
+      const done: string[] = Array.isArray(existing.completed_missions)
+        ? existing.completed_missions
+        : [];
+      if (!done.includes(delta.completeMissionId)) {
+        updates.completed_missions = [...done, delta.completeMissionId];
+        updates.missions_completed = (existing.missions_completed || 0) + 1;
+      }
+    }
 
     // Recalculate fluency score
     const newFluencyScore = calculateFluencyScore({
       fluencyPoints: (updates.fluency_points as number) || existing.fluency_points || 0,
       wordsLearned: (updates.words_learned as number) || existing.words_learned || 0,
       streakDays: existing.streak_days || 0,
-      missionsCompleted: existing.missions_completed || 0,
+      missionsCompleted: (updates.missions_completed as number) ?? existing.missions_completed ?? 0,
       errorPatterns: existing.error_patterns || {},
     });
     updates.fluency_score = newFluencyScore;

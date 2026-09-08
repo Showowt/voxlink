@@ -605,36 +605,32 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 4. API Translation - Run Google + MyMemory in PARALLEL for speed
-    // Each translator has 2s timeout to prevent hanging on slow APIs
-    const [googleResult, myMemoryResult] = await Promise.allSettled([
-      withTimeout(translateGoogle(cleanText, from, to), 2000, null),
-      withTimeout(translateMyMemory(cleanText, from, to), 2000, null),
+    // 4. API Translation — run all THREE free providers concurrently with a
+    // short window. Running Libre in this batch (instead of sequentially
+    // after a 2s wait) means a dead Google/MyMemory no longer stalls every
+    // utterance by 2s before the fallback even starts.
+    const [googleResult, myMemoryResult, libreResult] = await Promise.allSettled([
+      withTimeout(translateGoogle(cleanText, from, to), 1500, null),
+      withTimeout(translateMyMemory(cleanText, from, to), 1500, null),
+      withTimeout(translateLibre(cleanText, from, to), 1500, null),
     ]);
 
     let translation: string | null = null;
     let source = "api";
 
-    // Prefer Google (most accurate), fall back to MyMemory
+    // Preference: Google (most accurate) > MyMemory > Libre
     if (googleResult.status === "fulfilled" && googleResult.value) {
       translation = googleResult.value;
       source = "google";
     } else if (myMemoryResult.status === "fulfilled" && myMemoryResult.value) {
       translation = myMemoryResult.value;
       source = "mymemory";
+    } else if (libreResult.status === "fulfilled" && libreResult.value) {
+      translation = libreResult.value;
+      source = "libre";
     }
 
-    // 5. Fallback to LibreTranslate if both failed (with 2s timeout)
-    if (!translation) {
-      translation = await withTimeout(
-        translateLibre(cleanText, from, to),
-        2000,
-        null,
-      );
-      if (translation) source = "libre";
-    }
-
-    // 6. CLAUDE AI — Ultimate fallback. Never silently return original text.
+    // 5. CLAUDE AI — ultimate fallback. Never silently return original text.
     if (!translation) {
       translation = await translateClaude(cleanText, from, to);
       if (translation) source = "claude";

@@ -96,10 +96,25 @@ export default function AppShell({ children }: AppShellProps) {
     };
   }, []);
 
+  // BottomNav is a fixed ~56px bar hidden on full-screen call routes. Give
+  // the scroller matching bottom clearance on nav-visible routes so page
+  // content/controls aren't hidden underneath it.
+  const NAV_HIDDEN = ["/call/", "/talk/", "/group/", "/face-to-face", "/language-os/"];
+  const navVisible = !NAV_HIDDEN.some((r) => pathname.startsWith(r));
+
   return (
     <ErrorBoundary>
       <OfflineIndicator />
-      <div id="app-scroll">{children}</div>
+      <div
+        id="app-scroll"
+        style={
+          navVisible
+            ? { paddingBottom: "calc(3.5rem + env(safe-area-inset-bottom) + 0.5rem)" }
+            : undefined
+        }
+      >
+        {children}
+      </div>
       <BottomNav />
     </ErrorBoundary>
   );

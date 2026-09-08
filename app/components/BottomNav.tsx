@@ -13,6 +13,8 @@ const HIDDEN_ROUTES = [
   "/talk/",
   "/group/",
   "/face-to-face",
+  "/language-os/", // the [lang] chat + review are full-screen focused modes
+                   // (the /language-os landing has no trailing slash → nav shows)
   "/wingman",
   "/proximity",
   "/language-os/",
