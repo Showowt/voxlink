@@ -361,7 +361,13 @@ function DashboardContent() {
           </div>
         )}
 
-        <div className="text-center mt-8">
+        <div className="text-center mt-8 flex flex-col items-center gap-3">
+          <a
+            href="/account"
+            className="text-white/45 text-sm font-medium hover:text-white/70 transition-colors min-h-[44px] flex items-center"
+          >
+            Account &amp; Privacy · Delete account
+          </a>
           <a
             href="/"
             className="text-white/25 text-sm hover:text-white/50 transition-colors"
