@@ -110,23 +110,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
+    let active = true;
+    // Safety net: never leave the app stuck on a loading spinner if auth is
+    // slow or wedged — the dashboard gates its whole render on `loading`.
+    const safety = setTimeout(() => {
+      if (active) setLoading(false);
+    }, 4000);
+
+    // Apply an auth state WITHOUT awaiting any supabase call in-band. Awaiting a
+    // DB read (loadProfile) inside the onAuthStateChange callback deadlocks the
+    // Supabase auth lock on session restore, so setLoading(false) never ran and
+    // the Profile/dashboard span forever. Resolve loading synchronously and
+    // defer the profile fetch out of the lock with setTimeout(0).
+    const applySession = (session: Session | null) => {
+      if (!active) return;
       setSession(session);
       setUser(session?.user ?? null);
-
+      setLoading(false);
+      clearTimeout(safety);
       if (session?.user) {
-        await loadProfile(session.user.id);
+        const uid = session.user.id;
+        setTimeout(() => {
+          if (active) loadProfile(uid);
+        }, 0);
       } else {
         setProfile(null);
         setLimits(null);
       }
+    };
 
-      setLoading(false);
+    // Prime immediately from the restored session, then keep it in sync.
+    supabase.auth.getSession().then(({ data }) => applySession(data.session));
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      applySession(session);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      active = false;
+      clearTimeout(safety);
+      subscription.unsubscribe();
+    };
   }, [supabase, loadProfile]);
 
   const canUse = useCallback(
