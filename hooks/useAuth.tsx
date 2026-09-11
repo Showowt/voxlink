@@ -199,17 +199,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUpWithEmail = useCallback(
     async (email: string, password: string, name?: string) => {
       if (!supabase) return { error: "Auth not configured" };
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { full_name: name } },
-      });
-      // With email confirmation ON, signUp succeeds with a null session —
-      // the caller must show a "check your email" state, not redirect.
-      return {
-        error: error?.message,
-        needsConfirmation: !error && !!data.user && !data.session,
-      };
+      // Create the account already-confirmed via the server (instant, no email
+      // step — accounts are optional and Supabase's mailer is unreliable), then
+      // sign in immediately so the user lands in the app. Signups are tracked in
+      // usage_events server-side.
+      let res: Response;
+      try {
+        res = await fetch("/api/auth/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password, name }),
+        });
+      } catch {
+        return { error: "Network error. Please try again." };
+      }
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { error: json.error || json.message || "Sign up failed" };
+      }
+      // Account exists and is confirmed — sign in to establish the session.
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      return { error: error?.message, needsConfirmation: false };
     },
     [supabase],
   );
