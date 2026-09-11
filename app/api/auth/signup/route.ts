@@ -83,7 +83,9 @@ export async function POST(request: NextRequest) {
       email,
       password,
       email_confirm: true,
-      user_metadata: { name: displayName },
+      // Send both keys: the DB trigger derives the profile display name from
+      // full_name; `name` is kept for parity with the client metadata shape.
+      user_metadata: { name: displayName, full_name: displayName },
     });
 
     if (error) {
