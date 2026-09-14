@@ -63,6 +63,10 @@ export default function FaceToFacePage() {
   const bottomRecognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const topListeningRef = useRef(false);
   const bottomListeningRef = useRef(false);
+  // Shared rolling context of BOTH speakers' recent finalized lines. Both sides
+  // are on one device here, so the translator gets the full conversation and
+  // stops straying on pronouns / gender / references.
+  const f2fContextRef = useRef<string[]>([]);
 
   // Check browser support
   useEffect(() => {
@@ -79,6 +83,7 @@ export default function FaceToFacePage() {
       text: string,
       sourceLang: string,
       targetLang: string,
+      context?: string[],
     ): Promise<string> => {
       if (!text.trim()) return "";
 
@@ -90,19 +95,22 @@ export default function FaceToFacePage() {
             text: text.trim(),
             sourceLang,
             targetLang,
+            ...(context?.length ? { context } : {}),
           }),
         });
 
         if (!res.ok) {
           console.error("Translation failed:", res.status);
-          return text;
+          return "";
         }
 
         const data = await res.json();
-        return data.translation || text;
+        // Never speak/show the untranslated source as if it were a translation.
+        if (data.untranslated) return "";
+        return data.translation || "";
       } catch (err) {
         console.error("Translation error:", err);
-        return text;
+        return "";
       }
     },
     [],
@@ -213,17 +221,30 @@ export default function FaceToFacePage() {
         // Translate final results
         if (finalTranscript) {
           setState((prev) => ({ ...prev, isTranslating: true }));
-          const translated = await translate(finalTranscript, lang, targetLang);
-
-          // Update the OPPOSITE side with the translation
-          const setOtherState =
-            speaker === "top" ? setBottomState : setTopState;
-          setOtherState((prev) => ({ ...prev, translated }));
+          const context = f2fContextRef.current.slice(-8);
+          const translated = await translate(
+            finalTranscript,
+            lang,
+            targetLang,
+            context,
+          );
+          // Record this finalized line as context for subsequent turns (both
+          // speakers share one buffer since they're on the same device).
+          f2fContextRef.current = [
+            ...f2fContextRef.current,
+            finalTranscript,
+          ].slice(-8);
 
           setState((prev) => ({ ...prev, isTranslating: false }));
 
-          // Speak the translation on the other side
-          speak(translated, targetLang);
+          // Only update/speak when we got a real translation — never show or
+          // speak the untranslated source text on the other side.
+          if (translated) {
+            const setOtherState =
+              speaker === "top" ? setBottomState : setTopState;
+            setOtherState((prev) => ({ ...prev, translated }));
+            speak(translated, targetLang);
+          }
         }
       };
 

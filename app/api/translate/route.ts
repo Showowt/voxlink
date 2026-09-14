@@ -25,6 +25,12 @@ const TranslateRequestSchema = z
     targetLang: z.string().min(2).max(10).optional(),
     from: z.string().min(2).max(10).optional(),
     to: z.string().min(2).max(10).optional(),
+    // Accuracy inputs (optional, backward-compatible). When `context` is
+    // present the request takes the context-aware path so translations stop
+    // drifting on pronouns / gender / references across turns.
+    context: z.array(z.string().max(600)).max(12).optional(),
+    glossary: z.array(z.string().max(120)).max(60).optional(),
+    register: z.enum(["auto", "formal", "informal"]).optional(),
   })
   .refine(
     (data) => (data.sourceLang && data.targetLang) || (data.from && data.to),
@@ -332,6 +338,94 @@ async function translateClaude(
   }
 }
 
+// Region labels so the translator honors the target VARIETY (es-CO vs es-ES,
+// pt-BR vs pt-PT) instead of collapsing everything to a generic language.
+const REGION_NAMES: Record<string, string> = {
+  CO: "Colombia", MX: "Mexico", ES: "Spain", AR: "Argentina", CL: "Chile",
+  PE: "Peru", US: "United States", GB: "UK", BR: "Brazil", PT: "Portugal",
+  FR: "France", CA: "Canada", DE: "Germany", IT: "Italy", CN: "China",
+  TW: "Taiwan", JP: "Japan", KR: "Korea", SA: "Saudi Arabia",
+};
+
+// Build a human label from a RAW locale ("es-CO" → "Spanish (Colombia)").
+function localeLabel(raw: string, base: string): string {
+  const name = LANG_NAMES[base] || base;
+  const parts = raw.split(/[-_]/);
+  const region = parts.length > 1 ? parts[1].toUpperCase() : "";
+  return region && REGION_NAMES[region] ? `${name} (${REGION_NAMES[region]})` : name;
+}
+
+// Context-aware translation. Uses the recent conversation ONLY to resolve
+// pronouns / gender / tense / references — the #1 source of drift — and honors
+// an optional glossary (names, terms) and register. Falls back to null so the
+// caller can try the fast providers; NEVER returns the source text.
+async function translateClaudeContext(
+  text: string,
+  from: string,
+  to: string,
+  opts: {
+    context?: string[];
+    glossary?: string[];
+    register?: string;
+    fromLabel?: string;
+    toLabel?: string;
+  },
+): Promise<string | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY2 || process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
+
+  const fromName = opts.fromLabel || LANG_NAMES[from] || from;
+  const toName = opts.toLabel || LANG_NAMES[to] || to;
+
+  const parts: string[] = [
+    `You are a live conversation interpreter. Translate the NEW line from ${fromName} to ${toName}.`,
+    `Use the recent conversation ONLY to resolve pronouns, gender agreement, tense, and references. Do NOT translate or repeat the earlier lines, and do NOT add anything that is not in the new line.`,
+  ];
+  if (opts.register === "formal") parts.push("Use a formal register.");
+  else if (opts.register === "informal") parts.push("Use an informal, casual register.");
+  else parts.push("Match the speaker's tone and register naturally.");
+  if (opts.glossary?.length) {
+    parts.push(
+      `Keep these names/terms exactly and consistent: ${opts.glossary.slice(0, 60).join(", ")}.`,
+    );
+  }
+  if (opts.context?.length) {
+    parts.push(
+      `Recent conversation (most recent last):\n${opts.context
+        .slice(-12)
+        .map((l) => `- ${l}`)
+        .join("\n")}`,
+    );
+  }
+  parts.push(`New line to translate:\n${text}`);
+  parts.push(
+    "Return ONLY the translation of the new line — no quotes, no notes, no speaker labels.",
+  );
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 400,
+        messages: [{ role: "user", content: parts.join("\n\n") }],
+      }),
+      signal: AbortSignal.timeout(2500),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const content = data?.content?.[0]?.text?.trim();
+    return content || null;
+  } catch {
+    return null;
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // TRANSLATION APIS - Optimized for speed (2s timeout, parallel execution)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -481,9 +575,16 @@ export async function POST(req: NextRequest) {
       targetLang,
       from: fromParam,
       to: toParam,
+      context,
+      glossary,
+      register,
     } = parsed.data;
     const sourceLangFinal = sourceLang || fromParam || "en";
     const targetLangFinal = targetLang || toParam || "es";
+    const hasContext =
+      (Array.isArray(context) && context.length > 0) ||
+      (Array.isArray(glossary) && glossary.length > 0) ||
+      (register && register !== "auto");
     const cleanText = text.trim();
     if (!cleanText) {
       return NextResponse.json({ translation: "" }, { headers: corsHeaders });
@@ -560,56 +661,48 @@ export async function POST(req: NextRequest) {
     }
     const langPair = `${from}-${to}`;
 
-    // 1. Check cache first (INSTANT)
+    // 1-3. Fast lookups (cache → dictionary → partial). SKIPPED for
+    // context-aware requests: their accuracy depends on the conversation, so a
+    // context-free cache/dictionary hit (e.g. "it's beautiful" → masculine
+    // default) is exactly the drift we're eliminating.
     const cacheKey = `${langPair}:${cleanText.toLowerCase()}`;
-    const cached = getCached(cacheKey);
-    if (cached) {
-      return NextResponse.json(
-        {
-          translation: cached,
-          source: "cache",
-          latency: Date.now() - startTime,
-        },
-        { headers: corsHeaders },
-      );
-    }
-
-    // 2. Dictionary lookup — multi-language offline dictionary (INSTANT)
-    const dictResult = offlineTranslate(cleanText, from, to) ?? PHRASES[langPair]?.[cleanText.toLowerCase()];
-    if (dictResult) {
-      setCache(cacheKey, dictResult);
-      return NextResponse.json(
-        {
-          translation: dictResult,
-          source: "dictionary",
-          latency: Date.now() - startTime,
-        },
-        { headers: corsHeaders },
-      );
-    }
-
-    // 3. Partial phrase matching for compound sentences
-    const words = cleanText.toLowerCase().split(/\s+/);
-    if (words.length <= 3) {
-      const partial = offlineTranslate(words.join(" "), from, to) ?? PHRASES[langPair]?.[words.join(" ")];
-      if (partial) {
-        setCache(cacheKey, partial);
+    if (!hasContext) {
+      const cached = getCached(cacheKey);
+      if (cached) {
         return NextResponse.json(
-          {
-            translation: partial,
-            source: "dictionary",
-            latency: Date.now() - startTime,
-          },
+          { translation: cached, source: "cache", latency: Date.now() - startTime },
           { headers: corsHeaders },
         );
       }
+
+      const dictResult =
+        offlineTranslate(cleanText, from, to) ??
+        PHRASES[langPair]?.[cleanText.toLowerCase()];
+      if (dictResult) {
+        setCache(cacheKey, dictResult);
+        return NextResponse.json(
+          { translation: dictResult, source: "dictionary", latency: Date.now() - startTime },
+          { headers: corsHeaders },
+        );
+      }
+
+      const words = cleanText.toLowerCase().split(/\s+/);
+      if (words.length <= 3) {
+        const partial =
+          offlineTranslate(words.join(" "), from, to) ??
+          PHRASES[langPair]?.[words.join(" ")];
+        if (partial) {
+          setCache(cacheKey, partial);
+          return NextResponse.json(
+            { translation: partial, source: "dictionary", latency: Date.now() - startTime },
+            { headers: corsHeaders },
+          );
+        }
+      }
     }
 
-    // 4. API Translation — run all THREE free providers concurrently with a
-    // short window. Running Libre in this batch (instead of sequentially
-    // after a 2s wait) means a dead Google/MyMemory no longer stalls every
-    // utterance by 2s before the fallback even starts.
-    const [googleResult, myMemoryResult, libreResult] = await Promise.allSettled([
+    // 4. Free providers run concurrently as a fast fallback for BOTH paths.
+    const providerBatch = Promise.allSettled([
       withTimeout(translateGoogle(cleanText, from, to), 1500, null),
       withTimeout(translateMyMemory(cleanText, from, to), 1500, null),
       withTimeout(translateLibre(cleanText, from, to), 1500, null),
@@ -618,35 +711,55 @@ export async function POST(req: NextRequest) {
     let translation: string | null = null;
     let source = "api";
 
-    // Preference: Google (most accurate) > MyMemory > Libre
-    if (googleResult.status === "fulfilled" && googleResult.value) {
-      translation = googleResult.value;
-      source = "google";
-    } else if (myMemoryResult.status === "fulfilled" && myMemoryResult.value) {
-      translation = myMemoryResult.value;
-      source = "mymemory";
-    } else if (libreResult.status === "fulfilled" && libreResult.value) {
-      translation = libreResult.value;
-      source = "libre";
+    // 5a. Context-aware LLM is AUTHORITATIVE when context/glossary/register is
+    // supplied — this is what stops translations from straying across turns.
+    // Providers keep running in parallel so a Claude miss costs no extra time.
+    if (hasContext) {
+      translation = await translateClaudeContext(cleanText, from, to, {
+        context,
+        glossary,
+        register,
+        fromLabel: localeLabel(sourceLangFinal, from),
+        toLabel: localeLabel(targetLangFinal, to),
+      });
+      if (translation) source = "claude-context";
     }
 
-    // 5. CLAUDE AI — ultimate fallback. Never silently return original text.
+    // 5b. Fast providers — preference Google (most accurate) > MyMemory > Libre.
     if (!translation) {
+      const [googleResult, myMemoryResult, libreResult] = await providerBatch;
+      if (googleResult.status === "fulfilled" && googleResult.value) {
+        translation = googleResult.value;
+        source = "google";
+      } else if (myMemoryResult.status === "fulfilled" && myMemoryResult.value) {
+        translation = myMemoryResult.value;
+        source = "mymemory";
+      } else if (libreResult.status === "fulfilled" && libreResult.value) {
+        translation = libreResult.value;
+        source = "libre";
+      }
+    }
+
+    // 5c. Plain Claude as a last resort (skip if we already tried the
+    // context-aware Claude, which uses the same model/key).
+    if (!translation && !hasContext) {
       translation = await translateClaude(cleanText, from, to);
       if (translation) source = "claude";
     }
 
-    // 7. Final result
-    const finalTranslation = translation || cleanText;
+    // 6. Final result — NEVER emit the untranslated source as a "translation".
+    // On total failure return an empty string + untranslated:true so the client
+    // shows nothing instead of the wrong-language text mislabeled as accurate.
+    const finalTranslation = translation ?? "";
     const latency = Date.now() - startTime;
 
-    // Log when all providers failed — this should not happen often
     if (!translation) {
       console.warn(`[Translate] ALL providers failed for ${from}->${to}: "${cleanText.slice(0, 50)}..." (${latency}ms)`);
     }
 
-    // Cache successful translations
-    if (translation) {
+    // Cache successful translations — but never cache a context-aware result
+    // under the context-free key (it would poison the fast path).
+    if (translation && !hasContext) {
       setCache(cacheKey, finalTranslation);
     }
 
@@ -685,7 +798,8 @@ export async function POST(req: NextRequest) {
         original: cleanText,
         from,
         to,
-        source: translation ? source : "passthrough",
+        source: translation ? source : "failed",
+        untranslated: !translation,
         latency,
       },
       { headers: { ...corsHeaders, ...rateLimitHeaders(rateLimit) } },

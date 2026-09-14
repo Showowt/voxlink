@@ -163,6 +163,7 @@ async function translateAPI(
   from: string,
   to: string,
   signal?: AbortSignal,
+  opts?: { context?: string[] },
 ): Promise<string | null> {
   if (!text.trim() || from === to) return text;
 
@@ -170,12 +171,20 @@ async function translateAPI(
     const res = await fetch("/api/translate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: text.trim(), from, to }),
+      body: JSON.stringify({
+        text: text.trim(),
+        from,
+        to,
+        ...(opts?.context?.length ? { context: opts.context } : {}),
+      }),
       signal,
     });
 
     if (!res.ok) return null;
     const data = await res.json();
+    // The API now flags total failures instead of echoing the source text.
+    // Return null so we show nothing rather than the wrong-language original.
+    if (data.untranslated) return null;
     return data.translated ?? data.translation ?? null;
   } catch (e: unknown) {
     if (e instanceof Error && e.name === "AbortError") return null;
@@ -249,6 +258,10 @@ export function useTranscription({
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const lastInterimRef = useRef<string>("");
   const lastSentTextRef = useRef<string>("");
+  // Rolling buffer of my recent FINALIZED utterances (source language). Sent as
+  // conversation context on finals so the translator resolves pronouns/gender/
+  // references instead of translating each line in isolation (the #1 drift).
+  const recentTurnsRef = useRef<string[]>([]);
 
   // Resilience: restart backoff and visibility tracking
   const restartCountRef = useRef(0);
@@ -294,7 +307,43 @@ export function useTranscription({
         console.warn("[STT] DataChannel send failed for transcription — message queued");
       }
 
-      // 1. Try instant dictionary (0ms)
+      // FINAL utterances take the ACCURACY path: skip the local dictionary and
+      // client cache (context-free shortcuts that cause gender/register drift)
+      // and send the recent conversation so the server translates in context.
+      if (isFinal) {
+        const controller = new AbortController();
+        abortRef.current = controller;
+        const context = recentTurnsRef.current.slice(-8);
+        const translated = await translateAPI(
+          trimmed,
+          my,
+          their,
+          controller.signal,
+          { context },
+        );
+        if (controller.signal.aborted) return;
+        // Record this finalized line as context for the NEXT turn (recorded
+        // after translating, so a line is never context for itself).
+        recentTurnsRef.current = [...recentTurnsRef.current, trimmed].slice(-8);
+        if (translated) {
+          setLocalTranslated(translated);
+          lastSentTextRef.current = trimmed;
+          sendMessage(
+            JSON.stringify({
+              type: "translation",
+              text: translated,
+              original: trimmed,
+              from: my,
+              to: their,
+              isFinal: true,
+            }),
+          );
+        }
+        return;
+      }
+
+      // INTERIM live preview — latency-critical, so keep the instant dictionary
+      // + client cache + fast (context-free) API.
       const instant = instantTranslate(trimmed, my, their);
       if (instant) {
         setLocalTranslated(instant);
@@ -307,13 +356,12 @@ export function useTranscription({
             original: trimmed,
             from: my,
             to: their,
-            isFinal,
+            isFinal: false,
           }),
         );
         return;
       }
 
-      // 2. Try client-side cache (0ms)
       const cached = getCachedTranslation(trimmed, my, their);
       if (cached) {
         setLocalTranslated(cached);
@@ -325,21 +373,16 @@ export function useTranscription({
             original: trimmed,
             from: my,
             to: their,
-            isFinal,
+            isFinal: false,
           }),
         );
         return;
       }
 
-      // 3. API translation with AbortController
       const controller = new AbortController();
       abortRef.current = controller;
-
       const translated = await translateAPI(trimmed, my, their, controller.signal);
-
-      // Check if this request was superseded
       if (controller.signal.aborted) return;
-
       if (translated) {
         setLocalTranslated(translated);
         setCachedTranslation(trimmed, my, their, translated);
@@ -351,7 +394,7 @@ export function useTranscription({
             original: trimmed,
             from: my,
             to: their,
-            isFinal,
+            isFinal: false,
           }),
         );
       }
@@ -789,6 +832,7 @@ export function useTranscription({
       setError(null);
       lastInterimRef.current = "";
       lastSentTextRef.current = "";
+      recentTurnsRef.current = [];
 
       if (mode.current === "webspeech") {
         startWebSpeech();
