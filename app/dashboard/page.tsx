@@ -211,9 +211,11 @@ function DashboardContent() {
                 ? `Hey, ${profile.display_name.split(" ")[0]}`
                 : "Dashboard"}
             </h1>
-            <span className={`text-sm font-semibold ${planColor}`}>
-              {planLabel}
-            </span>
+            {!isNativeApp && (
+              <span className={`text-sm font-semibold ${planColor}`}>
+                {planLabel}
+              </span>
+            )}
           </div>
           <button
             onClick={signOut}
@@ -238,7 +240,11 @@ function DashboardContent() {
                 value: streak?.longest_streak ?? 0,
                 suffix: "d",
               },
-              { label: "Plan", value: planLabel, isText: true },
+              // The plan tier is a web-only concept — the native app is a fully
+              // free experience with no paid tiers (Apple 3.1.1 / 2.3.6).
+              ...(isNativeApp
+                ? []
+                : [{ label: "Plan", value: planLabel, isText: true }]),
             ].map(({ label, value, suffix = "", isText }) => (
               <div key={label}>
                 <div
@@ -252,7 +258,7 @@ function DashboardContent() {
           </div>
         </div>
 
-        {!isPro && (
+        {!isPro && !isNativeApp && (
           <div className="bg-white/[0.04] border border-white/8 rounded-2xl p-4 mb-6">
             <div className="flex items-center justify-between mb-4">
               <span className="text-sm font-semibold text-white/60">
@@ -285,7 +291,7 @@ function DashboardContent() {
           </div>
         )}
 
-        {isTrialing && (
+        {isTrialing && !isNativeApp && (
           <div className="bg-yellow-400/10 border border-yellow-400/20 rounded-2xl p-4 mb-6 flex items-center justify-between">
             <div>
               <div className="text-yellow-400 font-bold text-sm">
@@ -313,7 +319,9 @@ function DashboardContent() {
         </h2>
         <div className="grid grid-cols-2 gap-3 mb-8">
           {MODES.map((mode) => {
-            const locked = mode.pro && !isPro && !isTrialing;
+            // Native app is fully free — nothing is locked behind a paid tier.
+            const locked =
+              !isNativeApp && mode.pro && !isPro && !isTrialing;
             return (
               <button
                 key={mode.id}

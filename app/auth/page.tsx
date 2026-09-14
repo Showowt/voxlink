@@ -83,7 +83,11 @@ function AuthContent() {
             Entrevoz
           </div>
           <p className="text-white/40 text-sm">
-            {mode === "signin" ? "Welcome back" : "Start your free 7-day trial"}
+            {mode === "signin"
+              ? "Welcome back"
+              : isNativeApp
+                ? "Create your free account"
+                : "Start your free 7-day trial"}
           </p>
         </div>
 
@@ -236,7 +240,7 @@ function AuthContent() {
             </button>
           </div>
 
-          {mode === "signup" && (
+          {mode === "signup" && !isNativeApp && (
             <p className="text-white/25 text-xs text-center mt-4 leading-relaxed">
               7-day free trial on Pro. No credit card required.
               <br />
