@@ -11,6 +11,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { createBrowserClient } from "@/lib/supabase-browser";
+import { sendCallInvitePeer } from "./ring-peer";
 
 export type CallType = "video" | "audio";
 
@@ -28,9 +29,22 @@ export function ringChannelName(deviceId: string): string {
   return `ring-${deviceId}`;
 }
 
-// Fire a call invite to a contact's ring channel. Best-effort: subscribe, send
-// once, tear down. Resolves true only if the broadcast was actually sent.
+// Public entry: try Realtime broadcast first; if it's unavailable (anon
+// Realtime disabled / channel error), fall back to the PeerJS ring transport
+// so the invite still reaches the contact.
 export async function sendCallInvite(
+  targetDeviceId: string,
+  invite: Omit<CallInvite, "t">,
+): Promise<boolean> {
+  const viaRealtime = await sendCallInviteRealtime(targetDeviceId, invite);
+  if (viaRealtime) return true;
+  return sendCallInvitePeer(targetDeviceId, invite);
+}
+
+// Fire a call invite to a contact's ring channel over Supabase Realtime.
+// Best-effort: subscribe, send once, tear down. Resolves true only if the
+// broadcast was actually sent.
+async function sendCallInviteRealtime(
   targetDeviceId: string,
   invite: Omit<CallInvite, "t">,
 ): Promise<boolean> {

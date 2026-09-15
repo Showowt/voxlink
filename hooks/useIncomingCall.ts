@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createBrowserClient } from "@/lib/supabase-browser";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { ringChannelName, type CallInvite } from "@/app/lib/ring-signal";
+import { startRingPeerListener } from "@/app/lib/ring-peer";
 
 // Subscribes this device to its own ring channel and surfaces an incoming call
 // invite. Mounted once, app-wide (see IncomingCallOverlay). One invite at a
@@ -25,18 +26,30 @@ export function useIncomingCall() {
     }
     if (!deviceId) return;
 
+    let cancelled = false;
+    let peerCleanup: (() => void) | null = null;
+    let peerStarted = false;
+    const handledRooms = new Set<string>();
+
+    // Shared receiver for BOTH transports (Realtime + PeerJS fallback).
+    const receiveInvite = (p: CallInvite) => {
+      if (cancelled) return;
+      if (!p?.room || !p?.fromDevice) return;
+      if (Date.now() - (p.t || 0) > 60000) return; // stale — ignore
+      if (handledRooms.has(p.room)) return; // dedupe across transports
+      if (inviteRef.current) return; // already ringing for another call
+      handledRooms.add(p.room);
+      inviteRef.current = p;
+      setInvite(p);
+    };
+
     const channel = supabase.channel(ringChannelName(deviceId), {
       config: { broadcast: { self: false } },
     });
 
-    channel.on("broadcast", { event: "call-invite" }, (msg) => {
-      const p = msg.payload as CallInvite;
-      if (!p?.room || !p?.fromDevice) return;
-      if (Date.now() - (p.t || 0) > 60000) return; // stale — ignore
-      if (inviteRef.current) return; // already ringing for another call
-      inviteRef.current = p;
-      setInvite(p);
-    });
+    channel.on("broadcast", { event: "call-invite" }, (msg) =>
+      receiveInvite(msg.payload as CallInvite),
+    );
 
     // Caller hung up before we answered.
     channel.on("broadcast", { event: "call-canceled" }, (msg) => {
@@ -47,14 +60,29 @@ export function useIncomingCall() {
       }
     });
 
-    channel.subscribe();
+    channel.subscribe((status) => {
+      // If Realtime is unavailable (e.g. anon Realtime disabled), fall back to
+      // the PeerJS ring transport so invites still arrive.
+      if (
+        (status === "CHANNEL_ERROR" || status === "TIMED_OUT") &&
+        !peerStarted
+      ) {
+        peerStarted = true;
+        startRingPeerListener(deviceId, receiveInvite).then((cleanup) => {
+          if (cancelled) cleanup();
+          else peerCleanup = cleanup;
+        });
+      }
+    });
 
     return () => {
+      cancelled = true;
       try {
         supabase.removeChannel(channel);
       } catch {
         /* ignore */
       }
+      peerCleanup?.();
     };
   }, []);
 
