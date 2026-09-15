@@ -7,7 +7,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        // Register for VoIP pushes + CallKit at launch so the app can be woken
+        // from a killed state to ring on an incoming call. (See EntrevozCall.swift.)
+        PushKitManager.shared.start()
         return true
     }
 

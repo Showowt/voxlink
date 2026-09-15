@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, ReactNode } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import ErrorBoundary from "./ErrorBoundary";
 import BottomNav from "./BottomNav";
 import IncomingCallOverlay from "./IncomingCallOverlay";
@@ -16,6 +16,15 @@ interface AppShellProps {
 
 export default function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
+  const router = useRouter();
+
+  // Native shell only: register the VoIP token + handle CallKit answers so the
+  // device rings when closed. No-ops on the web.
+  useEffect(() => {
+    import("../lib/native-call")
+      .then(({ initNativeRing }) => initNativeRing((p) => router.push(p)))
+      .catch(() => {});
+  }, [router]);
 
   // iOS shell: stop the webview drawing under the system status bar (content
   // was sliding beneath the clock/battery). The plugin ships in the app

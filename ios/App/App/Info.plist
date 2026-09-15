@@ -30,6 +30,11 @@
 	<string>Entrevoz uses your camera for live translated video calls so the other person can see you.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Entrevoz uses your microphone to capture your voice, transcribe it, and translate it in real time during calls and conversations.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>voip</string>
+		<string>audio</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

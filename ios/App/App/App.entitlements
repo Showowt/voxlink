@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Push Notifications (VoIP). Add the "Push Notifications" capability in
+	     Xcode → Signing & Capabilities so the App ID + provisioning profile
+	     are updated to match; use "development" for local/TestFlight debug. -->
+	<key>aps-environment</key>
+	<string>production</string>
+</dict>
+</plist>

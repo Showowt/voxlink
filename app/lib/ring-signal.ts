@@ -36,6 +36,12 @@ export async function sendCallInvite(
   targetDeviceId: string,
   invite: Omit<CallInvite, "t">,
 ): Promise<boolean> {
+  // Also fire a VoIP push (best-effort) so a CLOSED device rings via native
+  // CallKit — runs in parallel with the in-app Realtime/PeerJS invite.
+  import("./native-call")
+    .then(({ sendVoipPush }) => sendVoipPush(targetDeviceId, invite))
+    .catch(() => {});
+
   const viaRealtime = await sendCallInviteRealtime(targetDeviceId, invite);
   if (viaRealtime) return true;
   return sendCallInvitePeer(targetDeviceId, invite);
