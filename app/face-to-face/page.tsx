@@ -122,9 +122,12 @@ export default function FaceToFacePage() {
     premiumF: "21m00Tcm4TlvDq8ikWAM", // Rachel — warm female, multilingual
     premiumM: "ErXwobaYiN019PkySvjV", // Antoni — natural male, multilingual
   };
+  // Voice is OPT-IN: default OFF (captions only) so nothing auto-speaks in an
+  // ElevenLabs voice. The user cycles the voice control to turn it on. The
+  // choice is remembered per device.
   const [voiceMode, setVoiceMode] = useState<
     "premiumF" | "premiumM" | "device" | "off"
-  >("premiumF");
+  >("off");
   const voiceModeRef = useRef(voiceMode);
   useEffect(() => {
     const saved = localStorage.getItem("entrevoz_f2f_voice");

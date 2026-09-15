@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useIncomingCall } from "@/hooks/useIncomingCall";
 import { sendCallSignal } from "@/app/lib/ring-signal";
 import { startRingtone } from "@/app/lib/ringtone";
+import { blockDevice } from "@/app/lib/call-block";
 
 // Routes where the user is already in a live session — don't interrupt them
 // with an incoming-call takeover there.
@@ -53,6 +54,11 @@ export default function IncomingCallOverlay() {
 
   const decline = () => {
     sendCallSignal(invite.fromDevice, "call-declined", invite.room).catch(() => {});
+    dismiss();
+  };
+
+  const blockCaller = () => {
+    blockDevice(invite.fromDevice);
     dismiss();
   };
 
@@ -126,6 +132,14 @@ export default function IncomingCallOverlay() {
           <span className="text-xs font-medium text-white/50">Accept</span>
         </button>
       </div>
+
+      {/* Silence a spam caller (their ring address is silenced on this device) */}
+      <button
+        onClick={blockCaller}
+        className="relative z-10 mb-6 text-xs font-medium text-white/30 hover:text-white/60 transition-colors"
+      >
+        Block this caller
+      </button>
     </div>
   );
 }

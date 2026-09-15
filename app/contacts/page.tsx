@@ -8,6 +8,7 @@ import { BackButton } from '@/app/components/ui/BackButton';
 // always empty.
 import { getDeviceId } from '@/app/lib/language-os/device-id';
 import { sendCallInvite } from '@/app/lib/ring-signal';
+import { generateRoomCode } from '@/app/lib/room-code';
 
 interface Contact {
   id: string;
@@ -73,7 +74,7 @@ export default function ContactsPage() {
   };
 
   const callContact = async (c: Contact, type: 'video' | 'audio') => {
-    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const code = generateRoomCode();
     // lang = MY language (drives my STT); the contact's language is only a
     // hint for the expected partner. Presetting lang to the contact's
     // language ran speech recognition in the wrong language.
@@ -98,7 +99,7 @@ export default function ContactsPage() {
   };
 
   const shareInvite = (c: Contact) => {
-    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const code = generateRoomCode();
     const url = `${window.location.origin}/call/${code}`;
     const msg = encodeURIComponent(`Let's catch up with live translation! Join here: ${url}`);
     window.open(`https://wa.me/?text=${msg}`, '_blank');

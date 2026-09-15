@@ -6,6 +6,7 @@ import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { ringChannelName, type CallInvite } from "@/app/lib/ring-signal";
 import { startRingPeerListener } from "@/app/lib/ring-peer";
 import { deriveDialCode } from "@/app/lib/dial-code";
+import { isBlocked, isThrottled } from "@/app/lib/call-block";
 
 // Subscribes this device to its own ring channel and surfaces an incoming call
 // invite. Mounted once, app-wide (see IncomingCallOverlay). One invite at a
@@ -36,6 +37,8 @@ export function useIncomingCall() {
       if (cancelled) return;
       if (!p?.room || !p?.fromDevice) return;
       if (Date.now() - (p.t || 0) > 60000) return; // stale — ignore
+      if (isBlocked(p.fromDevice)) return; // silenced caller
+      if (isThrottled(p.fromDevice, Date.now())) return; // spam throttle
       if (handledRooms.has(p.room)) return; // dedupe across transports/addresses
       if (inviteRef.current) return; // already ringing for another call
       handledRooms.add(p.room);

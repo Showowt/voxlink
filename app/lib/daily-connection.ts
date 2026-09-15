@@ -202,30 +202,80 @@ export class DailyConnection {
       }
     });
 
-    // Network quality changes
-    this.call.on("network-quality-change", (event) => {
-      if (!event) return;
-      const threshold = event.threshold;
-      const quality: ConnectionQuality["quality"] =
-        threshold === "good"
-          ? "excellent"
-          : threshold === "low"
-            ? "fair"
-            : "good";
-      this.callbacks.onQualityUpdate?.({
-        quality,
-        packetLoss: 0,
-        rtt: 0,
-        jitter: 0,
-        bandwidth: 0,
-        timestamp: Date.now(),
-      });
+    // Network quality changes — correct mapping (very-low → poor, so the
+    // "unstable" banner actually fires) + pull real RTT/loss from Daily.
+    this.call.on("network-quality-change", () => {
+      if (this.isDestroyed) return;
+      void this.pollStats();
+    });
+
+    // Real network reconnection: Daily silently reconnects on a flaky network.
+    // Surface it so the call page shows "Reconnecting…" instead of a frozen
+    // video with zero feedback (the reported mobile-drop symptom).
+    this.call.on("network-connection", (event) => {
+      if (this.isDestroyed || !event) return;
+      const state = (event as { event?: string }).event; // interrupted|connecting|connected
+      if (state === "interrupted" || state === "connecting") {
+        if (this._status === "connected") {
+          this.setStatus("reconnecting", "Reconnecting…");
+        }
+      } else if (state === "connected") {
+        if (this._status === "reconnecting") {
+          this.setStatus("connected", "Reconnected");
+        }
+      }
     });
 
     // Nonfatal error — connection recovered
     this.call.on("nonfatal-error", (event) => {
       console.warn("[Daily] Nonfatal:", event);
     });
+  }
+
+  // Feed REAL RTT / packet-loss / quality from Daily's getNetworkStats into the
+  // quality meter (the old code hardcoded rtt=0 and mapped worst→"good").
+  private async pollStats(): Promise<void> {
+    if (this.isDestroyed || !this.call) return;
+    try {
+      const ns = (await this.call.getNetworkStats()) as {
+        threshold?: string;
+        stats?: {
+          latest?: {
+            networkRoundTripTime?: number;
+            totalRecvPacketLoss?: number;
+            totalSendPacketLoss?: number;
+            videoRecvBitsPerSecond?: number;
+          };
+        };
+      };
+      const latest = ns?.stats?.latest ?? {};
+      const threshold = ns?.threshold;
+      const quality: ConnectionQuality["quality"] =
+        threshold === "good"
+          ? "excellent"
+          : threshold === "low"
+            ? "fair"
+            : threshold === "very-low"
+              ? "poor"
+              : "good";
+      const rtt = Math.round((latest.networkRoundTripTime ?? 0) * 1000);
+      const packetLoss = Math.round(
+        Math.max(
+          latest.totalRecvPacketLoss ?? 0,
+          latest.totalSendPacketLoss ?? 0,
+        ) * 100,
+      );
+      this.callbacks.onQualityUpdate?.({
+        quality,
+        packetLoss,
+        rtt,
+        jitter: 0,
+        bandwidth: latest.videoRecvBitsPerSecond ?? 0,
+        timestamp: Date.now(),
+      });
+    } catch {
+      /* stats unavailable — leave the meter as-is */
+    }
   }
 
   private handleParticipantJoined(participant: DailyParticipant): void {
@@ -245,6 +295,11 @@ export class DailyConnection {
 
     // Start keep-alive
     this.startKeepAlive();
+
+    // Poll real network stats every 3s for the quality meter.
+    if (this.statsInterval) clearInterval(this.statsInterval);
+    this.statsInterval = setInterval(() => void this.pollStats(), 3000);
+    void this.pollStats();
   }
 
   private handleDataMessage(data: unknown): void {

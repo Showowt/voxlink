@@ -5,15 +5,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { BackButton } from "@/app/components/ui/BackButton";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { sendCallInvite } from "@/app/lib/ring-signal";
+import { generateRoomCode } from "@/app/lib/room-code";
 
 const FLAGS: Record<string, string> = {
   en: "🇺🇸", es: "🇪🇸", fr: "🇫🇷", de: "🇩🇪", it: "🇮🇹", pt: "🇧🇷",
   zh: "🇨🇳", ja: "🇯🇵", ko: "🇰🇷", ar: "🇸🇦", ru: "🇷🇺", hi: "🇮🇳",
 };
 
-function randomRoom(): string {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
-}
+const randomRoom = () => generateRoomCode();
 
 function AddContent() {
   const router = useRouter();

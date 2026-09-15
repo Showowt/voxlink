@@ -1112,9 +1112,17 @@ function VideoCallContent() {
             } else if (peerStatus === "connecting") {
               setStatus("connecting");
               setStatusMessage(message || "Connecting...");
+            } else if (peerStatus === "reconnecting") {
+              // Daily is silently re-establishing the connection on a flaky
+              // network — show the overlay instead of a frozen video.
+              setStatus("reconnecting");
+              setStatusMessage(message || "Reconnecting…");
+              setIsReconnecting(true);
             } else if (peerStatus === "connected") {
               setStatus("connected");
               setStatusMessage("Connected!");
+              setIsReconnecting(false);
+              setReconnectAttempt(0);
             } else if (peerStatus === "room_full") {
               setStatus("room_full");
               setError(

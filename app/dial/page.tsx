@@ -12,10 +12,9 @@ import {
   isValidDialCode,
 } from "@/app/lib/dial-code";
 import { sendCallInvite } from "@/app/lib/ring-signal";
+import { generateRoomCode } from "@/app/lib/room-code";
 
-function randomRoom(): string {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
-}
+const randomRoom = () => generateRoomCode();
 
 export default function DialPage() {
   const router = useRouter();
