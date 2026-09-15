@@ -5,6 +5,7 @@ import { createBrowserClient } from "@/lib/supabase-browser";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { ringChannelName, type CallInvite } from "@/app/lib/ring-signal";
 import { startRingPeerListener } from "@/app/lib/ring-peer";
+import { deriveDialCode } from "@/app/lib/dial-code";
 
 // Subscribes this device to its own ring channel and surfaces an incoming call
 // invite. Mounted once, app-wide (see IncomingCallOverlay). One invite at a
@@ -27,62 +28,73 @@ export function useIncomingCall() {
     if (!deviceId) return;
 
     let cancelled = false;
-    let peerCleanup: (() => void) | null = null;
-    let peerStarted = false;
     const handledRooms = new Set<string>();
+    const cleanups: Array<() => void> = [];
 
-    // Shared receiver for BOTH transports (Realtime + PeerJS fallback).
+    // Shared receiver for BOTH transports + BOTH addresses (device id + code).
     const receiveInvite = (p: CallInvite) => {
       if (cancelled) return;
       if (!p?.room || !p?.fromDevice) return;
       if (Date.now() - (p.t || 0) > 60000) return; // stale — ignore
-      if (handledRooms.has(p.room)) return; // dedupe across transports
+      if (handledRooms.has(p.room)) return; // dedupe across transports/addresses
       if (inviteRef.current) return; // already ringing for another call
       handledRooms.add(p.room);
       inviteRef.current = p;
       setInvite(p);
     };
-
-    const channel = supabase.channel(ringChannelName(deviceId), {
-      config: { broadcast: { self: false } },
-    });
-
-    channel.on("broadcast", { event: "call-invite" }, (msg) =>
-      receiveInvite(msg.payload as CallInvite),
-    );
-
-    // Caller hung up before we answered.
-    channel.on("broadcast", { event: "call-canceled" }, (msg) => {
-      const room = (msg.payload as { room?: string })?.room;
+    const cancelInvite = (room?: string) => {
       if (inviteRef.current && inviteRef.current.room === room) {
         inviteRef.current = null;
         setInvite(null);
       }
-    });
+    };
 
-    channel.subscribe((status) => {
-      // If Realtime is unavailable (e.g. anon Realtime disabled), fall back to
-      // the PeerJS ring transport so invites still arrive.
-      if (
-        (status === "CHANNEL_ERROR" || status === "TIMED_OUT") &&
-        !peerStarted
-      ) {
-        peerStarted = true;
-        startRingPeerListener(deviceId, receiveInvite).then((cleanup) => {
-          if (cancelled) cleanup();
-          else peerCleanup = cleanup;
-        });
-      }
-    });
+    // Listen on BOTH the device id (used by saved contacts) and the short dial
+    // code (used by "dial a code" / QR), so either reaches this device.
+    const addresses = Array.from(
+      new Set([deviceId, deriveDialCode(deviceId)]),
+    ).filter(Boolean);
+
+    for (const address of addresses) {
+      let peerCleanup: (() => void) | null = null;
+      let peerStarted = false;
+
+      const channel = supabase.channel(ringChannelName(address), {
+        config: { broadcast: { self: false } },
+      });
+      channel.on("broadcast", { event: "call-invite" }, (msg) =>
+        receiveInvite(msg.payload as CallInvite),
+      );
+      channel.on("broadcast", { event: "call-canceled" }, (msg) =>
+        cancelInvite((msg.payload as { room?: string })?.room),
+      );
+      channel.subscribe((status) => {
+        // Realtime unavailable (anon disabled) → PeerJS fallback for this address.
+        if (
+          (status === "CHANNEL_ERROR" || status === "TIMED_OUT") &&
+          !peerStarted
+        ) {
+          peerStarted = true;
+          startRingPeerListener(address, receiveInvite).then((cleanup) => {
+            if (cancelled) cleanup();
+            else peerCleanup = cleanup;
+          });
+        }
+      });
+
+      cleanups.push(() => {
+        try {
+          supabase.removeChannel(channel);
+        } catch {
+          /* ignore */
+        }
+        peerCleanup?.();
+      });
+    }
 
     return () => {
       cancelled = true;
-      try {
-        supabase.removeChannel(channel);
-      } catch {
-        /* ignore */
-      }
-      peerCleanup?.();
+      cleanups.forEach((c) => c());
     };
   }, []);
 
