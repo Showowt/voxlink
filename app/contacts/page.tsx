@@ -7,6 +7,7 @@ import { BackButton } from '@/app/components/ui/BackButton';
 // the old inline entrevoz_device_id read a different id so the list was
 // always empty.
 import { getDeviceId } from '@/app/lib/language-os/device-id';
+import { sendCallInvite } from '@/app/lib/ring-signal';
 
 interface Contact {
   id: string;
@@ -71,12 +72,24 @@ export default function ContactsPage() {
     }).catch(() => {});
   };
 
-  const callContact = (c: Contact, type: 'video' | 'audio') => {
+  const callContact = async (c: Contact, type: 'video' | 'audio') => {
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
     // lang = MY language (drives my STT); the contact's language is only a
     // hint for the expected partner. Presetting lang to the contact's
     // language ran speech recognition in the wrong language.
     const myLang = localStorage.getItem('entrevoz_lang') || 'en';
+    const myName = localStorage.getItem('entrevoz_name') || 'Someone';
+    // Ring the contact on their device (Realtime) so they can accept — no link
+    // to send. Best-effort + short; we enter the room as host regardless (the
+    // "Share invite link" menu still covers contacts who aren't online).
+    await sendCallInvite(c.contact_device_id, {
+      room: code,
+      type,
+      fromDevice: deviceId || getDeviceId(),
+      fromName: myName,
+      fromLang: myLang,
+      targetLang: c.language,
+    });
     router.push(
       type === 'video'
         ? `/call/${code}?lang=${myLang}&hostLang=${c.language}&host=true`

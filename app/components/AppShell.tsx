@@ -4,6 +4,7 @@ import { useEffect, ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import ErrorBoundary from "./ErrorBoundary";
 import BottomNav from "./BottomNav";
+import IncomingCallOverlay from "./IncomingCallOverlay";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // APP SHELL - Wraps entire app with error handling and self-healing
@@ -116,6 +117,7 @@ export default function AppShell({ children }: AppShellProps) {
         {children}
       </div>
       <BottomNav />
+      <IncomingCallOverlay />
     </ErrorBoundary>
   );
 }

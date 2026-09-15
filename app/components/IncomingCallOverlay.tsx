@@ -1,0 +1,113 @@
+"use client";
+
+import { useRouter, usePathname } from "next/navigation";
+import { useIncomingCall } from "@/hooks/useIncomingCall";
+import { sendCallSignal } from "@/app/lib/ring-signal";
+
+// Routes where the user is already in a live session — don't interrupt them
+// with an incoming-call takeover there.
+const IN_CALL_ROUTES = ["/call/", "/talk/", "/group/", "/face-to-face", "/proximity"];
+
+const FLAGS: Record<string, string> = {
+  en: "🇺🇸", es: "🇪🇸", fr: "🇫🇷", de: "🇩🇪", it: "🇮🇹", pt: "🇧🇷",
+  zh: "🇨🇳", ja: "🇯🇵", ko: "🇰🇷", ar: "🇸🇦", ru: "🇷🇺", hi: "🇮🇳",
+};
+
+export default function IncomingCallOverlay() {
+  const { invite, dismiss } = useIncomingCall();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  if (!invite) return null;
+  if (IN_CALL_ROUTES.some((r) => pathname?.startsWith(r))) return null;
+
+  const accept = () => {
+    const { room, type } = invite;
+    dismiss();
+    // Join as guest. No ?lang preset — the lobby uses this device's own default
+    // and lets the callee confirm language + grant the mic (guest-language rule).
+    router.push(
+      type === "video"
+        ? `/call/${room}?host=false`
+        : `/talk/${room}?host=false`,
+    );
+  };
+
+  const decline = () => {
+    sendCallSignal(invite.fromDevice, "call-declined", invite.room).catch(() => {});
+    dismiss();
+  };
+
+  const initial = (invite.fromName || "?").charAt(0).toUpperCase();
+
+  return (
+    <div
+      className="fixed inset-0 z-[10000] flex flex-col items-center justify-between bg-[#050507]/95 backdrop-blur-xl safe-top safe-bottom"
+      role="dialog"
+      aria-label="Incoming call"
+    >
+      {/* ambient glow */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute top-1/4 left-1/2 h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-[#00E5A0]/10 blur-[130px]" />
+      </div>
+
+      <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-6 text-center">
+        <p className="mb-8 text-sm font-medium uppercase tracking-[0.3em] text-white/40">
+          Incoming {invite.type === "video" ? "video" : "voice"} call
+        </p>
+
+        {/* pulsing avatar */}
+        <div className="relative mb-6 flex items-center justify-center">
+          <span className="absolute h-32 w-32 animate-ping rounded-full bg-[#00E5A0]/20" />
+          <span className="absolute h-28 w-28 animate-pulse rounded-full bg-[#00E5A0]/10" />
+          <div className="relative flex h-24 w-24 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-4xl font-black text-white">
+            {initial}
+          </div>
+        </div>
+
+        <h1 className="text-2xl font-black text-white">
+          {invite.fromName || "Someone"}
+        </h1>
+        <p className="mt-2 flex items-center gap-2 text-sm text-white/50">
+          <span className="text-base leading-none">{FLAGS[invite.fromLang] || "🌐"}</span>
+          is calling you — live translated
+        </p>
+      </div>
+
+      {/* actions */}
+      <div className="relative z-10 mb-6 flex w-full max-w-sm items-center justify-around px-8">
+        <button
+          onClick={decline}
+          className="flex flex-col items-center gap-2"
+          aria-label="Decline call"
+        >
+          <span className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500 shadow-lg shadow-red-500/30 transition-transform active:scale-90">
+            <svg className="h-7 w-7 rotate-[135deg] text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+            </svg>
+          </span>
+          <span className="text-xs font-medium text-white/50">Decline</span>
+        </button>
+
+        <button
+          onClick={accept}
+          className="flex flex-col items-center gap-2"
+          aria-label="Accept call"
+        >
+          <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[#00E5A0] shadow-lg shadow-[#00E5A0]/40 transition-transform active:scale-90 animate-bounce">
+            {invite.type === "video" ? (
+              <svg className="h-7 w-7 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            ) : (
+              <svg className="h-7 w-7 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+              </svg>
+            )}
+          </span>
+          <span className="text-xs font-medium text-white/50">Accept</span>
+        </button>
+      </div>
+    </div>
+  );
+}
