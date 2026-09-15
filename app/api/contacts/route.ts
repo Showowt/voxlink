@@ -126,7 +126,7 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { ownerDeviceId, contactDeviceId, isFavorite } = body;
+    const { ownerDeviceId, contactDeviceId, isFavorite, displayName } = body;
 
     if (!ownerDeviceId || typeof ownerDeviceId !== "string") {
       return NextResponse.json({ success: false, error: "ownerDeviceId is required and must be a string" }, { status: 400 });
@@ -134,10 +134,21 @@ export async function PATCH(req: NextRequest) {
     if (!contactDeviceId || typeof contactDeviceId !== "string") {
       return NextResponse.json({ success: false, error: "contactDeviceId is required and must be a string" }, { status: 400 });
     }
+    if (displayName !== undefined && typeof displayName !== "string") {
+      return NextResponse.json({ success: false, error: "displayName must be a string" }, { status: 400 });
+    }
+
+    // Build a partial update so a rename doesn't wipe the favorite flag (and
+    // vice-versa).
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (isFavorite !== undefined) patch.is_favorite = isFavorite;
+    if (typeof displayName === "string" && displayName.trim()) {
+      patch.display_name = displayName.trim().slice(0, 60);
+    }
 
     const { error: updateError } = await supabase
       .from("contacts")
-      .update({ is_favorite: isFavorite, updated_at: new Date().toISOString() })
+      .update(patch)
       .eq("owner_device_id", ownerDeviceId)
       .eq("contact_device_id", contactDeviceId);
 

@@ -73,6 +73,34 @@ export default function ContactsPage() {
     }).catch(() => {});
   };
 
+  const [editing, setEditing] = useState<Contact | null>(null);
+  const [editName, setEditName] = useState('');
+
+  const startRename = (c: Contact) => {
+    setEditing(c);
+    setEditName(c.display_name);
+    setActiveMenu(null);
+  };
+
+  const saveRename = async () => {
+    const target = editing;
+    const name = editName.trim();
+    setEditing(null);
+    if (!target || !name || name === target.display_name) return;
+    setContacts(prev =>
+      prev.map(x => (x.id === target.id ? { ...x, display_name: name } : x)),
+    );
+    await fetch('/api/contacts', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ownerDeviceId: deviceId,
+        contactDeviceId: target.contact_device_id,
+        displayName: name,
+      }),
+    }).catch(() => {});
+  };
+
   const callContact = async (c: Contact, type: 'video' | 'audio') => {
     const code = generateRoomCode();
     // lang = MY language (drives my STT); the contact's language is only a
@@ -111,6 +139,44 @@ export default function ContactsPage() {
 
   return (
     <div className="min-h-[100dvh] bg-[#06060a] flex flex-col safe-top safe-bottom" onClick={() => setActiveMenu(null)}>
+
+      {/* Rename contact */}
+      {editing && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center px-6"
+          onClick={(e) => { e.stopPropagation(); setEditing(null); }}
+        >
+          <div
+            className="w-full max-w-sm bg-[#12121a] border border-white/[0.12] rounded-2xl p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-white/40 text-[10px] uppercase tracking-widest mb-3">Contact name</p>
+            <input
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') saveRename(); }}
+              autoFocus
+              maxLength={60}
+              placeholder="Name"
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-base placeholder-white/25 focus:outline-none focus:border-[#00C896]/50 mb-4 min-h-[48px]"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => setEditing(null)}
+                className="flex-1 py-3 rounded-xl bg-white/[0.06] border border-white/10 text-white/70 text-sm font-semibold min-h-[48px]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveRename}
+                className="flex-1 py-3 rounded-xl bg-[#00C896] text-black text-sm font-bold min-h-[48px]"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <header className="flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 border-b border-white/[0.06]">
@@ -184,6 +250,7 @@ export default function ContactsPage() {
                   onDelete={() => deleteContact(c)}
                   onCall={(type) => callContact(c, type)}
                   onShare={() => shareInvite(c)}
+                  onRename={() => startRename(c)}
                 />
               ))}
             </div>
@@ -205,6 +272,7 @@ export default function ContactsPage() {
                   onDelete={() => deleteContact(c)}
                   onCall={(type) => callContact(c, type)}
                   onShare={() => shareInvite(c)}
+                  onRename={() => startRename(c)}
                 />
               ))}
             </div>
@@ -223,6 +291,7 @@ function ContactCard({
   onDelete,
   onCall,
   onShare,
+  onRename,
 }: {
   contact: Contact;
   activeMenu: string | null;
@@ -231,6 +300,7 @@ function ContactCard({
   onDelete: () => void;
   onCall: (type: 'video' | 'audio') => void;
   onShare: () => void;
+  onRename: () => void;
 }) {
   return (
     <div className="relative bg-white/[0.03] border border-white/[0.08] rounded-2xl p-4">
@@ -296,6 +366,13 @@ function ContactCard({
           >
             <span className="text-[#00C896]">{c.is_favorite ? '★' : '☆'}</span>
             {c.is_favorite ? 'Remove favorite' : 'Add to favorites'}
+          </button>
+          <button
+            onClick={onRename}
+            className="w-full text-left px-4 py-3 text-sm text-white/80 hover:bg-white/[0.06] transition-colors border-t border-white/[0.06] flex items-center gap-2"
+          >
+            <span>✎</span>
+            Rename
           </button>
           <button
             onClick={onShare}

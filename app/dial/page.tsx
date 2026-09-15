@@ -26,19 +26,19 @@ export default function DialPage() {
   const [copied, setCopied] = useState(false);
   const [calling, setCalling] = useState(false);
 
+  // Load identity on mount.
   useEffect(() => {
-    const deviceId = getDeviceId();
-    const code = deriveDialCode(deviceId);
-    const name = localStorage.getItem("entrevoz_name") || "";
-    const lang = localStorage.getItem("entrevoz_lang") || "en";
-    setMyCode(code);
-    setMyName(name);
-    setMyLang(lang);
+    setMyCode(deriveDialCode(getDeviceId()));
+    setMyName(localStorage.getItem("entrevoz_name") || "");
+    setMyLang(localStorage.getItem("entrevoz_lang") || "en");
+  }, []);
 
-    // QR encodes an "add me" deep link carrying the device id (for a proper
-    // saved contact) + name/lang for display + the human code.
-    const params = new URLSearchParams({ d: deviceId, c: code, l: lang });
-    if (name) params.set("n", name);
+  // Regenerate the QR whenever the code/name/lang changes so editing your name
+  // updates the QR that others scan (the "add me" deep link carries the name).
+  useEffect(() => {
+    if (!myCode) return;
+    const params = new URLSearchParams({ d: getDeviceId(), c: myCode, l: myLang });
+    if (myName.trim()) params.set("n", myName.trim());
     const url = `${window.location.origin}/add?${params.toString()}`;
     QRCode.toDataURL(url, {
       margin: 1,
@@ -47,7 +47,17 @@ export default function DialPage() {
     })
       .then(setQr)
       .catch(() => setQr(""));
-  }, []);
+  }, [myCode, myName, myLang]);
+
+  // Persist the user's name so their QR / dial / incoming-ring shows it.
+  const updateName = (v: string) => {
+    setMyName(v);
+    try {
+      localStorage.setItem("entrevoz_name", v.trim());
+    } catch {
+      /* ignore */
+    }
+  };
 
   const addLink = () => {
     const params = new URLSearchParams({ d: getDeviceId(), c: myCode, l: myLang });
@@ -115,6 +125,20 @@ export default function DialPage() {
       <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-6" style={{ WebkitOverflowScrolling: "touch" }}>
         {/* MY CODE */}
         <div className="max-w-sm mx-auto text-center">
+          {/* Your name — so people know who's calling */}
+          <div className="mb-6 text-left">
+            <label className="text-white/40 text-[10px] uppercase tracking-widest block mb-2">Your name</label>
+            <input
+              value={myName}
+              onChange={(e) => updateName(e.target.value)}
+              placeholder="Add your name"
+              maxLength={40}
+              autoCorrect="off"
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-base placeholder-white/25 focus:outline-none focus:border-[#00E5A0]/40 min-h-[48px]"
+            />
+            <p className="text-white/30 text-[11px] mt-1.5">So people know it&apos;s you when you call or share your code.</p>
+          </div>
+
           <p className="text-white/40 text-xs uppercase tracking-[0.25em] mb-3">Your Entrevoz code</p>
           <div className="text-4xl font-black tracking-[0.15em] text-[#00E5A0] mb-1">
             {myCode ? formatDialCode(myCode) : "· · · · · ·"}
