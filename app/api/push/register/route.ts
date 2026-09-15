@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -22,11 +22,12 @@ export async function POST(req: NextRequest) {
     if (!token || typeof token !== "string") {
       return NextResponse.json({ error: "token required" }, { status: 400 });
     }
-    if (!isSupabaseConfigured()) {
+    const admin = supabaseAdmin();
+    if (!admin) {
       return NextResponse.json({ error: "Not configured" }, { status: 503 });
     }
 
-    const { error } = await supabase.from("push_tokens").upsert(
+    const { error } = await admin.from("push_tokens").upsert(
       {
         device_id: deviceId,
         dial_code: typeof dialCode === "string" ? dialCode : null,

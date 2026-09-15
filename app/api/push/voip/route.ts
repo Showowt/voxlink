@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import http2 from "node:http2";
 import { createPrivateKey, sign } from "node:crypto";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -86,7 +86,8 @@ export async function POST(req: NextRequest) {
   if (!jwt) {
     return NextResponse.json({ delivered: false, reason: "not_configured" });
   }
-  if (!isSupabaseConfigured()) {
+  const admin = supabaseAdmin();
+  if (!admin) {
     return NextResponse.json({ delivered: false, reason: "no_db" });
   }
 
@@ -102,7 +103,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "room + target required" }, { status: 400 });
     }
 
-    let query = supabase.from("push_tokens").select("voip_token").limit(1);
+    let query = admin.from("push_tokens").select("voip_token").limit(1);
     if (dev) query = query.eq("device_id", dev);
     else if (code) query = query.eq("dial_code", code);
     else if (any) query = query.or(`device_id.eq.${any},dial_code.eq.${any}`);
