@@ -55,16 +55,19 @@ export async function sendCallInvite(
     };
 
     channel.subscribe(async (status) => {
+      console.warn("[ring] sender", ringChannelName(targetDeviceId), "->", status);
       if (status === "SUBSCRIBED") {
         try {
-          await channel.send({
+          const sendRes = await channel.send({
             type: "broadcast",
             event: "call-invite",
             payload: { ...invite, t: Date.now() },
           });
+          console.warn("[ring] send result", sendRes);
           // Let the message flush before we tear the channel down.
-          setTimeout(() => done(true), 400);
-        } catch {
+          setTimeout(() => done(true), 600);
+        } catch (e) {
+          console.warn("[ring] send threw", e);
           done(false);
         }
       } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
