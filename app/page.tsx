@@ -1068,6 +1068,10 @@ function HomeContent() {
 
   // Onboarding state
   const [showOnboarding, setShowOnboarding] = useState(false);
+  // First-run name capture so your QR / dial code / incoming ring shows your
+  // name instead of "Someone" — shown once, after onboarding.
+  const [namePrompt, setNamePrompt] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
 
   useEffect(() => {
     if (!hasSeenOnboarding()) {
@@ -1141,6 +1145,17 @@ function HomeContent() {
     if (savedName) setName(savedName);
     if (savedLang && LANGUAGES.find((l) => l.code === savedLang))
       setLanguage(savedLang);
+
+    // Ask for a name once — for users who already finished onboarding but never
+    // set one (and aren't mid-join). New users get it right after onboarding.
+    if (
+      !savedName &&
+      !joinType &&
+      hasSeenOnboarding() &&
+      !localStorage.getItem("entrevoz_name_prompted")
+    ) {
+      setNamePrompt(true);
+    }
 
     // Handle join links
     if (joinType && joinId) {
@@ -1370,6 +1385,13 @@ function HomeContent() {
           onComplete={(navigateTo) => {
             completeOnboarding();
             setShowOnboarding(false);
+            if (
+              !localStorage.getItem("entrevoz_name") &&
+              !localStorage.getItem("entrevoz_name_prompted")
+            ) {
+              setNameDraft("");
+              setNamePrompt(true);
+            }
             if (navigateTo === "connect") {
               setActiveCategory("connect");
               setActiveTab("video");
@@ -1379,6 +1401,58 @@ function HomeContent() {
             }
           }}
         />
+      )}
+
+      {/* First-run name capture */}
+      {namePrompt && (
+        <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-md flex items-center justify-center px-6">
+          <div className="w-full max-w-sm bg-[#12121a] border border-white/[0.12] rounded-2xl p-6 text-center">
+            <div className="text-3xl mb-3">👋</div>
+            <h2 className="text-white font-bold text-lg mb-1">What&apos;s your name?</h2>
+            <p className="text-white/50 text-sm mb-5">So people know it&apos;s you when you call or share your code.</p>
+            <input
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && nameDraft.trim()) {
+                  const n = nameDraft.trim();
+                  setName(n);
+                  localStorage.setItem("entrevoz_name", n);
+                  localStorage.setItem("entrevoz_name_prompted", "true");
+                  setNamePrompt(false);
+                }
+              }}
+              autoFocus
+              maxLength={40}
+              placeholder="Your name"
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-base placeholder-white/25 focus:outline-none focus:border-[#00E5A0]/40 mb-4 min-h-[48px] text-center"
+            />
+            <button
+              onClick={() => {
+                const n = nameDraft.trim();
+                if (n) {
+                  setName(n);
+                  localStorage.setItem("entrevoz_name", n);
+                }
+                localStorage.setItem("entrevoz_name_prompted", "true");
+                setNamePrompt(false);
+              }}
+              disabled={!nameDraft.trim()}
+              className="w-full bg-[#00E5A0] text-black font-bold py-3 rounded-xl text-sm min-h-[48px] mb-2 disabled:opacity-40"
+            >
+              Save
+            </button>
+            <button
+              onClick={() => {
+                localStorage.setItem("entrevoz_name_prompted", "true");
+                setNamePrompt(false);
+              }}
+              className="text-white/40 text-sm min-h-[44px]"
+            >
+              Skip for now
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Toast Notification */}

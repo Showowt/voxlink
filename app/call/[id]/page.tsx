@@ -935,6 +935,7 @@ function VideoCallContent() {
   // Quality monitoring state
   const [quality, setQuality] = useState<ConnectionQuality | null>(null);
   const [callDuration, setCallDuration] = useState(0);
+  const [noAnswer, setNoAnswer] = useState(false);
   const callStartTimeRef = useRef<number | null>(null);
 
   // Refs (peerRef, localStreamRef defined above for useTranscription)
@@ -1057,6 +1058,17 @@ function VideoCallContent() {
       if (timerInterval) clearInterval(timerInterval);
     };
   }, [hasPartner, status]);
+
+  // "No answer" feedback — a host who's been waiting alone for 45s isn't left
+  // staring at a spinner forever (they may be offline / didn't pick up).
+  useEffect(() => {
+    if (hasPartner || inLobby || !isHost) {
+      setNoAnswer(false);
+      return;
+    }
+    const t = setTimeout(() => setNoAnswer(true), 45000);
+    return () => clearTimeout(t);
+  }, [hasPartner, inLobby, isHost, status]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // WEBRTC CONNECTION SETUP - Only runs after leaving lobby
@@ -1894,8 +1906,13 @@ function VideoCallContent() {
                     aria-live="polite"
                     aria-atomic="true"
                   >
-                    {statusMessage}
+                    {noAnswer && isHost ? "No answer yet" : statusMessage}
                   </p>
+                  {noAnswer && isHost && (
+                    <p className="text-amber-300/80 text-sm mb-2 max-w-[280px] mx-auto">
+                      They haven&apos;t picked up — they may be offline. They&apos;ll ring when they open the app, or share your code below.
+                    </p>
+                  )}
                   {isHost &&
                     (status === "waiting" || status === "connected") && (
                       <div className="mt-4 p-4 bg-white/10 backdrop-blur">
