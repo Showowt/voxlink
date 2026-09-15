@@ -33,14 +33,21 @@ export default function IncomingCallOverlay() {
   if (!invite || suppressed) return null;
 
   const accept = () => {
-    const { room, type } = invite;
+    const { room, type, fromLang } = invite;
     dismiss();
-    // Join as guest. No ?lang preset — the lobby uses this device's own default
-    // and lets the callee confirm language + grant the mic (guest-language rule).
+    // Seed the lobby with THIS device's own language as the default (not a
+    // caller-imposed preset — the lobby still lets the callee change it), and
+    // the caller's language as the "partner speaks" hint so translation is
+    // correct from the first word. The lobby is always shown, so the callee
+    // still chooses/confirms (guest-language rule respected).
+    const myLang =
+      (typeof window !== "undefined" && localStorage.getItem("entrevoz_lang")) ||
+      "";
+    const q = new URLSearchParams({ host: "false" });
+    if (myLang) q.set("lang", myLang);
+    if (fromLang) q.set("hostLang", fromLang);
     router.push(
-      type === "video"
-        ? `/call/${room}?host=false`
-        : `/talk/${room}?host=false`,
+      type === "video" ? `/call/${room}?${q}` : `/talk/${room}?${q}`,
     );
   };
 
