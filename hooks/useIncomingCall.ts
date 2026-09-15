@@ -25,13 +25,11 @@ export function useIncomingCall() {
     }
     if (!deviceId) return;
 
-    const chName = ringChannelName(deviceId);
-    const channel = supabase.channel(chName, {
+    const channel = supabase.channel(ringChannelName(deviceId), {
       config: { broadcast: { self: false } },
     });
 
     channel.on("broadcast", { event: "call-invite" }, (msg) => {
-      console.warn("[ring] invite received on", chName, msg.payload);
       const p = msg.payload as CallInvite;
       if (!p?.room || !p?.fromDevice) return;
       if (Date.now() - (p.t || 0) > 60000) return; // stale — ignore
@@ -49,9 +47,7 @@ export function useIncomingCall() {
       }
     });
 
-    channel.subscribe((status) => {
-      console.warn("[ring] listener", chName, "->", status);
-    });
+    channel.subscribe();
 
     return () => {
       try {
