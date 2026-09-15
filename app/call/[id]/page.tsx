@@ -804,11 +804,12 @@ function VideoCallContent() {
     }
   }, [transcription.error]);
 
-  // ── Voice Dubbing — the DEFAULT voice for translations (ElevenLabs mimic).
-  // Auto-enabled on connect; the toggle turns ALL translated voice off.
-  // Browser TTS survives only as a fallback while the clone is being built
-  // or when the dub API fails.
-  const voiceOutputRef = useRef(true);
+  // ── Voice Dubbing — spoken translations (ElevenLabs). OPT-IN: default OFF
+  // (captions only) so a call connects SILENTLY. The user taps the speaker
+  // control to hear translations aloud, and 🎭 Mimic to hear them in the
+  // partner's voice. Browser TTS is only a fallback while a clone is building.
+  const voiceOutputRef = useRef(false);
+  const [voiceOn, setVoiceOn] = useState(false);
   const [mimicOn, setMimicOn] = useState(false);
   const {
     state: dubbingState,
@@ -898,27 +899,32 @@ function VideoCallContent() {
   const toggleVoiceOutput = useCallback(() => {
     if (voiceOutputRef.current) {
       voiceOutputRef.current = false;
+      setVoiceOn(false);
       disableDubbing();
       window.speechSynthesis.cancel();
       setMimicOn(false);
     } else {
       voiceOutputRef.current = true;
+      setVoiceOn(true);
       enableDubbing(false); // default voice, mimic stays opt-in
     }
   }, [disableDubbing, enableDubbing]);
 
-  // Opt-in mimic: user taps to start learning the partner's voice.
+  // Opt-in mimic: user taps to start learning the partner's voice. Turning it
+  // on also turns voice output on (you can't mimic silently).
   const toggleMimic = useCallback(() => {
     if (mimicOn) {
       setMimicOn(false);
       // Fall back to default voice (disable clears the clone reference)
       disableDubbing();
       voiceOutputRef.current = true;
+      setVoiceOn(true);
       enableDubbing(false);
     } else {
       setMimicOn(true);
       if (!voiceOutputRef.current) {
         voiceOutputRef.current = true;
+        setVoiceOn(true);
         enableDubbing(true);
       } else {
         startMimic();
@@ -949,16 +955,10 @@ function VideoCallContent() {
   // Enable controls when connected - either hasPartner OR we have remote video stream
   const isConnected = status === "connected" && (hasPartner || hasRemoteStream);
 
-  // On connect: enable spoken translations with a natural DEFAULT voice.
-  // Voice mimic (learning the partner's voice) is OPT-IN — the user taps
-  // the 🎭 Mimic control to start it, so we never sample without consent.
-  const autoDubStartedRef = useRef(false);
-  useEffect(() => {
-    if (isConnected && !autoDubStartedRef.current && voiceOutputRef.current) {
-      autoDubStartedRef.current = true;
-      enableDubbing(false);
-    }
-  }, [isConnected, enableDubbing]);
+  // Spoken translations are OPT-IN. A call connects SILENTLY (captions only);
+  // the user taps the speaker control to hear translations aloud and 🎭 Mimic
+  // to hear them in the partner's voice. We never auto-enable ElevenLabs or
+  // sample the partner's voice without an explicit tap.
 
   const statusColor =
     status === "connected"
@@ -2540,14 +2540,14 @@ function VideoCallContent() {
             <button
               onClick={toggleVoiceOutput}
               className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center transition-all ${
-                voiceOutputRef.current
+                voiceOn
                   ? "bg-green-600 text-white"
                   : "bg-white/10 text-white/60 hover:bg-white/20"
               }`}
-              title={voiceOutputRef.current ? "Voice on — tap to mute" : "Voice off — tap to enable"}
+              title={voiceOn ? "Voice on — tap to mute" : "Voice off — tap to hear translations aloud"}
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                {voiceOutputRef.current ? (
+                {voiceOn ? (
                   <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
                 ) : (
                   <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>

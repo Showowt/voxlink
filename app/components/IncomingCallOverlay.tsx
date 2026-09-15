@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useIncomingCall } from "@/hooks/useIncomingCall";
 import { sendCallSignal } from "@/app/lib/ring-signal";
+import { startRingtone } from "@/app/lib/ringtone";
 
 // Routes where the user is already in a live session — don't interrupt them
 // with an incoming-call takeover there.
@@ -18,8 +20,17 @@ export default function IncomingCallOverlay() {
   const router = useRouter();
   const pathname = usePathname();
 
-  if (!invite) return null;
-  if (IN_CALL_ROUTES.some((r) => pathname?.startsWith(r))) return null;
+  const suppressed = IN_CALL_ROUTES.some((r) => pathname?.startsWith(r));
+  const active = !!invite && !suppressed;
+
+  // Audible ring + haptics while a call is incoming (stops on answer/decline).
+  useEffect(() => {
+    if (!active) return;
+    const stop = startRingtone();
+    return stop;
+  }, [active]);
+
+  if (!invite || suppressed) return null;
 
   const accept = () => {
     const { room, type } = invite;
