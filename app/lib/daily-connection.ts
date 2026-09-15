@@ -71,9 +71,14 @@ export class DailyConnection {
         throw new Error("Failed to create video room");
       }
 
-      const roomData: { url: string; name: string; created: boolean } =
-        await roomRes.json();
+      const roomData: {
+        url: string;
+        name: string;
+        created: boolean;
+        token?: string;
+      } = await roomRes.json();
       const roomUrl = roomData.url;
+      const roomToken = roomData.token;
       console.log("[Daily] Room URL:", roomUrl);
 
       // Create the Daily call object — let Daily manage its OWN mic and camera.
@@ -100,6 +105,7 @@ export class DailyConnection {
       await this.call.join({
         url: roomUrl,
         userName: this.userName,
+        ...(roomToken ? { token: roomToken } : {}),
       });
 
       console.log("[Daily] Joined room successfully");

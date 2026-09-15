@@ -25,8 +25,16 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const roomCode = body.roomCode || "";
+    const roomName = `entrevoz-${roomCode.toLowerCase()}`;
+    const exp = Math.floor(Date.now() / 1000) + 3600; // 1 hour
 
-    // Create a temporary room that expires after 1 hour
+    // Create-or-get a PRIVATE room. Private means the raw daily.co URL can't be
+    // joined without a server-minted token — so possession of the 6-char code
+    // alone (e.g. shoulder-surfed) no longer lets someone open the Daily client
+    // directly and seize/eavesdrop the call. Joins must come through this
+    // rate-limited route.
+    let room: { url: string; name: string } | null = null;
+    let created = false;
     const res = await fetch(`${DAILY_API_URL}/rooms`, {
       method: "POST",
       headers: {
@@ -34,10 +42,10 @@ export async function POST(request: NextRequest) {
         Authorization: `Bearer ${DAILY_API_KEY}`,
       },
       body: JSON.stringify({
-        name: `entrevoz-${roomCode.toLowerCase()}`,
-        privacy: "public", // No auth needed to join
+        name: roomName,
+        privacy: "private",
         properties: {
-          exp: Math.floor(Date.now() / 1000) + 3600, // 1 hour expiry
+          exp,
           max_participants: 2,
           enable_chat: false,
           enable_screenshare: false,
@@ -50,35 +58,45 @@ export async function POST(request: NextRequest) {
     });
 
     if (res.ok) {
-      const room = await res.json();
-      return NextResponse.json({
-        url: room.url,
-        name: room.name,
-        created: true,
+      room = await res.json();
+      created = true;
+    } else if (res.status === 400) {
+      // Room already exists — fetch it.
+      const getRes = await fetch(`${DAILY_API_URL}/rooms/${roomName}`, {
+        headers: { Authorization: `Bearer ${DAILY_API_KEY}` },
       });
+      if (getRes.ok) room = await getRes.json();
     }
 
-    // Room might already exist — try to get it
-    if (res.status === 400) {
-      const getRes = await fetch(
-        `${DAILY_API_URL}/rooms/entrevoz-${roomCode.toLowerCase()}`,
-        {
-          headers: { Authorization: `Bearer ${DAILY_API_KEY}` },
-        },
+    if (!room) {
+      const errText = await res.text();
+      console.error("[Daily] Room creation failed:", res.status, errText);
+      return NextResponse.json({ error: "Failed to create room" }, { status: 502 });
+    }
+
+    // Mint a short-lived meeting token for THIS room (required to join a private
+    // room). max_participants:2 is still enforced server-side by Daily.
+    const tokenRes = await fetch(`${DAILY_API_URL}/meeting-tokens`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${DAILY_API_KEY}`,
+      },
+      body: JSON.stringify({
+        properties: { room_name: roomName, exp, eject_at_token_exp: true },
+      }),
+    });
+    if (!tokenRes.ok) {
+      const t = await tokenRes.text();
+      console.error("[Daily] Token mint failed:", tokenRes.status, t);
+      return NextResponse.json(
+        { error: "Failed to authorize room" },
+        { status: 502 },
       );
-      if (getRes.ok) {
-        const room = await getRes.json();
-        return NextResponse.json({
-          url: room.url,
-          name: room.name,
-          created: false,
-        });
-      }
     }
+    const { token } = await tokenRes.json();
 
-    const errText = await res.text();
-    console.error("[Daily] Room creation failed:", res.status, errText);
-    return NextResponse.json({ error: "Failed to create room" }, { status: 502 });
+    return NextResponse.json({ url: room.url, name: room.name, created, token });
   } catch (err) {
     console.error("[Daily] API error:", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
