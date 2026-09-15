@@ -39,10 +39,12 @@ export function ringPeerId(deviceId: string): string {
   return `entrevoz-ring-${deviceId}`.replace(/[^A-Za-z0-9_-]/g, "");
 }
 
-// Listen for incoming ring invites over PeerJS. Returns a cleanup function.
+// Listen for incoming ring invites (and control signals like decline/cancel)
+// over PeerJS. Returns a cleanup function.
 export async function startRingPeerListener(
   deviceId: string,
   onInvite: (invite: CallInvite) => void,
+  onSignal?: (event: "call-declined" | "call-canceled", room: string) => void,
 ): Promise<() => void> {
   const iceServers = await getIceServers();
   let peer: Peer | null = null;
@@ -64,6 +66,11 @@ export async function startRingPeerListener(
         const msg = raw as { event?: string; payload?: CallInvite };
         if (msg?.event === "call-invite" && msg.payload?.room) {
           onInvite(msg.payload);
+        } else if (
+          (msg?.event === "call-declined" || msg?.event === "call-canceled") &&
+          msg.payload?.room
+        ) {
+          onSignal?.(msg.event, msg.payload.room);
         }
       } catch {
         /* ignore malformed */
@@ -153,5 +160,57 @@ export async function sendCallInvitePeer(
     peer.on("error", () => done(false));
 
     setTimeout(() => done(false), 6000); // hard cap
+  });
+}
+
+// Deliver a control signal (decline / cancel) to a device over PeerJS —
+// fallback for when Realtime broadcast is unavailable.
+export async function sendCallSignalPeer(
+  targetDeviceId: string,
+  event: "call-declined" | "call-canceled",
+  room: string,
+): Promise<boolean> {
+  if (!targetDeviceId) return false;
+  const iceServers = await getIceServers();
+
+  return new Promise<boolean>((resolve) => {
+    let peer: Peer | null = null;
+    let settled = false;
+    const done = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      try {
+        peer?.destroy();
+      } catch {
+        /* ignore */
+      }
+      resolve(ok);
+    };
+
+    try {
+      peer = new Peer({
+        ...PEER_SERVER,
+        config: { iceServers, iceCandidatePoolSize: 10 },
+        debug: 0,
+      });
+    } catch {
+      return resolve(false);
+    }
+
+    peer.on("open", () => {
+      const conn = peer!.connect(ringPeerId(targetDeviceId), { reliable: true });
+      conn.on("open", () => {
+        try {
+          conn.send({ event, payload: { room, t: Date.now() } });
+          setTimeout(() => done(true), 800);
+        } catch {
+          done(false);
+        }
+      });
+      conn.on("error", () => done(false));
+    });
+    peer.on("error", () => done(false));
+
+    setTimeout(() => done(false), 6000);
   });
 }

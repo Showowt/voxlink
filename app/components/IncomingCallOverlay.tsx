@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useIncomingCall } from "@/hooks/useIncomingCall";
 import { sendCallSignal } from "@/app/lib/ring-signal";
@@ -31,7 +31,31 @@ export default function IncomingCallOverlay() {
     return stop;
   }, [active]);
 
-  if (!invite || suppressed) return null;
+  // "They declined" feedback for the CALLER — without this, a declined call
+  // just looks like "Waiting for partner…" forever.
+  const [declined, setDeclined] = useState(false);
+  useEffect(() => {
+    const onDeclined = () => {
+      setDeclined(true);
+      setTimeout(() => setDeclined(false), 6000);
+    };
+    window.addEventListener("entrevoz:call-declined", onDeclined);
+    return () =>
+      window.removeEventListener("entrevoz:call-declined", onDeclined);
+  }, []);
+
+  const declinedToast = declined ? (
+    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[10001] flex items-center gap-2 rounded-full bg-[#12121a]/95 border border-white/15 px-5 py-3 shadow-2xl backdrop-blur-xl safe-top">
+      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-500/20">
+        <svg className="h-3.5 w-3.5 rotate-[135deg] text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+        </svg>
+      </span>
+      <span className="text-sm font-semibold text-white">Call declined</span>
+    </div>
+  ) : null;
+
+  if (!invite || suppressed) return declinedToast;
 
   const accept = () => {
     const { room, type, fromLang } = invite;
@@ -65,6 +89,8 @@ export default function IncomingCallOverlay() {
   const initial = (invite.fromName || "?").charAt(0).toUpperCase();
 
   return (
+    <>
+    {declinedToast}
     <div
       className="fixed inset-0 z-[10000] flex flex-col items-center justify-between bg-[#050507]/95 backdrop-blur-xl safe-top safe-bottom"
       role="dialog"
@@ -141,5 +167,6 @@ export default function IncomingCallOverlay() {
         Block this caller
       </button>
     </div>
+    </>
   );
 }

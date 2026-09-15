@@ -92,31 +92,61 @@ async function sendCallInviteRealtime(
 
 // Send a lightweight control signal (decline / cancel) to a device's ring
 // channel so the other side can dismiss its "calling…" / incoming UI.
+// Tries Realtime first; falls back to PeerJS when Realtime is unavailable.
 export async function sendCallSignal(
   targetDeviceId: string,
   event: "call-declined" | "call-canceled",
   room: string,
 ): Promise<void> {
+  const viaRealtime = await sendCallSignalRealtime(targetDeviceId, event, room);
+  if (!viaRealtime) {
+    const { sendCallSignalPeer } = await import("./ring-peer");
+    await sendCallSignalPeer(targetDeviceId, event, room).catch(() => false);
+  }
+}
+
+async function sendCallSignalRealtime(
+  targetDeviceId: string,
+  event: "call-declined" | "call-canceled",
+  room: string,
+): Promise<boolean> {
   const supabase = createBrowserClient();
-  if (!supabase || !targetDeviceId) return;
+  if (!supabase || !targetDeviceId) return false;
 
   const channel = supabase.channel(ringChannelName(targetDeviceId), {
     config: { broadcast: { self: false } },
   });
-  channel.subscribe((status) => {
-    if (status === "SUBSCRIBED") {
-      channel.send({
-        type: "broadcast",
-        event,
-        payload: { room, t: Date.now() },
-      });
-      setTimeout(() => {
+
+  return new Promise<boolean>((resolve) => {
+    let settled = false;
+    const done = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      try {
+        supabase.removeChannel(channel);
+      } catch {
+        /* ignore */
+      }
+      resolve(ok);
+    };
+
+    channel.subscribe((status) => {
+      if (status === "SUBSCRIBED") {
         try {
-          supabase.removeChannel(channel);
+          channel.send({
+            type: "broadcast",
+            event,
+            payload: { room, t: Date.now() },
+          });
+          setTimeout(() => done(true), 400);
         } catch {
-          /* ignore */
+          done(false);
         }
-      }, 400);
-    }
+      } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        done(false);
+      }
+    });
+
+    setTimeout(() => done(false), 5000);
   });
 }

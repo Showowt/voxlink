@@ -52,6 +52,22 @@ export function useIncomingCall() {
       }
     };
 
+    // The callee declined OUR outgoing call — tell whatever page is showing
+    // "Waiting for partner…" (the caller shouldn't wait forever). Deduped
+    // because the signal can arrive on both transports/addresses.
+    const declinedRooms = new Set<string>();
+    const handleDeclined = (room?: string) => {
+      if (!room || declinedRooms.has(room)) return;
+      declinedRooms.add(room);
+      try {
+        window.dispatchEvent(
+          new CustomEvent("entrevoz:call-declined", { detail: { room } }),
+        );
+      } catch {
+        /* ignore */
+      }
+    };
+
     // Listen on BOTH the device id (used by saved contacts) and the short dial
     // code (used by "dial a code" / QR), so either reaches this device.
     const addresses = Array.from(
@@ -71,6 +87,9 @@ export function useIncomingCall() {
       channel.on("broadcast", { event: "call-canceled" }, (msg) =>
         cancelInvite((msg.payload as { room?: string })?.room),
       );
+      channel.on("broadcast", { event: "call-declined" }, (msg) =>
+        handleDeclined((msg.payload as { room?: string })?.room),
+      );
       channel.subscribe((status) => {
         // Realtime unavailable (anon disabled) → PeerJS fallback for this address.
         if (
@@ -78,7 +97,10 @@ export function useIncomingCall() {
           !peerStarted
         ) {
           peerStarted = true;
-          startRingPeerListener(address, receiveInvite).then((cleanup) => {
+          startRingPeerListener(address, receiveInvite, (event, room) => {
+            if (event === "call-canceled") cancelInvite(room);
+            else if (event === "call-declined") handleDeclined(room);
+          }).then((cleanup) => {
             if (cancelled) cleanup();
             else peerCleanup = cleanup;
           });
