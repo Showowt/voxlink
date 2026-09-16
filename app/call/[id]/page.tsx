@@ -1054,6 +1054,85 @@ function VideoCallContent() {
     isListeningRef.current = isListening;
   }, [isListening]);
 
+  // ── iOS INTERRUPTION AUTO-RECOVERY ────────────────────────────────────────
+  // A native phone call / FaceTime seizes mic+camera and suspends the WebView;
+  // the Daily meeting usually dies ("left-meeting"/"error") and the screen
+  // comes back black with translation stopped. On return to foreground:
+  //   light  — meeting survived → just re-kick remote playback
+  //   heavy  — meeting died → full same-room rejoin (fresh token, lobby skipped)
+  //   last   — rejoin failed → ONE automatic refresh, then a visible retry.
+  // STT self-restarts on visibility return (useTranscription), so translation
+  // resumes as soon as the connection is back.
+  const statusRef = useRef<CallStatus>("loading");
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+  const recoveringRef = useRef(false);
+
+  useEffect(() => {
+    if (inLobby) return; // only while actually in the call
+
+    const attemptRecovery = async () => {
+      if (recoveringRef.current || !mountedRef.current) return;
+      const st = statusRef.current;
+      // Only states that mean "we were in / joining a call". A pre-join error
+      // keeps its normal error screen.
+      if (!["connected", "waiting", "connecting", "reconnecting", "error"].includes(st)) return;
+      if (st === "error" && !hadPartnerRef.current) return;
+      const peer = peerRef.current;
+      if (!peer) return;
+
+      recoveringRef.current = true;
+      try {
+        // Let iOS finish releasing mic/camera after the native call ends.
+        await new Promise((r) => setTimeout(r, 800));
+        if (!mountedRef.current) return;
+
+        if (peer.getMeetingState() === "joined-meeting") {
+          // Light: connection survived — resume playback (autoplay may be
+          // blocked after the interruption → show the tap-to-hear overlay).
+          remoteVideoRef.current?.play().catch(() => setNeedsAudioUnmute(true));
+          return;
+        }
+
+        setStatus("reconnecting");
+        const ok = await peer.recover();
+        if (!mountedRef.current) return;
+        if (ok) {
+          setError(null);
+          setTimeout(() => {
+            remoteVideoRef.current?.play().catch(() => setNeedsAudioUnmute(true));
+          }, 1500);
+        } else {
+          // Last resort: one automatic refresh straight back into this room.
+          const key = `ez_ir_${roomCode}`;
+          if (!sessionStorage.getItem(key)) {
+            sessionStorage.setItem(key, "1");
+            window.location.reload();
+          } else {
+            setStatus("error");
+            setError("Call interrupted — tap Retry to reconnect");
+          }
+        }
+      } finally {
+        recoveringRef.current = false;
+      }
+    };
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") attemptRecovery();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pageshow", attemptRecovery);
+    window.addEventListener("focus", attemptRecovery);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pageshow", attemptRecovery);
+      window.removeEventListener("focus", attemptRecovery);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inLobby, roomCode]);
+
   // translationEnabled=true by default — auto-starts when connected
 
   // Enable controls when connected - either hasPartner OR we have remote video stream

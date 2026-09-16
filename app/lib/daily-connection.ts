@@ -201,6 +201,16 @@ export class DailyConnection {
     });
 
     // Error handling
+    // The meeting ended underneath us (typical after an iOS interruption
+    // suspends the WebView long enough for the SFU connection to die). Surface
+    // "reconnecting" so the page shows recovery UI; the visibility-resume
+    // watcher performs the actual rejoin.
+    this.call.on("left-meeting", () => {
+      if (this.isDestroyed) return;
+      console.warn("[Daily] left-meeting — connection died (interruption?)");
+      this.setStatus("reconnecting", "Reconnecting…");
+    });
+
     this.call.on("error", (event) => {
       console.error("[Daily] Error:", event);
       if (!this.isDestroyed) {
@@ -394,6 +404,62 @@ export class DailyConnection {
   setLocalVideo(enabled: boolean): void {
     if (this.isDestroyed || !this.call) return;
     this.call.setLocalVideo(enabled);
+  }
+
+  // Current Daily meeting state — 'joined-meeting' means the SFU connection is
+  // alive. After an iOS interruption (phone call / FaceTime seizes mic+camera
+  // and suspends the WebView) it is typically 'left-meeting' or 'error'.
+  getMeetingState(): string {
+    if (this.isDestroyed || !this.call) return "none";
+    try {
+      return this.call.meetingState();
+    } catch {
+      return "none";
+    }
+  }
+
+  // Recover from an iOS interruption: if the meeting survived, do nothing
+  // (light path — the page just re-kicks media playback). If the meeting died,
+  // tear down the dead call object and fully re-join the SAME room — the room
+  // outlives us (1h TTL) and /api/daily/room get-or-creates + re-mints a fresh
+  // token, so this is safe to call any number of times.
+  async recover(): Promise<boolean> {
+    if (this.isDestroyed) return false;
+
+    if (this.getMeetingState() === "joined-meeting") return true;
+
+    console.log("[Daily] Recovering after interruption — rejoining room");
+    this.setStatus("reconnecting", "Reconnecting…");
+
+    // Quietly discard the dead call object (do NOT use disconnect() — that
+    // marks the instance destroyed and mutes callbacks).
+    this.stopKeepAlive();
+    if (this.statsInterval) {
+      clearInterval(this.statsInterval);
+      this.statsInterval = null;
+    }
+    if (this.call) {
+      try {
+        this.call.leave();
+      } catch {
+        /* ignore */
+      }
+      try {
+        this.call.destroy();
+      } catch {
+        /* ignore */
+      }
+      this.call = null;
+    }
+    this.remoteStream = null;
+    this.helloAcknowledged = false;
+
+    // Full re-join with the same identity/room. connect() re-fetches the room
+    // (get-or-create) + a fresh meeting token and rebuilds all listeners.
+    return this.connect(this.roomId, this.isHost, this.userName, "video", undefined, {
+      deviceId: this.deviceId,
+      lang: this.lang,
+    });
   }
 
   disconnect(): void {

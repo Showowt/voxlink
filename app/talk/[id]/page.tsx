@@ -148,6 +148,7 @@ function TalkContent() {
   const contactSavedRef = useRef(false);
   const hadPartnerRef = useRef(false); // ever connected to a partner this call
   const callStartRef = useRef<number>(0); // first partner-connect timestamp
+  const isConnectedRef = useRef(false); // live mirror for the interruption watcher
   const transcriptRef = useRef<TranscriptEntry[]>([]); // live mirror for teardown saves
 
   // Save the partner as a contact exactly once per call — the moment we know
@@ -430,6 +431,7 @@ function TalkContent() {
         if (!mountedRef.current) return;
         setConnectionStatus(message || status);
         setIsConnected(status === "connected");
+        isConnectedRef.current = status === "connected";
         if (status === "room_full") {
           setIsRoomFull(true);
         }
@@ -1003,6 +1005,45 @@ function TalkContent() {
       document.removeEventListener("visibilitychange", onHide);
     };
   }, [saveContactOnce, saveTalkHistory]);
+
+  // ── iOS INTERRUPTION AUTO-RECOVERY ────────────────────────────────────────
+  // A native phone call / FaceTime suspends the WebView and usually kills the
+  // PeerJS connection. On return to foreground: if we HAD a partner and are no
+  // longer connected, do ONE automatic refresh — mount re-initializes the
+  // connection and RoomSignal rediscovers the peer, so the call resumes
+  // without the user having to force-refresh. STT self-restarts on visibility.
+  const recoveringRef = useRef(false);
+  useEffect(() => {
+    const attemptRecovery = () => {
+      if (recoveringRef.current || !mountedRef.current) return;
+      if (!hadPartnerRef.current) return; // never connected — nothing to recover
+      if (isConnectedRef.current) return; // connection survived
+      recoveringRef.current = true;
+      setTimeout(() => {
+        if (!mountedRef.current || isConnectedRef.current) {
+          recoveringRef.current = false;
+          return; // reconnected on its own during the grace period
+        }
+        const key = `ez_ir_talk_${roomId}`;
+        if (!sessionStorage.getItem(key)) {
+          sessionStorage.setItem(key, "1");
+          window.location.reload();
+        } else {
+          recoveringRef.current = false;
+        }
+      }, 2500); // grace period for TalkConnection's own retry to win first
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") attemptRecovery();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pageshow", attemptRecovery);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pageshow", attemptRecovery);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId]);
 
   const endSession = useCallback(() => {
     stopListening();
