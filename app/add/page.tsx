@@ -66,8 +66,8 @@ function AddContent() {
     });
     router.push(
       type === "video"
-        ? `/call/${room}?lang=${lang}&hostLang=${theirLang}&host=true`
-        : `/talk/${room}?lang=${lang}&partnerLang=${theirLang}&host=true`,
+        ? `/call/${room}?lang=${lang}&hostLang=${theirLang}&host=true&name=${encodeURIComponent(name)}`
+        : `/talk/${room}?lang=${lang}&partnerLang=${theirLang}&host=true&name=${encodeURIComponent(name)}`,
     );
   };
 

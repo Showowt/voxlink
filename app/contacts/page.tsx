@@ -121,8 +121,8 @@ export default function ContactsPage() {
     });
     router.push(
       type === 'video'
-        ? `/call/${code}?lang=${myLang}&hostLang=${c.language}&host=true`
-        : `/talk/${code}?lang=${myLang}&partnerLang=${c.language}&host=true`,
+        ? `/call/${code}?lang=${myLang}&hostLang=${c.language}&host=true&name=${encodeURIComponent(myName)}`
+        : `/talk/${code}?lang=${myLang}&partnerLang=${c.language}&host=true&name=${encodeURIComponent(myName)}`,
     );
   };
 

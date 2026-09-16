@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
+
+// Placeholder names peers announce when no real name is set — never persist one
+// of these over a real saved name (which would rename "María" to "User").
+const SENTINEL_NAMES = new Set(["", "user", "partner", "unknown", "someone"]);
+function meaningfulName(n: unknown): string | null {
+  if (typeof n !== "string") return null;
+  const t = n.trim();
+  return t && !SENTINEL_NAMES.has(t.toLowerCase()) ? t.slice(0, 60) : null;
+}
 
 const limiter = new Map<string, { count: number; reset: number }>();
 function checkLimit(ip: string, max: number): boolean {
@@ -54,6 +63,12 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { ownerDeviceId, contactDeviceId, displayName, language } = body;
 
+    // Never report a fake success: if storage is unconfigured the no-op client
+    // resolves {data:null,error:null}, which would look like a successful save.
+    if (!isSupabaseConfigured()) {
+      return NextResponse.json({ success: false, error: "Storage not configured" }, { status: 503 });
+    }
+
     if (!ownerDeviceId || typeof ownerDeviceId !== "string") {
       return NextResponse.json({ success: false, error: "ownerDeviceId is required and must be a string" }, { status: 400 });
     }
@@ -81,15 +96,20 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (existing) {
+      // Only bump call metadata + upgrade the name when we actually have a real
+      // one. Never overwrite a saved name/language with a placeholder ("User")
+      // or a fallback ("en"), which happens on nearly every re-call.
+      const patch: Record<string, unknown> = {
+        call_count: (existing.call_count || 0) + 1,
+        last_called_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      const goodName = meaningfulName(displayName);
+      if (goodName) patch.display_name = goodName;
+
       const { error: updateError } = await supabase
         .from("contacts")
-        .update({
-          call_count: (existing.call_count || 0) + 1,
-          last_called_at: new Date().toISOString(),
-          display_name: displayName || undefined,
-          language: language || undefined,
-          updated_at: new Date().toISOString(),
-        })
+        .update(patch)
         .eq("id", existing.id);
 
       if (updateError) {
@@ -100,7 +120,7 @@ export async function POST(req: NextRequest) {
       const { error: insertError } = await supabase.from("contacts").insert({
         owner_device_id: ownerDeviceId,
         contact_device_id: contactDeviceId,
-        display_name: displayName || "Unknown",
+        display_name: meaningfulName(displayName) || "Unknown",
         language: language || "en",
         call_count: 1,
         last_called_at: new Date().toISOString(),
@@ -134,6 +154,10 @@ export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
     const { ownerDeviceId, contactDeviceId, isFavorite, displayName } = body;
+
+    if (!isSupabaseConfigured()) {
+      return NextResponse.json({ success: false, error: "Storage not configured" }, { status: 503 });
+    }
 
     if (!ownerDeviceId || typeof ownerDeviceId !== "string") {
       return NextResponse.json({ success: false, error: "ownerDeviceId is required and must be a string" }, { status: 400 });

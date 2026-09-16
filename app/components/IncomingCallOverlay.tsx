@@ -68,8 +68,12 @@ export default function IncomingCallOverlay() {
     const myLang =
       (typeof window !== "undefined" && localStorage.getItem("entrevoz_lang")) ||
       "";
+    const myName =
+      (typeof window !== "undefined" && localStorage.getItem("entrevoz_name")) ||
+      "";
     const q = new URLSearchParams({ host: "false" });
     if (myLang) q.set("lang", myLang);
+    if (myName) q.set("name", myName); // announce my real name so the caller saves me correctly
     if (fromLang) q.set("hostLang", fromLang);
     router.push(
       type === "video" ? `/call/${room}?${q}` : `/talk/${room}?${q}`,
