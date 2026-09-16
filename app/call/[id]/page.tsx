@@ -1762,6 +1762,31 @@ function VideoCallContent() {
     }
     saveContactOnce();
 
+    // Durable, cross-device call history (fire and forget, keepalive).
+    if (transcript.length > 0) {
+      fetch("/api/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        keepalive: true,
+        body: JSON.stringify({
+          deviceId: getDeviceId(),
+          partnerDeviceId: partnerDeviceIdRef.current || undefined,
+          partnerName: partnerNameRef.current || partnerName || undefined,
+          languagePair: `${userLang}-${partnerLang || expectedPartnerLang}`,
+          mode: "video",
+          roomCode,
+          durationSeconds: callDuration,
+          transcript: transcript.map((t) => ({
+            speaker: t.speaker,
+            name: t.name,
+            original: t.original,
+            translated: t.translated,
+            lang: t.lang,
+          })),
+        }),
+      }).catch(() => {});
+    }
+
     // Show post-call summary if we had any conversation
     if (transcript.length >= 2) {
       setShowPostCall(true);

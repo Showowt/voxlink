@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { BackButton } from "@/app/components/ui/BackButton";
 import { getLanguage } from "@/app/lib/languages";
+import { getDeviceId } from "@/app/lib/language-os/device-id";
 import {
   getHistory,
   getFavorites,
@@ -182,7 +183,155 @@ function TranslationCard({
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CALLS VIEW — durable, cross-device call log from /api/history
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface CallRow {
+  id: string;
+  room_code: string | null;
+  participant_1: string;
+  participant_2: string;
+  partner_name: string | null;
+  language_pair: string | null;
+  mode: string;
+  duration_seconds: number | null;
+  created_at: string;
+  ended_at: string | null;
+}
+
+interface TurnRow {
+  speaker: string;
+  name?: string;
+  original: string;
+  translated?: string;
+  lang?: string;
+}
+
+function formatDuration(s: number | null): string {
+  if (!s || s < 1) return "0:00";
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${m}:${sec.toString().padStart(2, "0")}`;
+}
+
+function CallsView() {
+  const [calls, setCalls] = useState<CallRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [transcripts, setTranscripts] = useState<Record<string, TurnRow[]>>({});
+
+  useEffect(() => {
+    let alive = true;
+    fetch(`/api/history?deviceId=${encodeURIComponent(getDeviceId())}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (alive) setCalls(Array.isArray(d.calls) ? d.calls : []);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const openCall = async (id: string) => {
+    if (openId === id) {
+      setOpenId(null);
+      return;
+    }
+    setOpenId(id);
+    if (!transcripts[id]) {
+      try {
+        const r = await fetch(`/api/history?id=${encodeURIComponent(id)}`);
+        const d = await r.json();
+        const t = Array.isArray(d?.call?.transcript) ? d.call.transcript : [];
+        setTranscripts((prev) => ({ ...prev, [id]: t }));
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="text-center py-16 text-white/40 text-sm">Loading calls…</div>
+    );
+  }
+
+  if (calls.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <div className="text-4xl mb-3">{"📞"}</div>
+        <p className="text-white/50 text-sm font-medium mb-1">No calls yet</p>
+        <p className="text-white/30 text-xs">Your translated calls will appear here</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2.5">
+      {calls.map((c) => {
+        const name = c.partner_name || "Unknown";
+        const turns = transcripts[c.id] || [];
+        return (
+          <div
+            key={c.id}
+            className="rounded-2xl border border-white/[0.08]"
+            style={{
+              background:
+                "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)",
+            }}
+          >
+            <button
+              onClick={() => openCall(c.id)}
+              className="w-full text-left p-3.5 sm:p-4"
+              aria-label={`Call with ${name}`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="text-lg">{c.mode === "audio" ? "🎙️" : "🎥"}</span>
+                  <div className="min-w-0">
+                    <p className="text-white font-medium text-sm truncate">{name}</p>
+                    <p className="text-white/40 text-xs truncate">
+                      {(c.language_pair || "").toUpperCase()} · {formatDuration(c.duration_seconds)} ·{" "}
+                      {formatTimestamp(new Date(c.created_at).getTime())}
+                    </p>
+                  </div>
+                </div>
+                <span className="text-white/25 text-xs shrink-0">{openId === c.id ? "▲" : "▼"}</span>
+              </div>
+            </button>
+            {openId === c.id && (
+              <div className="px-4 pb-4 border-t border-white/[0.06] pt-3 space-y-2 max-h-64 overflow-y-auto">
+                {turns.length === 0 ? (
+                  <p className="text-white/30 text-xs">No transcript saved for this call.</p>
+                ) : (
+                  turns.map((t, i) => (
+                    <div key={i} className="text-xs leading-relaxed">
+                      <span className="text-white/40">
+                        {t.speaker === "me" ? "You" : name}:{" "}
+                      </span>
+                      <span className="text-white/70">{t.original}</span>
+                      {t.translated && t.translated !== t.original && (
+                        <span className="text-[#00C896]"> → {t.translated}</span>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function HistoryPage() {
+  const [section, setSection] = useState<"calls" | "phrasebook">("calls");
   const [tab, setTab] = useState<TabType>("recent");
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<TranslationItem[]>([]);
@@ -245,12 +394,12 @@ export default function HistoryPage() {
           <div className="flex items-center gap-1">
             <BackButton href="/" />
             <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight">
-              Translation History
+              History
             </h1>
           </div>
 
           {/* Clear All */}
-          {tab === "recent" && recentCount > 0 && (
+          {section === "phrasebook" && tab === "recent" && recentCount > 0 && (
             <button
               onClick={() => setShowClearConfirm(true)}
               className="text-xs text-white/40 hover:text-red-400 transition-colors px-3 py-2 min-h-[44px] flex items-center rounded-lg hover:bg-white/[0.04]"
@@ -260,6 +409,35 @@ export default function HistoryPage() {
             </button>
           )}
         </div>
+
+        {/* Section toggle: Calls (durable, cross-device) vs Phrasebook (local translations) */}
+        <div className="flex gap-1 p-1 rounded-xl bg-white/[0.04] border border-white/[0.06] mb-4">
+          <button
+            onClick={() => setSection("calls")}
+            className={`flex-1 py-2.5 min-h-[44px] rounded-lg text-sm font-medium transition-all ${
+              section === "calls"
+                ? "bg-white/[0.10] text-white border border-white/[0.10]"
+                : "text-white/40 hover:text-white/60"
+            }`}
+          >
+            📞 Calls
+          </button>
+          <button
+            onClick={() => setSection("phrasebook")}
+            className={`flex-1 py-2.5 min-h-[44px] rounded-lg text-sm font-medium transition-all ${
+              section === "phrasebook"
+                ? "bg-white/[0.10] text-white border border-white/[0.10]"
+                : "text-white/40 hover:text-white/60"
+            }`}
+          >
+            💬 Phrasebook
+          </button>
+        </div>
+
+        {section === "calls" ? (
+          <CallsView />
+        ) : (
+          <>
 
         {/* Clear Confirmation */}
         {showClearConfirm && (
@@ -406,6 +584,9 @@ export default function HistoryPage() {
             ))
           )}
         </div>
+
+          </>
+        )}
 
         {/* Footer spacing */}
         <div className="h-8" />

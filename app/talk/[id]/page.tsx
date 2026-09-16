@@ -948,9 +948,43 @@ function TalkContent() {
     stopListening();
     // Save the partner as a contact (idempotent — usually already fired mid-call).
     saveContactOnce();
+
+    // Durable, cross-device call history (fire and forget, keepalive).
+    if (transcript.length > 0) {
+      fetch("/api/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        keepalive: true,
+        body: JSON.stringify({
+          deviceId: getDeviceId(),
+          partnerDeviceId: partnerDeviceIdRef.current || undefined,
+          partnerName: partnerNameRef.current || partnerName || undefined,
+          languagePair: `${userLang}-${partnerLangRef.current || defaultTargetLang}`,
+          mode: "audio",
+          roomCode: roomId,
+          transcript: transcript.map((t) => ({
+            speaker: t.speaker,
+            name: t.name,
+            original: t.original,
+            translated: t.translated,
+            lang: t.sourceLang,
+          })),
+        }),
+      }).catch(() => {});
+    }
+
     connectionRef.current?.disconnect();
     router.push("/");
-  }, [stopListening, router, saveContactOnce]);
+  }, [
+    stopListening,
+    router,
+    saveContactOnce,
+    transcript,
+    userLang,
+    defaultTargetLang,
+    roomId,
+    partnerName,
+  ]);
 
   const speak = useCallback((text: string, lang: string) => {
     speechSynthesis.cancel();

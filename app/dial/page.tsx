@@ -246,8 +246,17 @@ export default function DialPage() {
               </svg>
             </button>
           </div>
+          <button
+            onClick={() => router.push("/scan")}
+            className="w-full mt-3 flex items-center justify-center gap-2 bg-white/[0.06] border border-white/10 text-white/80 font-semibold py-3 rounded-xl text-sm active:scale-95 transition-all min-h-[48px]"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7V5a1 1 0 011-1h2M4 17v2a1 1 0 001 1h2M20 7V5a1 1 0 00-1-1h-2M20 17v2a1 1 0 01-1 1h-2M4 12h16" />
+            </svg>
+            Scan a QR code
+          </button>
           <p className="text-white/30 text-xs text-center mt-4 leading-relaxed">
-            Ask a friend for their code, or open your camera on their QR.
+            Ask a friend for their code, or scan their QR.
             <br />
             Their phone rings — no link needed.
           </p>
