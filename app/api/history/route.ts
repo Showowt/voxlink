@@ -72,9 +72,12 @@ export async function POST(req: NextRequest) {
       // NOTE: created_at intentionally omitted so an upsert-update preserves it.
     };
 
+    // One row PER PARTICIPANT per call — each device owns its own history entry
+    // (correct partner_name + own-perspective transcript), rather than both
+    // sides colliding into one shared room_code row.
     const { error } = await supabase
       .from("conversations")
-      .upsert(row, { onConflict: "room_code" });
+      .upsert(row, { onConflict: "participant_1,room_code" });
 
     if (error) {
       console.error("[history POST]", error.message);
@@ -113,7 +116,7 @@ export async function GET(req: NextRequest) {
     .select(
       "id, room_code, participant_1, participant_2, partner_name, language_pair, mode, duration_seconds, created_at, ended_at",
     )
-    .or(`participant_1.eq.${deviceId},participant_2.eq.${deviceId}`)
+    .eq("participant_1", deviceId)
     .order("created_at", { ascending: false })
     .limit(50);
 
