@@ -96,6 +96,63 @@ async function sendCallInviteRealtime(
   });
 }
 
+// "Your invite was claimed" — fired by the invitee's device right after a
+// successful first claim so the INVITER gets a live "X just joined — call
+// them now" moment while excitement is peak. Realtime-only by design: if
+// Realtime is unavailable the inviter still sees the new contact on the next
+// list refresh (graceful, not a dead end).
+export interface InviteClaimed {
+  name: string;
+  deviceId: string;
+  lang: string;
+  t: number;
+}
+
+export async function sendInviteClaimed(
+  targetDeviceId: string,
+  claimed: Omit<InviteClaimed, "t">,
+): Promise<boolean> {
+  const supabase = createBrowserClient();
+  if (!supabase || !targetDeviceId) return false;
+
+  const channel = supabase.channel(ringChannelName(targetDeviceId), {
+    config: { broadcast: { self: false } },
+  });
+
+  return new Promise<boolean>((resolve) => {
+    let settled = false;
+    const done = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      try {
+        supabase.removeChannel(channel);
+      } catch {
+        /* ignore */
+      }
+      resolve(ok);
+    };
+
+    channel.subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        try {
+          channel.send({
+            type: "broadcast",
+            event: "invite-claimed",
+            payload: { ...claimed, t: Date.now() },
+          });
+          setTimeout(() => done(true), 400);
+        } catch {
+          done(false);
+        }
+      } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        done(false);
+      }
+    });
+
+    setTimeout(() => done(false), 5000);
+  });
+}
+
 // Send a lightweight control signal (decline / cancel) to a device's ring
 // channel so the other side can dismiss its "calling…" / incoming UI.
 // Tries Realtime first; falls back to PeerJS when Realtime is unavailable.

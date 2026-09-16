@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useIncomingCall } from "@/hooks/useIncomingCall";
-import { sendCallSignal } from "@/app/lib/ring-signal";
+import { sendCallSignal, sendCallInvite } from "@/app/lib/ring-signal";
 import { startRingtone } from "@/app/lib/ringtone";
 import { blockDevice } from "@/app/lib/call-block";
+import { generateRoomCode } from "@/app/lib/room-code";
+import { getDeviceId } from "@/app/lib/language-os/device-id";
 
 // Routes where the user is already in a live session — don't interrupt them
 // with an incoming-call takeover there.
@@ -44,6 +46,125 @@ export default function IncomingCallOverlay() {
       window.removeEventListener("entrevoz:call-declined", onDeclined);
   }, []);
 
+  // "X just joined" celebration for the INVITER — fired live when their invite
+  // is claimed, so they can make the first call while excitement is peak.
+  const [joined, setJoined] = useState<{
+    name: string;
+    deviceId: string;
+    lang: string;
+  } | null>(null);
+  const [calling, setCalling] = useState(false);
+  useEffect(() => {
+    const onClaimed = (e: Event) => {
+      const d = (e as CustomEvent).detail as {
+        name?: string;
+        deviceId?: string;
+        lang?: string;
+      };
+      if (!d?.deviceId) return;
+      setJoined({
+        name: d.name || "Your friend",
+        deviceId: d.deviceId,
+        lang: d.lang || "en",
+      });
+      // Celebration chime + haptic (short, not a full ringtone).
+      try {
+        navigator.vibrate?.([60, 40, 60]);
+      } catch {
+        /* ignore */
+      }
+      try {
+        const Ctx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext })
+            .webkitAudioContext;
+        const ctx = new Ctx();
+        [523.25, 659.25, 783.99].forEach((f, i) => {
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.frequency.value = f;
+          o.connect(g);
+          g.connect(ctx.destination);
+          g.gain.setValueAtTime(0.0001, ctx.currentTime + i * 0.12);
+          g.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + i * 0.12 + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + i * 0.12 + 0.3);
+          o.start(ctx.currentTime + i * 0.12);
+          o.stop(ctx.currentTime + i * 0.12 + 0.35);
+        });
+        setTimeout(() => ctx.close().catch(() => {}), 1200);
+      } catch {
+        /* ignore */
+      }
+    };
+    window.addEventListener("entrevoz:invite-claimed", onClaimed);
+    return () => window.removeEventListener("entrevoz:invite-claimed", onClaimed);
+  }, []);
+
+  // Auto-dismiss the celebration after 30s if untouched.
+  useEffect(() => {
+    if (!joined) return;
+    const t = setTimeout(() => setJoined(null), 30000);
+    return () => clearTimeout(t);
+  }, [joined]);
+
+  const callJoined = async () => {
+    if (!joined || calling) return;
+    setCalling(true);
+    const room = generateRoomCode();
+    const myLang = localStorage.getItem("entrevoz_lang") || "en";
+    const myName = localStorage.getItem("entrevoz_name") || "Someone";
+    await sendCallInvite(joined.deviceId, {
+      room,
+      type: "video",
+      fromDevice: getDeviceId(),
+      fromName: myName,
+      fromLang: myLang,
+      targetLang: joined.lang,
+    });
+    const target = joined;
+    setJoined(null);
+    setCalling(false);
+    router.push(
+      `/call/${room}?lang=${myLang}&hostLang=${target.lang}&host=true&name=${encodeURIComponent(myName)}&pd=${encodeURIComponent(target.deviceId)}&pn=${encodeURIComponent(target.name)}`,
+    );
+  };
+
+  const joinedBanner =
+    joined && !suppressed && !invite ? (
+      <div className="fixed inset-x-4 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-[10001] mx-auto max-w-sm rounded-2xl border border-[#00E5A0]/30 bg-[#0c0f0e]/95 p-4 shadow-2xl shadow-[#00E5A0]/10 backdrop-blur-xl">
+        <div className="flex items-center gap-3">
+          <div className="relative flex h-12 w-12 flex-shrink-0 items-center justify-center">
+            <span className="absolute h-12 w-12 animate-ping rounded-full bg-[#00E5A0]/20" />
+            <div className="relative flex h-11 w-11 items-center justify-center rounded-full border border-[#00E5A0]/40 bg-[#00E5A0]/10 text-lg font-black text-white">
+              {joined.name.charAt(0).toUpperCase()}
+            </div>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-bold text-white">
+              🎉 {joined.name} just joined!
+            </p>
+            <p className="text-xs text-white/45">
+              They&apos;re in your contacts — say hi, live translated.
+            </p>
+          </div>
+          <button
+            onClick={() => setJoined(null)}
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-white/30 transition-colors hover:text-white/60"
+            aria-label="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
+        <button
+          onClick={callJoined}
+          disabled={calling}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[#00E5A0] py-3 text-sm font-bold text-black transition-all active:scale-95 disabled:opacity-50 min-h-[48px]"
+        >
+          {calling ? "Calling…" : `📹 Call ${joined.name.split(" ")[0]} now`}
+        </button>
+      </div>
+    ) : null;
+
   const declinedToast = declined ? (
     <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[10001] flex items-center gap-2 rounded-full bg-[#12121a]/95 border border-white/15 px-5 py-3 shadow-2xl backdrop-blur-xl safe-top">
       <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-500/20">
@@ -55,7 +176,13 @@ export default function IncomingCallOverlay() {
     </div>
   ) : null;
 
-  if (!invite || suppressed) return declinedToast;
+  if (!invite || suppressed)
+    return (
+      <>
+        {declinedToast}
+        {joinedBanner}
+      </>
+    );
 
   const accept = () => {
     const { room, type, fromLang, fromDevice, fromName } = invite;

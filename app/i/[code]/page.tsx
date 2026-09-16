@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { formatDialCode } from "@/app/lib/dial-code";
-import { sendCallInvite } from "@/app/lib/ring-signal";
+import { sendCallInvite, sendInviteClaimed } from "@/app/lib/ring-signal";
 import { generateRoomCode } from "@/app/lib/room-code";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -98,6 +98,14 @@ export default function InvitePage() {
       }
       setClaim(d);
       setState("connected");
+      // Tell the inviter live — "X just joined, call them now" — exactly once.
+      if (d.firstClaim) {
+        sendInviteClaimed(d.inviter.deviceId, {
+          name: myName.trim() || "Your friend",
+          deviceId: getDeviceId(),
+          lang: myLang,
+        }).catch(() => {});
+      }
     } catch {
       setState("ready");
     }

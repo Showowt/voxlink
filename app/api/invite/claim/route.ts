@@ -132,6 +132,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      // True only on the FIRST claim — the client uses this to fire the
+      // "X just joined" live signal to the inviter exactly once.
+      firstClaim: !invite.claimed_at,
       inviter: {
         deviceId: invite.inviter_device_id,
         name: goodName(invite.inviter_name) || "Your friend",

@@ -52,6 +52,34 @@ export function useIncomingCall() {
       }
     };
 
+    // Someone claimed OUR invite — surface a "X just joined" celebration so
+    // the inviter can call them while excitement is peak. Deduped by device
+    // (the signal can arrive on both listening addresses).
+    const claimedDevices = new Set<string>();
+    const handleInviteClaimed = (p?: {
+      name?: string;
+      deviceId?: string;
+      lang?: string;
+      t?: number;
+    }) => {
+      if (!p?.deviceId || claimedDevices.has(p.deviceId)) return;
+      if (Date.now() - (p.t || 0) > 120000) return; // stale
+      claimedDevices.add(p.deviceId);
+      try {
+        window.dispatchEvent(
+          new CustomEvent("entrevoz:invite-claimed", {
+            detail: {
+              name: p.name || "Your friend",
+              deviceId: p.deviceId,
+              lang: p.lang || "en",
+            },
+          }),
+        );
+      } catch {
+        /* ignore */
+      }
+    };
+
     // The callee declined OUR outgoing call — tell whatever page is showing
     // "Waiting for partner…" (the caller shouldn't wait forever). Deduped
     // because the signal can arrive on both transports/addresses.
@@ -89,6 +117,11 @@ export function useIncomingCall() {
       );
       channel.on("broadcast", { event: "call-declined" }, (msg) =>
         handleDeclined((msg.payload as { room?: string })?.room),
+      );
+      channel.on("broadcast", { event: "invite-claimed" }, (msg) =>
+        handleInviteClaimed(
+          msg.payload as { name?: string; deviceId?: string; lang?: string; t?: number },
+        ),
       );
       channel.subscribe((status) => {
         // Realtime unavailable (anon disabled) → PeerJS fallback for this address.
