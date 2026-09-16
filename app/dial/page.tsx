@@ -139,12 +139,19 @@ export default function DialPage() {
     const langParam = partnerLang
       ? `&${type === "video" ? "hostLang" : "partnerLang"}=${encodeURIComponent(partnerLang)}`
       : "";
-    // Announce my real name to the partner so they save me correctly.
+    // Announce my real name to the partner so they save me correctly, and seed
+    // the resolved partner identity so the room saves the contact + history
+    // without depending on the in-call handshake.
     const nameParam = `&name=${encodeURIComponent(name)}`;
+    const partnerParam = resolved
+      ? `&pd=${encodeURIComponent(resolved.deviceId)}${
+          resolved.displayName ? `&pn=${encodeURIComponent(resolved.displayName)}` : ""
+        }`
+      : "";
     router.push(
       type === "video"
-        ? `/call/${room}?lang=${lang}&host=true${langParam}${nameParam}`
-        : `/talk/${room}?lang=${lang}&host=true${langParam}${nameParam}`,
+        ? `/call/${room}?lang=${lang}&host=true${langParam}${nameParam}${partnerParam}`
+        : `/talk/${room}?lang=${lang}&host=true${langParam}${nameParam}${partnerParam}`,
     );
   };
 

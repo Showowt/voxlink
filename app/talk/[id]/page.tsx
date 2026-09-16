@@ -146,16 +146,19 @@ function TalkContent() {
   const partnerDeviceIdRef = useRef<string>("");
   const partnerNameRef = useRef<string>("");
   const contactSavedRef = useRef(false);
+  const hadPartnerRef = useRef(false); // ever connected to a partner this call
+  const callStartRef = useRef<number>(0); // first partner-connect timestamp
+  const transcriptRef = useRef<TranscriptEntry[]>([]); // live mirror for teardown saves
 
-  // Save the partner as a contact exactly once per call — the moment we have
-  // both their device id (handshake) and name. Fires mid-call with keepalive so
-  // it survives the other side disconnecting first (which wipes partnerName),
-  // app backgrounding, or a swipe-kill.
+  // Save the partner as a contact exactly once per call — the moment we know
+  // their device id (seeded from the invite/URL or the in-call handshake).
+  // Fires mid-call with keepalive so it survives the other side disconnecting
+  // first, app backgrounding, or a swipe-kill. A missing name is NOT a reason
+  // to skip (saved as "Unknown"; a later real name upgrades the row).
   const saveContactOnce = useCallback(() => {
     if (contactSavedRef.current) return;
     const contactDeviceId = partnerDeviceIdRef.current;
-    const displayName = partnerNameRef.current;
-    if (!contactDeviceId || !displayName) return;
+    if (!contactDeviceId || contactDeviceId === getDeviceId()) return;
     contactSavedRef.current = true;
     try {
       fetch("/api/contacts", {
@@ -165,7 +168,7 @@ function TalkContent() {
         body: JSON.stringify({
           ownerDeviceId: getDeviceId(),
           contactDeviceId,
-          displayName,
+          displayName: partnerNameRef.current || "Unknown",
           language: partnerLangRef.current || defaultTargetLang || "en",
         }),
       }).catch(() => {});
@@ -173,6 +176,55 @@ function TalkContent() {
       /* ignore */
     }
   }, [defaultTargetLang]);
+
+  // Log this call to durable cross-device history. Upsert-safe to fire more
+  // than once; requires only that a partner ever connected — an empty
+  // transcript still logs the call metadata.
+  const saveTalkHistory = useCallback(() => {
+    if (!hadPartnerRef.current) return;
+    const turns = transcriptRef.current.slice(-60).map((t) => ({
+      speaker: t.speaker,
+      name: t.name,
+      original: (t.original || "").slice(0, 300),
+      translated: (t.translated || "").slice(0, 300),
+      lang: t.sourceLang,
+    }));
+    const durationSeconds = callStartRef.current
+      ? Math.round((Date.now() - callStartRef.current) / 1000)
+      : 0;
+    try {
+      fetch("/api/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        keepalive: true,
+        body: JSON.stringify({
+          deviceId: getDeviceId(),
+          partnerDeviceId: partnerDeviceIdRef.current || undefined,
+          partnerName: partnerNameRef.current || undefined,
+          languagePair: `${userLang}-${partnerLangRef.current || defaultTargetLang}`,
+          mode: "audio",
+          roomCode: roomId,
+          durationSeconds,
+          transcript: turns,
+        }),
+      }).catch(() => {});
+    } catch {
+      /* ignore */
+    }
+  }, [userLang, defaultTargetLang, roomId]);
+
+  // Seed the partner's identity from the URL (set by dial/contacts/add/accept)
+  // so contact-save + history work even if the in-call handshake never lands.
+  useEffect(() => {
+    const pd = searchParams.get("pd") || "";
+    const pn = searchParams.get("pn") || "";
+    if (pd && pd.length >= 8 && pd !== getDeviceId()) {
+      partnerDeviceIdRef.current = partnerDeviceIdRef.current || pd;
+      if (pn && !partnerNameRef.current) partnerNameRef.current = pn;
+      saveContactOnce();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const historyEndRef = useRef<HTMLDivElement>(null);
   const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -341,7 +393,9 @@ function TalkContent() {
           return prev;
         }
         // Cap to last 200 turns — keeps long calls fast (bounded re-render cost)
-        return [...prev, entry].slice(-200);
+        const next = [...prev, entry].slice(-200);
+        transcriptRef.current = next; // live mirror for teardown/backstop saves
+        return next;
       });
 
       // Persist each translated turn to the phrasebook so voice calls actually
@@ -510,6 +564,8 @@ function TalkContent() {
           setPartnerLang(lang);
           partnerLangRef.current = lang;
         }
+        hadPartnerRef.current = true;
+        if (!callStartRef.current) callStartRef.current = Date.now();
         vibrate([100, 50, 100]);
         saveContactOnce();
       },
@@ -930,61 +986,34 @@ function TalkContent() {
     }
   }, [roomId, vibrate]);
 
-  // Backstop: persist the contact if the app is backgrounded/closed without
-  // tapping End (iOS suspends the WebView on background/lock).
+  // Backstop: persist the contact + call history if the app is backgrounded or
+  // closed without tapping End (iOS suspends the WebView on background/lock).
   useEffect(() => {
-    const onHide = () => {
-      if (document.visibilityState === "hidden") saveContactOnce();
+    const flush = () => {
+      saveContactOnce();
+      saveTalkHistory();
     };
-    window.addEventListener("pagehide", saveContactOnce);
+    const onHide = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
     document.addEventListener("visibilitychange", onHide);
     return () => {
-      window.removeEventListener("pagehide", saveContactOnce);
+      window.removeEventListener("pagehide", flush);
       document.removeEventListener("visibilitychange", onHide);
     };
-  }, [saveContactOnce]);
+  }, [saveContactOnce, saveTalkHistory]);
 
   const endSession = useCallback(() => {
     stopListening();
     // Save the partner as a contact (idempotent — usually already fired mid-call).
     saveContactOnce();
-
-    // Durable, cross-device call history (fire and forget, keepalive).
-    if (transcript.length > 0) {
-      fetch("/api/history", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        keepalive: true,
-        body: JSON.stringify({
-          deviceId: getDeviceId(),
-          partnerDeviceId: partnerDeviceIdRef.current || undefined,
-          partnerName: partnerNameRef.current || partnerName || undefined,
-          languagePair: `${userLang}-${partnerLangRef.current || defaultTargetLang}`,
-          mode: "audio",
-          roomCode: roomId,
-          transcript: transcript.map((t) => ({
-            speaker: t.speaker,
-            name: t.name,
-            original: t.original,
-            translated: t.translated,
-            lang: t.sourceLang,
-          })),
-        }),
-      }).catch(() => {});
-    }
-
+    // Durable, cross-device call history — logs every connected call, even
+    // with an empty transcript (fire and forget, keepalive).
+    saveTalkHistory();
     connectionRef.current?.disconnect();
     router.push("/");
-  }, [
-    stopListening,
-    router,
-    saveContactOnce,
-    transcript,
-    userLang,
-    defaultTargetLang,
-    roomId,
-    partnerName,
-  ]);
+  }, [stopListening, router, saveContactOnce, saveTalkHistory]);
 
   const speak = useCallback((text: string, lang: string) => {
     speechSynthesis.cancel();

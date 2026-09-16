@@ -58,7 +58,7 @@ export default function IncomingCallOverlay() {
   if (!invite || suppressed) return declinedToast;
 
   const accept = () => {
-    const { room, type, fromLang } = invite;
+    const { room, type, fromLang, fromDevice, fromName } = invite;
     dismiss();
     // Seed the lobby with THIS device's own language as the default (not a
     // caller-imposed preset — the lobby still lets the callee change it), and
@@ -75,6 +75,10 @@ export default function IncomingCallOverlay() {
     if (myLang) q.set("lang", myLang);
     if (myName) q.set("name", myName); // announce my real name so the caller saves me correctly
     if (fromLang) q.set("hostLang", fromLang);
+    // Seed the caller's identity so the room can save them as a contact + log
+    // history WITHOUT depending on the in-call handshake (which is racy).
+    if (fromDevice) q.set("pd", fromDevice);
+    if (fromName) q.set("pn", fromName);
     router.push(
       type === "video" ? `/call/${room}?${q}` : `/talk/${room}?${q}`,
     );

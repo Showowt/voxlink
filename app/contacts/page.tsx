@@ -47,11 +47,26 @@ export default function ContactsPage() {
   useEffect(() => {
     const id = getDeviceId();
     setDeviceId(id);
-    fetch(`/api/contacts?deviceId=${encodeURIComponent(id)}`)
-      .then(r => r.json())
-      .then(d => setContacts(d.contacts ?? []))
-      .catch(() => { setFetchError(true); })
-      .finally(() => setLoading(false));
+    const load = () => {
+      fetch(`/api/contacts?deviceId=${encodeURIComponent(id)}`, { cache: 'no-store' })
+        .then(r => r.json())
+        .then(d => { setContacts(d.contacts ?? []); setFetchError(false); })
+        .catch(() => { setFetchError(true); })
+        .finally(() => setLoading(false));
+    };
+    load();
+    // Refresh whenever the page regains focus/visibility — in the native shell
+    // pages stay mounted, so a mount-only fetch shows a stale (pre-call) list
+    // and freshly saved contacts look like they never saved.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') load();
+    };
+    window.addEventListener('focus', load);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('focus', load);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
 
   const toggleFavorite = async (c: Contact) => {
@@ -119,10 +134,11 @@ export default function ContactsPage() {
       fromLang: myLang,
       targetLang: c.language,
     });
+    const seed = `&name=${encodeURIComponent(myName)}&pd=${encodeURIComponent(c.contact_device_id)}&pn=${encodeURIComponent(c.display_name)}`;
     router.push(
       type === 'video'
-        ? `/call/${code}?lang=${myLang}&hostLang=${c.language}&host=true&name=${encodeURIComponent(myName)}`
-        : `/talk/${code}?lang=${myLang}&partnerLang=${c.language}&host=true&name=${encodeURIComponent(myName)}`,
+        ? `/call/${code}?lang=${myLang}&hostLang=${c.language}&host=true${seed}`
+        : `/talk/${code}?lang=${myLang}&partnerLang=${c.language}&host=true${seed}`,
     );
   };
 

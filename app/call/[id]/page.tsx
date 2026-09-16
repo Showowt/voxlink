@@ -670,17 +670,19 @@ function VideoCallContent() {
   const partnerNameRef = useRef<string>("");
   const partnerLangRef = useRef<string>("");
   const contactSavedRef = useRef(false);
+  const hadPartnerRef = useRef(false); // ever connected to a partner this call
+  const callStartRef = useRef<number>(0); // first partner-connect timestamp
+  const transcriptRef = useRef<TranscriptEntry[]>([]); // live mirror for teardown saves
 
-  // Save the partner as a contact exactly once per call — the moment we have
-  // both their real device id (from the in-call handshake) and their name.
-  // Fires mid-call (not only on the hangup button) with keepalive, so a saved
-  // contact survives the other side hanging up first (which wipes partnerName
-  // state), app backgrounding, or a swipe-kill.
+  // Save the partner as a contact exactly once per call — the moment we know
+  // their real device id (seeded from the invite/URL or the in-call handshake).
+  // Fires mid-call with keepalive, so a saved contact survives the other side
+  // hanging up first, app backgrounding, or a swipe-kill. A missing name is NOT
+  // a reason to skip (saved as "Unknown"; a later real name upgrades the row).
   const saveContactOnce = useCallback(() => {
     if (contactSavedRef.current) return;
     const contactDeviceId = partnerDeviceIdRef.current;
-    const displayName = partnerNameRef.current;
-    if (!contactDeviceId || !displayName) return;
+    if (!contactDeviceId || contactDeviceId === getDeviceId()) return;
     contactSavedRef.current = true;
     try {
       fetch("/api/contacts", {
@@ -690,7 +692,7 @@ function VideoCallContent() {
         body: JSON.stringify({
           ownerDeviceId: getDeviceId(),
           contactDeviceId,
-          displayName,
+          displayName: partnerNameRef.current || "Unknown",
           language: partnerLangRef.current || "en",
         }),
       }).catch(() => {});
@@ -699,20 +701,74 @@ function VideoCallContent() {
     }
   }, []);
 
-  // Backstop: if the app is backgrounded or closed without tapping End, still
-  // persist the contact. iOS suspends the WebView on background/lock, so this is
-  // the last reliable moment to fire the keepalive save.
+  // Log this call to durable cross-device history. Safe to fire more than once
+  // (the API upserts one row per participant+room); requires only that a
+  // partner ever connected — an empty transcript still logs call metadata.
+  const saveCallHistory = useCallback(() => {
+    if (!hadPartnerRef.current) return;
+    const turns = transcriptRef.current.slice(-60).map((t) => ({
+      speaker: t.speaker,
+      name: t.name,
+      original: (t.original || "").slice(0, 300),
+      translated: (t.translated || "").slice(0, 300),
+      lang: t.lang,
+    }));
+    const durationSeconds = callStartRef.current
+      ? Math.round((Date.now() - callStartRef.current) / 1000)
+      : 0;
+    try {
+      fetch("/api/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        keepalive: true,
+        body: JSON.stringify({
+          deviceId: getDeviceId(),
+          partnerDeviceId: partnerDeviceIdRef.current || undefined,
+          partnerName: partnerNameRef.current || undefined,
+          languagePair: `${userLang}-${partnerLangRef.current || expectedPartnerLang}`,
+          mode: "video",
+          roomCode,
+          durationSeconds,
+          transcript: turns,
+        }),
+      }).catch(() => {});
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userLang, expectedPartnerLang, roomCode]);
+
+  // Seed the partner's identity from the URL (set by dial/contacts/add/accept)
+  // so contact-save + history work even if the in-call handshake never lands.
   useEffect(() => {
-    const onHide = () => {
-      if (document.visibilityState === "hidden") saveContactOnce();
+    const pd = searchParams.get("pd") || "";
+    const pn = searchParams.get("pn") || "";
+    if (pd && pd.length >= 8 && pd !== getDeviceId()) {
+      partnerDeviceIdRef.current = partnerDeviceIdRef.current || pd;
+      if (pn && !partnerNameRef.current) partnerNameRef.current = pn;
+      saveContactOnce();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Backstop: if the app is backgrounded or closed without tapping End, still
+  // persist the contact + call history. iOS suspends the WebView on
+  // background/lock, so this is the last reliable moment to fire keepalive.
+  useEffect(() => {
+    const flush = () => {
+      saveContactOnce();
+      saveCallHistory();
     };
-    window.addEventListener("pagehide", saveContactOnce);
+    const onHide = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
     document.addEventListener("visibilitychange", onHide);
     return () => {
-      window.removeEventListener("pagehide", saveContactOnce);
+      window.removeEventListener("pagehide", flush);
       document.removeEventListener("visibilitychange", onHide);
     };
-  }, [saveContactOnce]);
+  }, [saveContactOnce, saveCallHistory]);
 
   // Media state
   const [isMuted, setIsMuted] = useState(false);
@@ -1208,6 +1264,8 @@ function VideoCallContent() {
             // Mark that we have a remote stream - enables mic even if hello wasn't received
             setHasRemoteStream(true);
             setHasPartner(true); // If we got video, partner is definitely connected
+            hadPartnerRef.current = true;
+            if (!callStartRef.current) callStartRef.current = Date.now();
           },
           onDataMessage: (data: unknown) => {
             if (!mountedRef.current) return;
@@ -1219,6 +1277,8 @@ function VideoCallContent() {
             setPartnerName(name);
             if (name) partnerNameRef.current = name;
             setHasPartner(true);
+            hadPartnerRef.current = true;
+            if (!callStartRef.current) callStartRef.current = Date.now();
             saveContactOnce();
           },
           onPartnerInfo: (info) => {
@@ -1641,7 +1701,11 @@ function VideoCallContent() {
     };
     // Cap history to the last 200 turns — on long (30 min+) calls an unbounded
     // array makes every re-render progressively slower ("slow after 30 min").
-    setTranscript((prev) => [...prev, entry].slice(-200));
+    setTranscript((prev) => {
+      const next = [...prev, entry].slice(-200);
+      transcriptRef.current = next; // live mirror for teardown/backstop saves
+      return next;
+    });
 
     // Persist each translated turn to the phrasebook so live calls actually
     // fill /history (previously only the home-screen translator did this, so
@@ -1762,30 +1826,9 @@ function VideoCallContent() {
     }
     saveContactOnce();
 
-    // Durable, cross-device call history (fire and forget, keepalive).
-    if (transcript.length > 0) {
-      fetch("/api/history", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        keepalive: true,
-        body: JSON.stringify({
-          deviceId: getDeviceId(),
-          partnerDeviceId: partnerDeviceIdRef.current || undefined,
-          partnerName: partnerNameRef.current || partnerName || undefined,
-          languagePair: `${userLang}-${partnerLang || expectedPartnerLang}`,
-          mode: "video",
-          roomCode,
-          durationSeconds: callDuration,
-          transcript: transcript.map((t) => ({
-            speaker: t.speaker,
-            name: t.name,
-            original: t.original,
-            translated: t.translated,
-            lang: t.lang,
-          })),
-        }),
-      }).catch(() => {});
-    }
+    // Durable, cross-device call history — logs every connected call, even
+    // with an empty transcript (fire and forget, keepalive).
+    saveCallHistory();
 
     // Show post-call summary if we had any conversation
     if (transcript.length >= 2) {
