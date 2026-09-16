@@ -21,7 +21,7 @@ function AddContent() {
   const theirName = params.get("n") || "Someone";
   const theirLang = params.get("l") || "en";
 
-  const [state, setState] = useState<"idle" | "saving" | "saved" | "self" | "error">("idle");
+  const [state, setState] = useState<"idle" | "saving" | "saved" | "self" | "error" | "savefail">("idle");
   const [calling, setCalling] = useState(false);
 
   useEffect(() => {
@@ -45,8 +45,9 @@ function AddContent() {
         language: theirLang,
       }),
     })
-      .then((r) => setState(r.ok ? "saved" : "error"))
-      .catch(() => setState("error"));
+      // A failed SAVE must not look like an invalid link — you can still call.
+      .then((r) => setState(r.ok ? "saved" : "savefail"))
+      .catch(() => setState("savefail"));
   }, [theirDevice, theirName, theirLang]);
 
   const call = async (type: "video" | "audio") => {
@@ -110,7 +111,13 @@ function AddContent() {
               speaks {theirLang.toUpperCase()}
             </p>
             <p className="mb-8 text-xs text-white/35">
-              {state === "saving" ? "Adding to your contacts…" : state === "saved" ? "✓ Saved to your contacts" : ""}
+              {state === "saving"
+                ? "Adding to your contacts…"
+                : state === "saved"
+                  ? "✓ Saved to your contacts"
+                  : state === "savefail"
+                    ? "Couldn't save to contacts — you can still call"
+                    : ""}
             </p>
 
             <div className="flex w-full max-w-xs flex-col gap-3">

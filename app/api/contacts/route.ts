@@ -70,13 +70,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "language must be a string" }, { status: 400 });
     }
 
-    // Try to update existing contact (increment call count)
+    // Try to update existing contact (increment call count). maybeSingle avoids
+    // a noisy error when there's no existing row; the unique index on
+    // (owner_device_id, contact_device_id) guarantees at most one match.
     const { data: existing } = await supabase
       .from("contacts")
       .select("id, call_count")
       .eq("owner_device_id", ownerDeviceId)
       .eq("contact_device_id", contactDeviceId)
-      .single();
+      .maybeSingle();
 
     if (existing) {
       const { error: updateError } = await supabase
@@ -105,6 +107,11 @@ export async function POST(req: NextRequest) {
       });
 
       if (insertError) {
+        // A concurrent save may have created the row first (unique-index race) —
+        // the contact exists, which was the goal, so treat it as success.
+        if (insertError.code === "23505") {
+          return NextResponse.json({ success: true });
+        }
         console.error("[Contacts POST] Insert error:", insertError);
         return NextResponse.json({ success: false, error: insertError.message }, { status: 500 });
       }

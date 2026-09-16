@@ -22,6 +22,7 @@ import ReconnectingOverlay from "../../components/ReconnectingOverlay";
 import { useBrowserSupport } from "../../lib/browser-support";
 import { shareJoinLink } from "../../lib/share-link";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
+import { addTranslation } from "@/app/lib/translation-history";
 import LearningMode, { useLearningMode, TappableCaption, LearningInsightCard } from "../../components/LearningMode";
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -143,6 +144,36 @@ function TalkContent() {
   // Partner language ref - keeps current value accessible in callbacks
   const partnerLangRef = useRef<string | null>(null);
   const partnerDeviceIdRef = useRef<string>("");
+  const partnerNameRef = useRef<string>("");
+  const contactSavedRef = useRef(false);
+
+  // Save the partner as a contact exactly once per call — the moment we have
+  // both their device id (handshake) and name. Fires mid-call with keepalive so
+  // it survives the other side disconnecting first (which wipes partnerName),
+  // app backgrounding, or a swipe-kill.
+  const saveContactOnce = useCallback(() => {
+    if (contactSavedRef.current) return;
+    const contactDeviceId = partnerDeviceIdRef.current;
+    const displayName = partnerNameRef.current;
+    if (!contactDeviceId || !displayName) return;
+    contactSavedRef.current = true;
+    try {
+      fetch("/api/contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        keepalive: true,
+        body: JSON.stringify({
+          ownerDeviceId: getDeviceId(),
+          contactDeviceId,
+          displayName,
+          language: partnerLangRef.current || defaultTargetLang || "en",
+        }),
+      }).catch(() => {});
+    } catch {
+      /* ignore */
+    }
+  }, [defaultTargetLang]);
+
   const historyEndRef = useRef<HTMLDivElement>(null);
   const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const liveTextTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -313,9 +344,21 @@ function TalkContent() {
         return [...prev, entry].slice(-200);
       });
 
+      // Persist each translated turn to the phrasebook so voice calls actually
+      // fill /history (previously Talk saved no history of any kind).
+      if (
+        entry.original.trim() &&
+        entry.translated?.trim() &&
+        entry.original.trim() !== entry.translated.trim()
+      ) {
+        const targetLang =
+          entry.speaker === "me" ? partnerLangRef.current || defaultTargetLang : userLang;
+        addTranslation(entry.original, entry.translated, entry.sourceLang, targetLang);
+      }
+
       vibrate(entry.speaker === "partner" ? 100 : [30, 20, 30]);
     },
-    [vibrate],
+    [vibrate, userLang, defaultTargetLang],
   );
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -461,16 +504,19 @@ function TalkContent() {
       onPartnerConnected: (name, lang) => {
         if (!mountedRef.current) return;
         setPartnerName(name);
+        if (name) partnerNameRef.current = name;
         // Set partner's language immediately on connect
         if (lang) {
           setPartnerLang(lang);
           partnerLangRef.current = lang;
         }
         vibrate([100, 50, 100]);
+        saveContactOnce();
       },
       onPartnerInfo: (info) => {
         if (!mountedRef.current) return;
         if (info.deviceId) partnerDeviceIdRef.current = info.deviceId;
+        saveContactOnce();
       },
 
       onPartnerDisconnected: () => {
@@ -884,24 +930,27 @@ function TalkContent() {
     }
   }, [roomId, vibrate]);
 
+  // Backstop: persist the contact if the app is backgrounded/closed without
+  // tapping End (iOS suspends the WebView on background/lock).
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === "hidden") saveContactOnce();
+    };
+    window.addEventListener("pagehide", saveContactOnce);
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      window.removeEventListener("pagehide", saveContactOnce);
+      document.removeEventListener("visibilitychange", onHide);
+    };
+  }, [saveContactOnce]);
+
   const endSession = useCallback(() => {
     stopListening();
-    // Save contact (fire and forget)
-    if (partnerDeviceIdRef.current && partnerName) {
-      fetch("/api/contacts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ownerDeviceId: getDeviceId(),
-          contactDeviceId: partnerDeviceIdRef.current,
-          displayName: partnerName,
-          language: partnerLang || defaultTargetLang,
-        }),
-      }).catch(() => {});
-    }
+    // Save the partner as a contact (idempotent — usually already fired mid-call).
+    saveContactOnce();
     connectionRef.current?.disconnect();
     router.push("/");
-  }, [stopListening, router, partnerName, partnerLang, defaultTargetLang]);
+  }, [stopListening, router, saveContactOnce]);
 
   const speak = useCallback((text: string, lang: string) => {
     speechSynthesis.cancel();

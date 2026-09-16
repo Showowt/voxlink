@@ -13,6 +13,7 @@ import {
 } from "@/app/lib/dial-code";
 import { sendCallInvite } from "@/app/lib/ring-signal";
 import { generateRoomCode } from "@/app/lib/room-code";
+import { registerDirectory, resolveDialCode } from "@/app/lib/directory";
 
 const randomRoom = () => generateRoomCode();
 
@@ -47,6 +48,15 @@ export default function DialPage() {
     })
       .then(setQr)
       .catch(() => setQr(""));
+  }, [myCode, myName, myLang]);
+
+  // Publish this device's code → identity so anyone who dials the code can save
+  // it as a real contact and translate correctly. Debounced so typing a name
+  // doesn't spam the endpoint; also fires once on open when the code is ready.
+  useEffect(() => {
+    if (!myCode) return;
+    const t = setTimeout(() => registerDirectory(), 600);
+    return () => clearTimeout(t);
   }, [myCode, myName, myLang]);
 
   // Persist the user's name so their QR / dial / incoming-ring shows it.
@@ -97,6 +107,26 @@ export default function DialPage() {
     const room = randomRoom();
     const lang = localStorage.getItem("entrevoz_lang") || "en";
     const name = localStorage.getItem("entrevoz_name") || "Someone";
+
+    // Resolve the code to a real identity so we can SAVE this person as a contact
+    // right now (a dial code alone can't be saved — it's a one-way hash) and know
+    // their language up front. Best-effort + time-boxed; ringing works regardless.
+    const resolved = await resolveDialCode(code);
+    const partnerLang = resolved?.language || "";
+    if (resolved) {
+      fetch("/api/contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        keepalive: true,
+        body: JSON.stringify({
+          ownerDeviceId: getDeviceId(),
+          contactDeviceId: resolved.deviceId,
+          displayName: resolved.displayName || `Contact ${formatDialCode(code)}`,
+          language: resolved.language || "en",
+        }),
+      }).catch(() => {});
+    }
+
     // Ring the code's owner, then enter the room as host.
     await sendCallInvite(code, {
       room,
@@ -104,11 +134,15 @@ export default function DialPage() {
       fromDevice: getDeviceId(),
       fromName: name,
       fromLang: lang,
+      ...(partnerLang ? { targetLang: partnerLang } : {}),
     });
+    const langParam = partnerLang
+      ? `&${type === "video" ? "hostLang" : "partnerLang"}=${encodeURIComponent(partnerLang)}`
+      : "";
     router.push(
       type === "video"
-        ? `/call/${room}?lang=${lang}&host=true`
-        : `/talk/${room}?lang=${lang}&host=true`,
+        ? `/call/${room}?lang=${lang}&host=true${langParam}`
+        : `/talk/${room}?lang=${lang}&host=true${langParam}`,
     );
   };
 

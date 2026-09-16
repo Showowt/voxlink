@@ -14,6 +14,7 @@ import {
   LanguageGrid,
 } from "./components/LanguageSelector";
 import { addTranslation } from "./lib/translation-history";
+import { registerDirectory } from "./lib/directory";
 import { OnboardingTutorial } from "./components/OnboardingTutorial";
 import { hasSeenOnboarding, completeOnboarding } from "./lib/onboarding";
 // Premium UI Components
@@ -1166,10 +1167,13 @@ function HomeContent() {
     }
   }, [joinType, joinId]);
 
-  // Save preferences
+  // Save preferences + publish identity to the dial directory (debounced) so
+  // this device is discoverable/saveable by anyone who dials its code.
   useEffect(() => {
     if (name) localStorage.setItem("entrevoz_name", name);
     if (language) localStorage.setItem("entrevoz_lang", language);
+    const t = setTimeout(() => registerDirectory(), 600);
+    return () => clearTimeout(t);
   }, [name, language]);
 
   // Generate cryptographically secure room code

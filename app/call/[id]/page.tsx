@@ -41,6 +41,7 @@ import { useVoiceDubbing } from "@/hooks/useVoiceDubbing";
 import { useRemoteTranscription } from "@/hooks/useRemoteTranscription";
 import { setTtsSpeaking, subscribeTtsSpeaking } from "@/lib/tts-gate";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
+import { addTranslation } from "@/app/lib/translation-history";
 import { useCallRecording } from "@/hooks/useCallRecording";
 import RecordingIndicator from "../../components/RecordingIndicator";
 import { saveRecording } from "@/app/lib/recording-storage";
@@ -666,6 +667,52 @@ function VideoCallContent() {
   const [hasRemoteStream, setHasRemoteStream] = useState(false);
   const [partnerName, setPartnerName] = useState("");
   const partnerDeviceIdRef = useRef<string>("");
+  const partnerNameRef = useRef<string>("");
+  const partnerLangRef = useRef<string>("");
+  const contactSavedRef = useRef(false);
+
+  // Save the partner as a contact exactly once per call — the moment we have
+  // both their real device id (from the in-call handshake) and their name.
+  // Fires mid-call (not only on the hangup button) with keepalive, so a saved
+  // contact survives the other side hanging up first (which wipes partnerName
+  // state), app backgrounding, or a swipe-kill.
+  const saveContactOnce = useCallback(() => {
+    if (contactSavedRef.current) return;
+    const contactDeviceId = partnerDeviceIdRef.current;
+    const displayName = partnerNameRef.current;
+    if (!contactDeviceId || !displayName) return;
+    contactSavedRef.current = true;
+    try {
+      fetch("/api/contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        keepalive: true,
+        body: JSON.stringify({
+          ownerDeviceId: getDeviceId(),
+          contactDeviceId,
+          displayName,
+          language: partnerLangRef.current || "en",
+        }),
+      }).catch(() => {});
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  // Backstop: if the app is backgrounded or closed without tapping End, still
+  // persist the contact. iOS suspends the WebView on background/lock, so this is
+  // the last reliable moment to fire the keepalive save.
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === "hidden") saveContactOnce();
+    };
+    window.addEventListener("pagehide", saveContactOnce);
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      window.removeEventListener("pagehide", saveContactOnce);
+      document.removeEventListener("visibilitychange", onHide);
+    };
+  }, [saveContactOnce]);
 
   // Media state
   const [isMuted, setIsMuted] = useState(false);
@@ -1170,12 +1217,18 @@ function VideoCallContent() {
             if (!mountedRef.current) return;
             // Partner joined
             setPartnerName(name);
+            if (name) partnerNameRef.current = name;
             setHasPartner(true);
+            saveContactOnce();
           },
           onPartnerInfo: (info) => {
             if (!mountedRef.current) return;
             if (info.deviceId) partnerDeviceIdRef.current = info.deviceId;
-            if (info.lang) setPartnerLang(info.lang);
+            if (info.lang) {
+              setPartnerLang(info.lang);
+              partnerLangRef.current = info.lang;
+            }
+            saveContactOnce();
           },
           onPartnerLeft: () => {
             if (!mountedRef.current) return;
@@ -1589,6 +1642,14 @@ function VideoCallContent() {
     // Cap history to the last 200 turns — on long (30 min+) calls an unbounded
     // array makes every re-render progressively slower ("slow after 30 min").
     setTranscript((prev) => [...prev, entry].slice(-200));
+
+    // Persist each translated turn to the phrasebook so live calls actually
+    // fill /history (previously only the home-screen translator did this, so
+    // call history was always empty).
+    if (original.trim() && translated.trim() && original.trim() !== translated.trim()) {
+      const targetLang = speaker === "me" ? (partnerLang || expectedPartnerLang) : userLang;
+      addTranslation(original, translated, lang, targetLang);
+    }
   };
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1666,10 +1727,11 @@ function VideoCallContent() {
     if (peerRef.current) {
       peerRef.current.disconnect();
     }
-    // Save conversation memory
-    if (transcript.length >= 2 && partnerName) {
+    // Save conversation memory (use the name ref so it still saves when the
+    // partner hung up first and wiped partnerName state).
+    if (transcript.length >= 2 && (partnerNameRef.current || partnerName)) {
       conversationMemory.saveCallMemory({
-        partnerName,
+        partnerName: partnerNameRef.current || partnerName,
         lang: partnerLang || expectedPartnerLang,
         duration: callDuration,
         languages: [userLang, partnerLang || expectedPartnerLang],
@@ -1693,19 +1755,12 @@ function VideoCallContent() {
       }).catch((err) => console.error("[Call] Bridge sync failed:", err));
     }
 
-    // Save contact (fire and forget)
-    if (partnerDeviceIdRef.current && partnerName) {
-      fetch("/api/contacts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ownerDeviceId: getDeviceId(),
-          contactDeviceId: partnerDeviceIdRef.current,
-          displayName: partnerName,
-          language: partnerLang || expectedPartnerLang,
-        }),
-      }).catch((err) => console.error("[Call] Contact save failed:", err));
+    // Save the partner as a contact (idempotent — usually already fired mid-call
+    // via saveContactOnce when the device-id handshake arrived).
+    if (!partnerLangRef.current) {
+      partnerLangRef.current = partnerLang || expectedPartnerLang || "en";
     }
+    saveContactOnce();
 
     // Show post-call summary if we had any conversation
     if (transcript.length >= 2) {
