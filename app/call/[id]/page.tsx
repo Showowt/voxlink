@@ -1082,6 +1082,9 @@ function VideoCallContent() {
 
   const attemptRecovery = useCallback(async () => {
     if (recoveringRef.current || !mountedRef.current || inLobbyRef.current) return;
+    // Offline — don't burn retries/the one-shot reload; the 'online' listener
+    // re-triggers recovery the moment the network is back.
+    if (typeof navigator !== "undefined" && !navigator.onLine) return;
     const st = statusRef.current;
     // Only states that mean "we were in / joining a call". A pre-join error
     // keeps its normal error screen.
@@ -1172,6 +1175,7 @@ function VideoCallContent() {
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("pageshow", onResume);
     window.addEventListener("focus", onResume);
+    window.addEventListener("online", onResume);
 
     // Native shell: the Capacitor App plugin (present in every shipped binary)
     // fires appStateChange on return from a phone call — the strongest resume
@@ -1209,6 +1213,7 @@ function VideoCallContent() {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("pageshow", onResume);
       window.removeEventListener("focus", onResume);
+      window.removeEventListener("online", onResume);
       if (recoveryRearmRef.current) clearTimeout(recoveryRearmRef.current);
       try {
         nativeSub?.remove?.();

@@ -1025,6 +1025,7 @@ function TalkContent() {
   useEffect(() => {
     const attemptRecovery = () => {
       if (recoveringRef.current || !mountedRef.current) return;
+      if (typeof navigator !== "undefined" && !navigator.onLine) return; // wait for 'online'
       if (!hadPartnerRef.current) return; // never connected — nothing to recover
       if (isConnectedRef.current) return; // connection survived
       recoveringRef.current = true;
@@ -1047,9 +1048,11 @@ function TalkContent() {
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("pageshow", attemptRecovery);
+    window.addEventListener("online", attemptRecovery);
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("pageshow", attemptRecovery);
+      window.removeEventListener("online", attemptRecovery);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
