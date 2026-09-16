@@ -195,7 +195,27 @@ export function useVoiceDubbing(
       isPlayingRef.current = true;
 
       source.start();
+      // Watchdog: if an AVAudioSession interruption suspends the AudioContext
+      // mid-playback, onended NEVER fires and isPlayingRef stays true forever —
+      // every later dub is then silently queued/dropped. Force-unstick shortly
+      // after the clip should have finished.
+      const unstickTimer = setTimeout(
+        () => {
+          if (currentSourceRef.current === source) {
+            try {
+              source.stop();
+            } catch {
+              /* ignore */
+            }
+            currentSourceRef.current = null;
+            isPlayingRef.current = false;
+            setState((s) => ({ ...s, isPlaying: false }));
+          }
+        },
+        (audioBuffer.duration + 3) * 1000,
+      );
       source.onended = () => {
+        clearTimeout(unstickTimer);
         currentSourceRef.current = null;
         isPlayingRef.current = false;
         setState((s) => ({ ...s, isPlaying: false }));

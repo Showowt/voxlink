@@ -1067,42 +1067,76 @@ function VideoCallContent() {
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
-  const recoveringRef = useRef(false);
-
+  const inLobbyRef = useRef(true);
   useEffect(() => {
-    if (inLobby) return; // only while actually in the call
+    inLobbyRef.current = inLobby;
+  }, [inLobby]);
+  const recoveringRef = useRef(false);
+  const recoveryFailsRef = useRef(0);
+  const recoveryRearmRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Ref-stable entry point so CONNECTION events (left-meeting, fatal error,
+  // stalled reconnect) can trigger recovery too — not only visibility. Without
+  // this, the common iOS sequence (foreground first, socket death detected
+  // seconds later) left the user stuck on "Reconnecting…" forever.
+  const attemptRecoveryRef = useRef<() => void>(() => {});
 
-    const attemptRecovery = async () => {
-      if (recoveringRef.current || !mountedRef.current) return;
-      const st = statusRef.current;
-      // Only states that mean "we were in / joining a call". A pre-join error
-      // keeps its normal error screen.
-      if (!["connected", "waiting", "connecting", "reconnecting", "error"].includes(st)) return;
-      if (st === "error" && !hadPartnerRef.current) return;
-      const peer = peerRef.current;
-      if (!peer) return;
+  const attemptRecovery = useCallback(async () => {
+    if (recoveringRef.current || !mountedRef.current || inLobbyRef.current) return;
+    const st = statusRef.current;
+    // Only states that mean "we were in / joining a call". A pre-join error
+    // keeps its normal error screen.
+    if (!["connected", "waiting", "connecting", "reconnecting", "error"].includes(st)) return;
+    if (st === "error" && !hadPartnerRef.current) return;
+    const peer = peerRef.current;
+    if (!peer) return;
 
-      recoveringRef.current = true;
-      try {
-        // Let iOS finish releasing mic/camera after the native call ends.
-        await new Promise((r) => setTimeout(r, 800));
-        if (!mountedRef.current) return;
+    recoveringRef.current = true;
+    try {
+      // Let iOS finish releasing mic/camera after the native call ends.
+      await new Promise((r) => setTimeout(r, 800));
+      if (!mountedRef.current) return;
 
-        if (peer.getMeetingState() === "joined-meeting") {
-          // Light: connection survived — resume playback (autoplay may be
-          // blocked after the interruption → show the tap-to-hear overlay).
-          remoteVideoRef.current?.play().catch(() => setNeedsAudioUnmute(true));
-          return;
+      if (peer.getMeetingState() === "joined-meeting") {
+        // Light: connection survived — refresh Daily's own tracks (they may be
+        // dead after the OS seized the mic/cam) and resume playback.
+        peer.refreshLocalMedia();
+        remoteVideoRef.current?.play().catch(() => setNeedsAudioUnmute(true));
+        // Re-arm: daily-js often still reports "joined" right after resume and
+        // only notices the dead socket seconds later — check again shortly.
+        if (recoveryRearmRef.current) clearTimeout(recoveryRearmRef.current);
+        recoveryRearmRef.current = setTimeout(() => {
+          if (
+            mountedRef.current &&
+            peerRef.current &&
+            peerRef.current.getMeetingState() !== "joined-meeting"
+          ) {
+            attemptRecoveryRef.current();
+          }
+        }, 4000);
+        return;
+      }
+
+      setStatus("reconnecting");
+      setReconnectAttempt(recoveryFailsRef.current + 1);
+      const ok = await peer.recover();
+      if (!mountedRef.current) return;
+      if (ok) {
+        recoveryFailsRef.current = 0;
+        setReconnectAttempt(0);
+        setError(null);
+        try {
+          sessionStorage.removeItem(`ez_ir_${roomCode}`);
+        } catch {
+          /* ignore */
         }
-
-        setStatus("reconnecting");
-        const ok = await peer.recover();
-        if (!mountedRef.current) return;
-        if (ok) {
-          setError(null);
-          setTimeout(() => {
-            remoteVideoRef.current?.play().catch(() => setNeedsAudioUnmute(true));
-          }, 1500);
+        setTimeout(() => {
+          remoteVideoRef.current?.play().catch(() => setNeedsAudioUnmute(true));
+        }, 1500);
+      } else {
+        recoveryFailsRef.current += 1;
+        if (recoveryFailsRef.current < 3) {
+          // Retry in-place a couple of times before the heavy fallback.
+          setTimeout(() => attemptRecoveryRef.current(), 3000);
         } else {
           // Last resort: one automatic refresh straight back into this room.
           const key = `ez_ir_${roomCode}`;
@@ -1110,28 +1144,79 @@ function VideoCallContent() {
             sessionStorage.setItem(key, "1");
             window.location.reload();
           } else {
+            // Make the failure VISIBLE: the error screen renders only when
+            // hasPartner is false, and participant-left never arrives over a
+            // dead socket — clear it here or the user sees a black screen.
+            setHasPartner(false);
+            setHasRemoteStream(false);
+            if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
             setStatus("error");
             setError("Call interrupted — tap Retry to reconnect");
           }
         }
-      } finally {
-        recoveringRef.current = false;
       }
-    };
+    } finally {
+      recoveringRef.current = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomCode]);
+  attemptRecoveryRef.current = attemptRecovery;
+
+  useEffect(() => {
+    if (inLobby) return; // only while actually in the call
 
     const onVisible = () => {
-      if (document.visibilityState === "visible") attemptRecovery();
+      if (document.visibilityState === "visible") attemptRecoveryRef.current();
     };
+    const onResume = () => attemptRecoveryRef.current();
     document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("pageshow", attemptRecovery);
-    window.addEventListener("focus", attemptRecovery);
+    window.addEventListener("pageshow", onResume);
+    window.addEventListener("focus", onResume);
+
+    // Native shell: the Capacitor App plugin (present in every shipped binary)
+    // fires appStateChange on return from a phone call — the strongest resume
+    // signal available without a new binary.
+    type AppListener = { remove?: () => void };
+    let nativeSub: AppListener | null = null;
+    try {
+      const cap = (
+        window as unknown as {
+          Capacitor?: {
+            Plugins?: {
+              App?: {
+                addListener?: (
+                  ev: string,
+                  cb: (s: { isActive: boolean }) => void,
+                ) => AppListener | Promise<AppListener>;
+              };
+            };
+          };
+        }
+      ).Capacitor;
+      const res = cap?.Plugins?.App?.addListener?.("appStateChange", (s) => {
+        if (s?.isActive) attemptRecoveryRef.current();
+      });
+      if (res && "then" in res) {
+        (res as Promise<AppListener>).then((l) => (nativeSub = l)).catch(() => {});
+      } else if (res) {
+        nativeSub = res as AppListener;
+      }
+    } catch {
+      /* web — no native bridge */
+    }
+
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("pageshow", attemptRecovery);
-      window.removeEventListener("focus", attemptRecovery);
+      window.removeEventListener("pageshow", onResume);
+      window.removeEventListener("focus", onResume);
+      if (recoveryRearmRef.current) clearTimeout(recoveryRearmRef.current);
+      try {
+        nativeSub?.remove?.();
+      } catch {
+        /* ignore */
+      }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inLobby, roomCode]);
+  }, [inLobby]);
 
   // translationEnabled=true by default — auto-starts when connected
 
@@ -1308,15 +1393,28 @@ function VideoCallContent() {
               setStatusMessage(message || "Connecting...");
             } else if (peerStatus === "reconnecting") {
               // Daily is silently re-establishing the connection on a flaky
-              // network — show the overlay instead of a frozen video.
+              // network — show the overlay instead of a frozen video. If it
+              // does NOT recover on its own shortly (typical after an iOS
+              // interruption kills the socket), actively rejoin.
               setStatus("reconnecting");
               setStatusMessage(message || "Reconnecting…");
               setIsReconnecting(true);
+              setTimeout(() => {
+                if (statusRef.current === "reconnecting") {
+                  attemptRecoveryRef.current();
+                }
+              }, 2500);
             } else if (peerStatus === "connected") {
               setStatus("connected");
               setStatusMessage("Connected!");
               setIsReconnecting(false);
               setReconnectAttempt(0);
+              recoveryFailsRef.current = 0;
+              try {
+                sessionStorage.removeItem(`ez_ir_${roomCode}`);
+              } catch {
+                /* ignore */
+              }
             } else if (peerStatus === "room_full") {
               setStatus("room_full");
               setError(
@@ -1379,6 +1477,16 @@ function VideoCallContent() {
           onError: (err) => {
             if (!mountedRef.current) return;
             console.error("❌ Error:", err);
+            // Mid-call fatal (typical after an iOS interruption kills the
+            // meeting): try to recover instead of dead-ending — recovery
+            // shows "Reconnecting…" and only surfaces the error screen after
+            // its retries + one auto-refresh are exhausted.
+            if (hadPartnerRef.current) {
+              setStatus("reconnecting");
+              setStatusMessage("Reconnecting…");
+              attemptRecoveryRef.current();
+              return;
+            }
             setError(err);
             setStatus("error");
           },
@@ -1447,37 +1555,33 @@ function VideoCallContent() {
       if (!stream) return;
 
       // A track can be readyState "live" yet muted/frozen after backgrounding.
-      // Recover if any track is dead OR the video track is muted (frozen).
-      const videoTrack = stream.getVideoTracks()[0];
-      const tracksAlive = stream.getTracks().some((t) => t.readyState === "live");
-      const videoFrozen = videoTrack ? videoTrack.muted : false;
-      if (tracksAlive && !videoFrozen) return; // healthy — nothing to do
+      // Recover if ANY track (audio OR video) is dead or muted — an audio-only
+      // interruption (voice call declined quickly) previously passed this
+      // check and left the mic dead.
+      const unhealthy = stream
+        .getTracks()
+        .some((t) => t.readyState !== "live" || t.muted);
+      if (!unhealthy) return; // healthy — nothing to do
 
-      console.log("[Entrevoz] Media frozen/died after background — re-acquiring camera");
+      console.log("[Entrevoz] Media frozen/died after background — re-acquiring");
       try {
         const newStream = await getCamera("user");
         localStreamRef.current = newStream;
+        // Re-feed the transcription hook (it reads lobbyStream first).
+        setLobbyStream(newStream);
 
         // Update local video preview
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = newStream;
         }
 
-        // Update Daily.co with new media tracks
-        if (peerRef.current && "call" in peerRef.current) {
-          const dailyConn = peerRef.current as unknown as { call: { setInputDevicesAsync: (opts: { audioSource: MediaStreamTrack; videoSource: MediaStreamTrack }) => Promise<void> } | null };
-          if (dailyConn.call) {
-            const videoTrack = newStream.getVideoTracks()[0];
-            const audioTrack = newStream.getAudioTracks()[0];
-            if (videoTrack && audioTrack) {
-              await dailyConn.call.setInputDevicesAsync({
-                audioSource: audioTrack,
-                videoSource: videoTrack,
-              });
-              console.log("[Entrevoz] Media re-acquired after phone call interruption");
-            }
-          }
-        }
+        // Daily publishes its OWN tracks — never push external tracks into it
+        // (setInputDevicesAsync with raw tracks silently switches Daily into
+        // custom-track mode). Ask it to refresh its internal mic/cam instead,
+        // and let the recovery engine handle a dead meeting.
+        peerRef.current?.refreshLocalMedia();
+        attemptRecoveryRef.current();
+        console.log("[Entrevoz] Media re-acquired after phone call interruption");
       } catch (err) {
         console.error("[Entrevoz] Failed to re-acquire camera after interruption:", err);
       }

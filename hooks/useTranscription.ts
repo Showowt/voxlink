@@ -549,8 +549,16 @@ export function useTranscription({
       // Benign errors — recognition auto-restarts via onend
       if (e.error === "no-speech" || e.error === "aborted") return;
 
-      // Fatal: user revoked permission
+      // "not-allowed" during a NATIVE-CALL interruption is NOT a revoked
+      // permission — CallKit seized the mic and iOS denies capture while the
+      // phone call is active. Treat it like audio-capture so the visibility
+      // handler restarts recognition when we return. Only a foreground
+      // not-allowed is a real permission denial.
       if (e.error === "not-allowed") {
+        if (document.visibilityState === "hidden" || wasBackgroundedRef.current) {
+          console.warn("[STT] Mic seized by OS (interruption) — will retry on visibility restore");
+          return;
+        }
         setError("Microphone access denied. Allow mic permission and reload.");
         isRunRef.current = false;
         setIsListening(false);
@@ -888,10 +896,21 @@ export function useTranscription({
           }
           startWebSpeech();
         } else if (mode.current === "whisper") {
-          // Restart whisper if it died
-          if (!mrRef.current || mrRef.current.state === "inactive") {
-            startWhisper();
+          // After an AVAudioSession interruption the frozen MediaRecorder can
+          // still report "recording" and the analyser AudioContext sits
+          // "interrupted"/"suspended" (its RMS gate then reads silence forever
+          // → translation silently dead). Resume the ctx and restart the whole
+          // pipeline UNCONDITIONALLY — stopWhisper tears down cleanly.
+          try {
+            const ctx = whisperCtxRef.current;
+            if (ctx && (ctx.state as string) !== "running") {
+              ctx.resume().catch(() => {});
+            }
+          } catch {
+            /* ignore */
           }
+          stopWhisper();
+          startWhisper();
         }
       }, 500);
     };

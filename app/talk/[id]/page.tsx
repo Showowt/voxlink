@@ -432,6 +432,15 @@ function TalkContent() {
         setConnectionStatus(message || status);
         setIsConnected(status === "connected");
         isConnectedRef.current = status === "connected";
+        if (status === "connected") {
+          // Recovery succeeded — re-arm the one-shot auto-refresh so a SECOND
+          // interruption in this session can also auto-recover.
+          try {
+            sessionStorage.removeItem(`ez_ir_talk_${roomId}`);
+          } catch {
+            /* ignore */
+          }
+        }
         if (status === "room_full") {
           setIsRoomFull(true);
         }

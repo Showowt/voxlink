@@ -406,6 +406,20 @@ export class DailyConnection {
     this.call.setLocalVideo(enabled);
   }
 
+  // After an iOS interruption released the mic/camera, ask Daily to discard its
+  // (possibly dead) internal tracks and acquire fresh ones — the safe, public
+  // alternative to pushing external tracks via setInputDevicesAsync (which
+  // silently switches Daily into custom-track mode).
+  refreshLocalMedia(): void {
+    if (this.isDestroyed || !this.call) return;
+    try {
+      this.call.setLocalAudio(true, { forceDiscardTrack: true });
+      this.call.setLocalVideo(true);
+    } catch {
+      /* ignore */
+    }
+  }
+
   // Current Daily meeting state — 'joined-meeting' means the SFU connection is
   // alive. After an iOS interruption (phone call / FaceTime seizes mic+camera
   // and suspends the WebView) it is typically 'left-meeting' or 'error'.
