@@ -9,6 +9,8 @@ import { BackButton } from '@/app/components/ui/BackButton';
 import { getDeviceId } from '@/app/lib/language-os/device-id';
 import { sendCallInvite } from '@/app/lib/ring-signal';
 import { generateRoomCode } from '@/app/lib/room-code';
+import { normalizeDialCode, isValidDialCode, formatDialCode } from '@/app/lib/dial-code';
+import { resolveDialCode } from '@/app/lib/directory';
 
 interface Contact {
   id: string;
@@ -19,6 +21,19 @@ interface Contact {
   call_count: number;
   is_favorite: boolean;
 }
+
+interface PendingInvite {
+  invite_code: string;
+  invitee_label: string | null;
+  claimed_by_device_id: string | null;
+  created_at: string;
+}
+
+// Manual adds whose code isn't registered yet are saved with a `code:` device
+// id sentinel — still dialable (the code IS a ring address) and auto-upgraded
+// to the real device id once the person registers.
+const isCodeContact = (c: Contact) => c.contact_device_id.startsWith('code:');
+const codeOf = (c: Contact) => c.contact_device_id.slice(5);
 
 const FLAGS: Record<string, string> = {
   en: '\u{1F1FA}\u{1F1F8}', es: '\u{1F1EA}\u{1F1F8}', fr: '\u{1F1EB}\u{1F1F7}',
@@ -44,15 +59,56 @@ export default function ContactsPage() {
   const [deviceId, setDeviceId] = useState('');
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
 
+  const [pending, setPending] = useState<PendingInvite[]>([]);
+
   useEffect(() => {
     const id = getDeviceId();
     setDeviceId(id);
+    const upgraded = new Set<string>();
     const load = () => {
       fetch(`/api/contacts?deviceId=${encodeURIComponent(id)}`, { cache: 'no-store' })
         .then(r => r.json())
-        .then(d => { setContacts(d.contacts ?? []); setFetchError(false); })
+        .then(async d => {
+          const list: Contact[] = d.contacts ?? [];
+          setContacts(list);
+          setFetchError(false);
+          // Upgrade pass: code-sentinel contacts whose person has since
+          // registered get swapped to their real device id (same name).
+          for (const c of list.filter(isCodeContact)) {
+            const code = codeOf(c);
+            if (upgraded.has(code)) continue;
+            upgraded.add(code);
+            const resolved = await resolveDialCode(code).catch(() => null);
+            if (resolved && resolved.deviceId !== id) {
+              await fetch('/api/contacts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  ownerDeviceId: id,
+                  contactDeviceId: resolved.deviceId,
+                  displayName: c.display_name,
+                  language: resolved.language || c.language,
+                }),
+              }).catch(() => {});
+              await fetch('/api/contacts', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ownerDeviceId: id, contactDeviceId: c.contact_device_id }),
+              }).catch(() => {});
+              fetch(`/api/contacts?deviceId=${encodeURIComponent(id)}`, { cache: 'no-store' })
+                .then(r => r.json())
+                .then(dd => setContacts(dd.contacts ?? []))
+                .catch(() => {});
+            }
+          }
+        })
         .catch(() => { setFetchError(true); })
         .finally(() => setLoading(false));
+      // Pending invites → shown as "Invited — waiting" entries.
+      fetch(`/api/invite?inviterDeviceId=${encodeURIComponent(id)}`, { cache: 'no-store' })
+        .then(r => r.json())
+        .then(d => setPending((d.invites ?? []).filter((i: PendingInvite) => !i.claimed_by_device_id)))
+        .catch(() => {});
     };
     load();
     // Refresh whenever the page regains focus/visibility — in the native shell
@@ -124,9 +180,10 @@ export default function ContactsPage() {
     const myLang = localStorage.getItem('entrevoz_lang') || 'en';
     const myName = localStorage.getItem('entrevoz_name') || 'Someone';
     // Ring the contact on their device (Realtime) so they can accept — no link
-    // to send. Best-effort + short; we enter the room as host regardless (the
-    // "Share invite link" menu still covers contacts who aren't online).
-    await sendCallInvite(c.contact_device_id, {
+    // to send. A code-sentinel contact rings by its dial code (the code IS an
+    // address); a real contact rings by device id.
+    const ringTarget = isCodeContact(c) ? codeOf(c) : c.contact_device_id;
+    await sendCallInvite(ringTarget, {
       room: code,
       type,
       fromDevice: deviceId || getDeviceId(),
@@ -134,12 +191,136 @@ export default function ContactsPage() {
       fromLang: myLang,
       targetLang: c.language,
     });
-    const seed = `&name=${encodeURIComponent(myName)}&pd=${encodeURIComponent(c.contact_device_id)}&pn=${encodeURIComponent(c.display_name)}`;
+    // Only seed pd for a real device id — a code can't be saved as a partner.
+    const seed =
+      `&name=${encodeURIComponent(myName)}` +
+      (isCodeContact(c)
+        ? ''
+        : `&pd=${encodeURIComponent(c.contact_device_id)}&pn=${encodeURIComponent(c.display_name)}`);
     router.push(
       type === 'video'
         ? `/call/${code}?lang=${myLang}&hostLang=${c.language}&host=true${seed}`
         : `/talk/${code}?lang=${myLang}&partnerLang=${c.language}&host=true${seed}`,
     );
+  };
+
+  // ── Add contact / invite ──────────────────────────────────────────────────
+  const [showAdd, setShowAdd] = useState(false);
+  const [addMode, setAddMode] = useState<'code' | 'invite'>('code');
+  const [addName, setAddName] = useState('');
+  const [addCode, setAddCode] = useState('');
+  const [addBusy, setAddBusy] = useState(false);
+  const [addNote, setAddNote] = useState('');
+  const [inviteLink, setInviteLink] = useState('');
+
+  const resetAdd = () => {
+    setShowAdd(false);
+    setAddMode('code');
+    setAddName('');
+    setAddCode('');
+    setAddBusy(false);
+    setAddNote('');
+    setInviteLink('');
+  };
+
+  const refreshList = () => {
+    fetch(`/api/contacts?deviceId=${encodeURIComponent(deviceId)}`, { cache: 'no-store' })
+      .then(r => r.json())
+      .then(d => setContacts(d.contacts ?? []))
+      .catch(() => {});
+    fetch(`/api/invite?inviterDeviceId=${encodeURIComponent(deviceId)}`, { cache: 'no-store' })
+      .then(r => r.json())
+      .then(d => setPending((d.invites ?? []).filter((i: PendingInvite) => !i.claimed_by_device_id)))
+      .catch(() => {});
+  };
+
+  const submitAddByCode = async () => {
+    const code = normalizeDialCode(addCode);
+    if (!isValidDialCode(code)) {
+      setAddNote('Enter a valid 6-character code (like ABC-DEF).');
+      return;
+    }
+    setAddBusy(true);
+    setAddNote('');
+    const resolved = await resolveDialCode(code).catch(() => null);
+    if (resolved && resolved.deviceId === deviceId) {
+      setAddBusy(false);
+      setAddNote("That's your own code.");
+      return;
+    }
+    const body = resolved
+      ? {
+          ownerDeviceId: deviceId,
+          contactDeviceId: resolved.deviceId,
+          displayName: addName.trim() || resolved.displayName || `Contact ${formatDialCode(code)}`,
+          language: resolved.language || 'en',
+        }
+      : {
+          // Not registered yet — save as a dialable code-contact; auto-upgrades
+          // to their real device id once they open Entrevoz.
+          ownerDeviceId: deviceId,
+          contactDeviceId: `code:${code}`,
+          displayName: addName.trim() || `Contact ${formatDialCode(code)}`,
+          language: 'en',
+        };
+    const r = await fetch('/api/contacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).catch(() => null);
+    setAddBusy(false);
+    if (r?.ok) {
+      refreshList();
+      resetAdd();
+    } else {
+      setAddNote("Couldn't save — check your connection and try again.");
+    }
+  };
+
+  const submitInvite = async () => {
+    setAddBusy(true);
+    setAddNote('');
+    const r = await fetch('/api/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        deviceId,
+        inviterName: localStorage.getItem('entrevoz_name') || '',
+        inviterLang: localStorage.getItem('entrevoz_lang') || 'en',
+        inviteeLabel: addName.trim() || undefined,
+      }),
+    }).catch(() => null);
+    setAddBusy(false);
+    const d = r?.ok ? await r.json().catch(() => null) : null;
+    if (d?.inviteCode) {
+      setInviteLink(`${window.location.origin}/i/${d.inviteCode}`);
+      refreshList();
+    } else {
+      setAddNote("Couldn't create the invite — try again.");
+    }
+  };
+
+  const shareInviteLink = async (link: string, label?: string | null) => {
+    const who = label ? `${label}, ` : '';
+    const text = `${who}let's talk with live translation on Entrevoz — tap to connect with me: ${link}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'Entrevoz', text });
+        return;
+      } catch {
+        /* fall through */
+      }
+    }
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
+  const cancelInvite = async (inv: PendingInvite) => {
+    setPending(prev => prev.filter(p => p.invite_code !== inv.invite_code));
+    await fetch('/api/invite', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceId, inviteCode: inv.invite_code }),
+    }).catch(() => {});
   };
 
   const shareInvite = (c: Contact) => {
@@ -198,8 +379,134 @@ export default function ContactsPage() {
       <header className="flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 border-b border-white/[0.06]">
         <BackButton href="/" label="Home" />
         <h1 className="text-white text-sm font-semibold tracking-tight">Contacts</h1>
-        <div className="w-10" />
+        <button
+          onClick={(e) => { e.stopPropagation(); setShowAdd(true); }}
+          className="w-10 h-10 rounded-xl bg-[#00C896]/10 border border-[#00C896]/25 flex items-center justify-center text-[#00C896] text-xl font-bold active:scale-90 transition-all"
+          aria-label="Add contact"
+        >
+          +
+        </button>
       </header>
+
+      {/* Add contact / invite modal */}
+      {showAdd && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center px-6"
+          onClick={(e) => { e.stopPropagation(); resetAdd(); }}
+        >
+          <div
+            className="w-full max-w-sm bg-[#12121a] border border-white/[0.12] rounded-2xl p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {inviteLink ? (
+              <>
+                <div className="text-center mb-4">
+                  <div className="text-3xl mb-2">✉️</div>
+                  <p className="text-white font-semibold">
+                    Invite {addName.trim() ? `for ${addName.trim()}` : 'ready'}
+                  </p>
+                  <p className="text-white/40 text-xs mt-1">
+                    They tap the link, and you both become contacts automatically.
+                  </p>
+                </div>
+                <div className="rounded-xl bg-white/5 border border-white/10 px-3 py-2.5 text-white/70 text-xs break-all mb-4">
+                  {inviteLink}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => shareInviteLink(inviteLink, addName.trim() || null)}
+                    className="flex-1 py-3 rounded-xl bg-[#00C896] text-black text-sm font-bold min-h-[48px]"
+                  >
+                    Send invite
+                  </button>
+                  <button
+                    onClick={resetAdd}
+                    className="px-5 py-3 rounded-xl bg-white/[0.06] border border-white/10 text-white/70 text-sm font-semibold min-h-[48px]"
+                  >
+                    Done
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Mode toggle */}
+                <div className="flex gap-1 p-1 rounded-xl bg-white/[0.04] border border-white/[0.06] mb-4">
+                  <button
+                    onClick={() => { setAddMode('code'); setAddNote(''); }}
+                    className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all min-h-[44px] ${
+                      addMode === 'code' ? 'bg-white/[0.10] text-white border border-white/[0.10]' : 'text-white/40'
+                    }`}
+                  >
+                    Have their code
+                  </button>
+                  <button
+                    onClick={() => { setAddMode('invite'); setAddNote(''); }}
+                    className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all min-h-[44px] ${
+                      addMode === 'invite' ? 'bg-white/[0.10] text-white border border-white/[0.10]' : 'text-white/40'
+                    }`}
+                  >
+                    Invite them
+                  </button>
+                </div>
+
+                <p className="text-white/40 text-[10px] uppercase tracking-widest mb-2">Name</p>
+                <input
+                  value={addName}
+                  onChange={(e) => setAddName(e.target.value)}
+                  placeholder={addMode === 'code' ? 'Who is this?' : 'Who are you inviting?'}
+                  maxLength={60}
+                  autoCorrect="off"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-base placeholder-white/25 focus:outline-none focus:border-[#00C896]/50 mb-4 min-h-[48px]"
+                />
+
+                {addMode === 'code' ? (
+                  <>
+                    <p className="text-white/40 text-[10px] uppercase tracking-widest mb-2">Their Entrevoz code</p>
+                    <input
+                      value={addCode}
+                      onChange={(e) => setAddCode(formatDialCode(normalizeDialCode(e.target.value)))}
+                      onKeyDown={(e) => { if (e.key === 'Enter') submitAddByCode(); }}
+                      placeholder="ABC-DEF"
+                      inputMode="text"
+                      autoCapitalize="characters"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      className="w-full text-center text-xl font-black tracking-[0.2em] bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/20 focus:outline-none focus:border-[#00C896]/50 mb-2 min-h-[52px]"
+                    />
+                    <p className="text-white/30 text-[11px] mb-4">
+                      If they haven&apos;t opened Entrevoz yet, we&apos;ll save them anyway — their
+                      phone rings by code, and the contact links up when they join.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-white/35 text-xs leading-relaxed mb-4">
+                    No code needed — we create a personal link. The moment they open it,
+                    you&apos;re both saved as contacts and can call with live translation.
+                  </p>
+                )}
+
+                {addNote && <p className="text-amber-400/90 text-xs mb-3">{addNote}</p>}
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={resetAdd}
+                    className="flex-1 py-3 rounded-xl bg-white/[0.06] border border-white/10 text-white/70 text-sm font-semibold min-h-[48px]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={addMode === 'code' ? submitAddByCode : submitInvite}
+                    disabled={addBusy || (addMode === 'code' && !normalizeDialCode(addCode))}
+                    className="flex-1 py-3 rounded-xl bg-[#00C896] text-black text-sm font-bold min-h-[48px] disabled:opacity-40"
+                  >
+                    {addBusy ? 'Saving…' : addMode === 'code' ? 'Save contact' : 'Create invite'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4" style={{ WebkitOverflowScrolling: 'touch' }}>
@@ -209,7 +516,45 @@ export default function ContactsPage() {
           </div>
         )}
 
-        {!loading && contacts.length === 0 && (
+        {/* Pending invites */}
+        {!loading && pending.length > 0 && (
+          <div className="mb-6">
+            <p className="text-white/40 text-[10px] uppercase tracking-widest font-semibold mb-3 px-1">Invited</p>
+            <div className="space-y-2">
+              {pending.map(inv => (
+                <div key={inv.invite_code} className="bg-white/[0.03] border border-dashed border-white/[0.12] rounded-2xl p-4 flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-full bg-white/[0.06] border border-white/[0.1] flex items-center justify-center text-white/50 font-semibold text-base flex-shrink-0">
+                    {(inv.invitee_label || '?').charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-white text-sm font-medium truncate block">
+                      {inv.invitee_label || 'Invited friend'}
+                    </span>
+                    <span className="text-amber-400/70 text-xs">Invited — waiting to join</span>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      shareInviteLink(`${window.location.origin}/i/${inv.invite_code}`, inv.invitee_label);
+                    }}
+                    className="px-3.5 py-2.5 rounded-xl bg-[#00C896]/10 border border-[#00C896]/20 text-[#00C896] text-xs font-semibold active:scale-95 transition-all min-h-[44px]"
+                  >
+                    Resend
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); cancelInvite(inv); }}
+                    className="w-10 h-10 rounded-xl flex items-center justify-center text-white/25 hover:text-red-400 transition-colors"
+                    aria-label="Cancel invite"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!loading && contacts.length === 0 && pending.length === 0 && (
           <div className="text-center py-16">
             {fetchError ? (
               <>
@@ -238,14 +583,23 @@ export default function ContactsPage() {
                 </div>
                 <p className="text-white font-medium text-base mb-2">No contacts yet</p>
                 <p className="text-white/40 text-sm leading-relaxed max-w-[260px] mx-auto">
-                  People you call will appear here automatically. Star them to pin as favorites.
+                  Add someone by their code, invite them with a link, or just call —
+                  people you talk to save automatically.
                 </p>
-                <button
-                  onClick={() => router.push('/')}
-                  className="mt-6 px-5 py-2.5 rounded-xl text-sm font-medium bg-[#00C896]/10 text-[#00C896] border border-[#00C896]/20 hover:bg-[#00C896]/15 transition-all active:scale-95"
-                >
-                  Start a call
-                </button>
+                <div className="mt-6 flex flex-col gap-2 items-center">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShowAdd(true); }}
+                    className="px-5 py-2.5 rounded-xl text-sm font-bold bg-[#00C896] text-black transition-all active:scale-95 min-h-[44px]"
+                  >
+                    + Add or invite someone
+                  </button>
+                  <button
+                    onClick={() => router.push('/dial')}
+                    className="px-5 py-2.5 rounded-xl text-sm font-medium bg-[#00C896]/10 text-[#00C896] border border-[#00C896]/20 hover:bg-[#00C896]/15 transition-all active:scale-95 min-h-[44px]"
+                  >
+                    Dial a code
+                  </button>
+                </div>
               </>
             )}
           </div>
@@ -334,7 +688,9 @@ function ContactCard({
             {c.is_favorite && <span className="text-[#00C896] text-xs">★</span>}
           </div>
           <span className="text-white/30 text-xs">
-            {c.call_count} {c.call_count === 1 ? 'call' : 'calls'} · {timeAgo(c.last_called_at)}
+            {isCodeContact(c)
+              ? `Rings by code ${formatDialCode(codeOf(c))} · links up when they join`
+              : `${c.call_count} ${c.call_count === 1 ? 'call' : 'calls'} · ${timeAgo(c.last_called_at)}`}
           </span>
         </div>
 
