@@ -23,6 +23,8 @@ import { useBrowserSupport } from "../../lib/browser-support";
 import { shareJoinLink } from "../../lib/share-link";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { addTranslation } from "@/app/lib/translation-history";
+import { checkMicPermission } from "@/app/lib/mic-permission";
+import MicReminder from "@/app/components/MicReminder";
 import LearningMode, { useLearningMode, TappableCaption, LearningInsightCard } from "../../components/LearningMode";
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1131,6 +1133,25 @@ function TalkContent() {
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [startListening]);
 
+  // ── MIC PERMISSION REMINDER ───────────────────────────────────────────────
+  // Connected but the mic never started capturing (forgotten/denied) → remind
+  // instead of a silently one-way conversation.
+  const [showMicReminder, setShowMicReminder] = useState(false);
+  const micReminderDismissedRef = useRef(false);
+  useEffect(() => {
+    if (!isConnected || micReminderDismissedRef.current) return;
+    const t = setTimeout(async () => {
+      if (!mountedRef.current || micReminderDismissedRef.current || isListening) return;
+      const perm = await checkMicPermission();
+      if (perm === "denied" || perm === "prompt") setShowMicReminder(true);
+    }, 5000);
+    return () => clearTimeout(t);
+  }, [isConnected, isListening]);
+  const onMicGranted = useCallback(() => {
+    setShowMicReminder(false);
+    startListening();
+  }, [startListening]);
+
   // Derived display values
   const displayTargetLang = partnerLang || defaultTargetLang;
   const statusColor = isRoomFull
@@ -1233,6 +1254,14 @@ function TalkContent() {
 
   return (
     <div className="h-[100dvh] bg-[#0a0a0f] flex flex-col overflow-hidden">
+      <MicReminder
+        visible={showMicReminder}
+        onGranted={onMicGranted}
+        onDismiss={() => {
+          micReminderDismissedRef.current = true;
+          setShowMicReminder(false);
+        }}
+      />
       {/* Header */}
       <div className="bg-black/80 backdrop-blur-xl border-b border-white/10 px-4 py-3 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">

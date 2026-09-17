@@ -8,6 +8,7 @@ import { startRingtone } from "@/app/lib/ringtone";
 import { blockDevice } from "@/app/lib/call-block";
 import { generateRoomCode } from "@/app/lib/room-code";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
+import LanguagePick from "@/app/components/LanguagePick";
 
 // Routes where the user is already in a live session — don't interrupt them
 // with an incoming-call takeover there.
@@ -32,6 +33,27 @@ export default function IncomingCallOverlay() {
     const stop = startRingtone();
     return stop;
   }, [active]);
+
+  // The callee picks THEIR language BEFORE answering so translation is right
+  // from the first word. Pre-filled from their saved preference; changing it
+  // persists app-wide.
+  const [myRingLang, setMyRingLang] = useState("en");
+  useEffect(() => {
+    if (!active) return;
+    try {
+      setMyRingLang(localStorage.getItem("entrevoz_lang") || "en");
+    } catch {
+      /* ignore */
+    }
+  }, [active]);
+  const pickRingLang = (code: string) => {
+    setMyRingLang(code);
+    try {
+      localStorage.setItem("entrevoz_lang", code);
+    } catch {
+      /* ignore */
+    }
+  };
 
   // "They declined" feedback for the CALLER — without this, a declined call
   // just looks like "Waiting for partner…" forever.
@@ -193,6 +215,7 @@ export default function IncomingCallOverlay() {
     // correct from the first word. The lobby is always shown, so the callee
     // still chooses/confirms (guest-language rule respected).
     const myLang =
+      myRingLang ||
       (typeof window !== "undefined" && localStorage.getItem("entrevoz_lang")) ||
       "";
     const myName =
@@ -257,6 +280,15 @@ export default function IncomingCallOverlay() {
           <span className="text-base leading-none">{FLAGS[invite.fromLang] || "🌐"}</span>
           is calling you — live translated
         </p>
+
+        {/* Pick YOUR language before answering so translation is right from
+            the first word (pre-filled from your saved preference). */}
+        <div className="mt-7 w-full max-w-xs text-left">
+          <p className="mb-2 text-center text-[10px] font-semibold uppercase tracking-[0.25em] text-white/35">
+            I speak
+          </p>
+          <LanguagePick value={myRingLang} onChange={pickRingLang} />
+        </div>
       </div>
 
       {/* actions */}

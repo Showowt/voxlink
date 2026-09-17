@@ -42,6 +42,8 @@ import { useRemoteTranscription } from "@/hooks/useRemoteTranscription";
 import { setTtsSpeaking, subscribeTtsSpeaking } from "@/lib/tts-gate";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { addTranslation } from "@/app/lib/translation-history";
+import { checkMicPermission } from "@/app/lib/mic-permission";
+import MicReminder from "@/app/components/MicReminder";
 import { useCallRecording } from "@/hooks/useCallRecording";
 import RecordingIndicator from "../../components/RecordingIndicator";
 import { saveRecording } from "@/app/lib/recording-storage";
@@ -1053,6 +1055,38 @@ function VideoCallContent() {
   useEffect(() => {
     isListeningRef.current = isListening;
   }, [isListening]);
+
+  // ── MIC PERMISSION REMINDER ───────────────────────────────────────────────
+  // Translation is on but the mic isn't actually capturing (permission
+  // forgotten/denied) → remind instead of a silently broken call. Checks a few
+  // seconds after connect and whenever STT reports a mic denial.
+  const [showMicReminder, setShowMicReminder] = useState(false);
+  const micReminderDismissedRef = useRef(false);
+  useEffect(() => {
+    if (status !== "connected" || !translationEnabled || inLobby) return;
+    if (micReminderDismissedRef.current) return;
+    const t = setTimeout(async () => {
+      if (!mountedRef.current || micReminderDismissedRef.current) return;
+      const sttDenied = /denied|not-allowed|microphone/i.test(transcription.error || "");
+      const perm = await checkMicPermission();
+      if (sttDenied || perm === "denied" || (perm === "prompt" && !isListeningRef.current)) {
+        setShowMicReminder(true);
+      }
+    }, 4000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, translationEnabled, inLobby, transcription.error]);
+
+  const onMicGranted = useCallback(() => {
+    setShowMicReminder(false);
+    // Fresh permission: let Daily re-acquire its mic and restart STT by
+    // cycling the translation toggle (flips the hook's isActive).
+    peerRef.current?.refreshLocalMedia();
+    setTranslationEnabled(false);
+    setTimeout(() => {
+      if (mountedRef.current) setTranslationEnabled(true);
+    }, 400);
+  }, []);
 
   // ── iOS INTERRUPTION AUTO-RECOVERY ────────────────────────────────────────
   // A native phone call / FaceTime seizes mic+camera and suspends the WebView;
@@ -2118,6 +2152,14 @@ function VideoCallContent() {
 
   return (
     <div className="min-h-screen-safe bg-black flex flex-col safe-x">
+      <MicReminder
+        visible={showMicReminder}
+        onGranted={onMicGranted}
+        onDismiss={() => {
+          micReminderDismissedRef.current = true;
+          setShowMicReminder(false);
+        }}
+      />
       {/* Video Container */}
       <div className="flex-1 relative overflow-hidden">
         {/* Remote Video (full screen) */}

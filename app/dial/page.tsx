@@ -14,6 +14,7 @@ import {
 import { sendCallInvite } from "@/app/lib/ring-signal";
 import { generateRoomCode } from "@/app/lib/room-code";
 import { registerDirectory, resolveDialCode } from "@/app/lib/directory";
+import LanguagePick from "@/app/components/LanguagePick";
 
 const randomRoom = () => generateRoomCode();
 
@@ -69,6 +70,17 @@ export default function DialPage() {
     }
   };
 
+  // Persist the user's language — drives their STT, what partners hear, the QR
+  // deep-link, and the dial directory (so callers translate correctly).
+  const updateLang = (code: string) => {
+    setMyLang(code);
+    try {
+      localStorage.setItem("entrevoz_lang", code);
+    } catch {
+      /* ignore */
+    }
+  };
+
   const addLink = () => {
     const params = new URLSearchParams({ d: getDeviceId(), c: myCode, l: myLang });
     if (myName) params.set("n", myName);
@@ -105,8 +117,10 @@ export default function DialPage() {
     if (!isValidDialCode(code) || code === myCode) return;
     setCalling(true);
     const room = randomRoom();
-    const lang = localStorage.getItem("entrevoz_lang") || "en";
-    const name = localStorage.getItem("entrevoz_name") || "Someone";
+    // Use the on-screen selection (state) — it's persisted, but state is the
+    // freshest source when the user just changed it.
+    const lang = myLang || localStorage.getItem("entrevoz_lang") || "en";
+    const name = myName.trim() || localStorage.getItem("entrevoz_name") || "Someone";
 
     // Resolve the code to a real identity so we can SAVE this person as a contact
     // right now (a dial code alone can't be saved — it's a one-way hash) and know
@@ -180,6 +194,14 @@ export default function DialPage() {
               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-base placeholder-white/25 focus:outline-none focus:border-[#00E5A0]/40 min-h-[48px]"
             />
             <p className="text-white/30 text-[11px] mt-1.5">So people know it&apos;s you when you call or share your code.</p>
+          </div>
+
+          {/* I speak — the caller's language, so translation is right from the
+              first word when dialing out (previously there was no way to set
+              it here and calls silently used a default). */}
+          <div className="mb-6 text-left">
+            <label className="text-white/40 text-[10px] uppercase tracking-widest block mb-2">I speak</label>
+            <LanguagePick value={myLang} onChange={updateLang} />
           </div>
 
           <p className="text-white/40 text-xs uppercase tracking-[0.25em] mb-3">Your Entrevoz code</p>
