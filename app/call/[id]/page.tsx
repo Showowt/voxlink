@@ -45,6 +45,7 @@ import { addTranslation } from "@/app/lib/translation-history";
 import { checkMicPermission } from "@/app/lib/mic-permission";
 import MicReminder from "@/app/components/MicReminder";
 import { sendCallSignal } from "@/app/lib/ring-signal";
+import { ensureAIConsent } from "@/app/lib/ai-consent";
 import { useCallRecording } from "@/hooks/useCallRecording";
 import RecordingIndicator from "../../components/RecordingIndicator";
 import { saveRecording } from "@/app/lib/recording-storage";
@@ -1348,6 +1349,9 @@ function VideoCallContent() {
       videoEnabled: boolean;
       cyranoEnabled: boolean;
     }) => {
+      // Permission BEFORE any audio leaves the device (5.1.1) — joining sends
+      // call media to Daily and speech to the translation pipeline.
+      if (!ensureAIConsent()) return;
       setLobbyStream(settings.stream);
       setUserLang(settings.userLang);
       setExpectedPartnerLang(settings.partnerLang);

@@ -13,6 +13,13 @@ import type {
 } from "../lib/speech-types";
 // Import to ensure global Window augmentation
 import "../lib/speech-types";
+import { ensureAIConsent } from "../lib/ai-consent";
+import {
+  startWhisperCapture,
+  whisperAvailable,
+  isFatalSpeechError,
+  type WhisperCaptureHandle,
+} from "../lib/whisper-capture";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // VOXLINK FACE-TO-FACE - True Split-Screen Mode
@@ -183,6 +190,69 @@ export default function FaceToFacePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Whisper fallback ───────────────────────────────────────────────────────
+  // webkitSpeechRecognition can EXIST but not WORK (Siri/Dictation disabled —
+  // the default on App-Review devices → "service-not-allowed"). When that
+  // happens we switch this session to tap-to-talk Whisper capture (our own
+  // /api/transcribe) — the user just keeps using the same mic buttons.
+  const whisperModeRef = useRef(false);
+  const whisperHandleRef = useRef<WhisperCaptureHandle | null>(null);
+  const whisperSpeakerRef = useRef<Speaker | null>(null);
+
+  // Shared final-text pipeline (used by BOTH web-speech results and whisper).
+  const handleFinalText = useCallback(
+    async (speaker: Speaker, lang: string, finalTranscript: string) => {
+      const setState = speaker === "top" ? setTopState : setBottomState;
+      const targetLang = speaker === "top" ? bottomLang : topLang;
+      setState((prev) => ({ ...prev, original: finalTranscript, isTranslating: true }));
+      const context = f2fContextRef.current.slice(-8);
+      const translated = await translate(finalTranscript, lang, targetLang, context);
+      f2fContextRef.current = [...f2fContextRef.current, finalTranscript].slice(-8);
+      setState((prev) => ({ ...prev, isTranslating: false }));
+      if (translated) {
+        const setOtherState = speaker === "top" ? setBottomState : setTopState;
+        setOtherState((prev) => ({ ...prev, translated }));
+        speak(translated, targetLang);
+      }
+    },
+    [topLang, bottomLang, translate, speak],
+  );
+
+  const startWhisperFor = useCallback(
+    async (speaker: Speaker, lang: string) => {
+      const setState = speaker === "top" ? setTopState : setBottomState;
+      const listeningRef = speaker === "top" ? topListeningRef : bottomListeningRef;
+      const handle = await startWhisperCapture({
+        lang,
+        onFinal: (text) => handleFinalText(speaker, lang, text),
+        onError: (msg) => setError(msg),
+      });
+      if (!handle) {
+        listeningRef.current = false;
+        setState((prev) => ({ ...prev, isListening: false }));
+        return;
+      }
+      whisperHandleRef.current = handle;
+      whisperSpeakerRef.current = speaker;
+      listeningRef.current = true;
+      setState((prev) => ({ ...prev, isListening: true }));
+    },
+    [handleFinalText],
+  );
+
+  const stopWhisper = useCallback(() => {
+    const speaker = whisperSpeakerRef.current;
+    whisperHandleRef.current?.stop(); // finalizes → transcription → handleFinalText
+    whisperHandleRef.current = null;
+    whisperSpeakerRef.current = null;
+    if (speaker) {
+      const setState = speaker === "top" ? setTopState : setBottomState;
+      const listeningRef = speaker === "top" ? topListeningRef : bottomListeningRef;
+      listeningRef.current = false;
+      setState((prev) => ({ ...prev, isListening: false }));
+    }
+  }, []);
+
   // Create speech recognition for a speaker
   const createRecognition = useCallback(
     (speaker: Speaker, lang: string): SpeechRecognitionInstance | null => {
@@ -221,40 +291,34 @@ export default function FaceToFacePage() {
         const displayText = finalTranscript || interimTranscript;
         setState((prev) => ({ ...prev, original: displayText }));
 
-        // Translate final results
+        // Translate final results (shared pipeline with the whisper fallback)
         if (finalTranscript) {
-          setState((prev) => ({ ...prev, isTranslating: true }));
-          const context = f2fContextRef.current.slice(-8);
-          const translated = await translate(
-            finalTranscript,
-            lang,
-            targetLang,
-            context,
-          );
-          // Record this finalized line as context for subsequent turns (both
-          // speakers share one buffer since they're on the same device).
-          f2fContextRef.current = [
-            ...f2fContextRef.current,
-            finalTranscript,
-          ].slice(-8);
-
-          setState((prev) => ({ ...prev, isTranslating: false }));
-
-          // Only update/speak when we got a real translation — never show or
-          // speak the untranslated source text on the other side.
-          if (translated) {
-            const setOtherState =
-              speaker === "top" ? setBottomState : setTopState;
-            setOtherState((prev) => ({ ...prev, translated }));
-            speak(translated, targetLang);
-          }
+          void targetLang; // target resolved inside the shared handler
+          handleFinalText(speaker, lang, finalTranscript);
         }
       };
 
       recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
         console.error(`${speaker} speech error:`, event.error);
+        // Apple's speech service unavailable (Siri/Dictation off — default on
+        // App-Review devices): silently switch to Whisper and keep going —
+        // this was the "error notification" that blocked voice translation.
+        if (isFatalSpeechError(event.error) && whisperAvailable()) {
+          whisperModeRef.current = true;
+          try {
+            recognition.abort();
+          } catch {
+            /* ignore */
+          }
+          startWhisperFor(speaker, lang);
+          return;
+        }
         if (event.error !== "no-speech" && event.error !== "aborted") {
-          setError(`Microphone error: ${event.error}`);
+          setError(
+            event.error === "not-allowed"
+              ? "Microphone access is needed — allow it and tap the mic again."
+              : `Microphone error: ${event.error}`,
+          );
         }
         setState((prev) => ({ ...prev, isListening: false }));
         listeningRef.current = false;
@@ -291,6 +355,19 @@ export default function FaceToFacePage() {
         speaker === "top" ? bottomListeningRef : topListeningRef;
       const lang = speaker === "top" ? topLang : bottomLang;
       const setState = speaker === "top" ? setTopState : setBottomState;
+
+      if (!listeningRef.current && !ensureAIConsent()) return; // permission BEFORE sending audio
+
+      // Whisper-fallback mode: same buttons, tap to start / tap to finish.
+      if (whisperModeRef.current) {
+        if (whisperHandleRef.current) {
+          stopWhisper(); // finishes the utterance → transcribe → translate
+        } else {
+          setError("");
+          startWhisperFor(speaker, lang);
+        }
+        return;
+      }
 
       // Stop the other speaker first (only one can speak at a time)
       if (otherListeningRef.current) {

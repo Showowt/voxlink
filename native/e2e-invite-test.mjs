@@ -62,6 +62,7 @@ const page = await ctx.newPage();
 await page.setViewport({ width: 390, height: 844 });
 await page.evaluateOnNewDocument((id) => {
   localStorage.setItem("los_device_id", id);
+      localStorage.setItem("entrevoz_ai_consent", "granted:test");
 }, MOM_ID);
 await page.goto(`${BASE}/i/${inviteCode}`, { waitUntil: "networkidle2", timeout: 45000 });
 await new Promise((s) => setTimeout(s, 2500));

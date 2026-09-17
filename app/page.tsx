@@ -15,6 +15,13 @@ import {
 } from "./components/LanguageSelector";
 import { addTranslation } from "./lib/translation-history";
 import { registerDirectory } from "./lib/directory";
+import { ensureAIConsent } from "./lib/ai-consent";
+import {
+  startWhisperCapture,
+  whisperAvailable,
+  isFatalSpeechError,
+  type WhisperCaptureHandle,
+} from "./lib/whisper-capture";
 import { OnboardingTutorial } from "./components/OnboardingTutorial";
 import { hasSeenOnboarding, completeOnboarding } from "./lib/onboarding";
 // Premium UI Components
@@ -646,6 +653,21 @@ function VoxNoteTab() {
     recognition.onerror = (event: any) => {
       console.error("Speech recognition error:", event.error);
 
+      // Apple's speech service unavailable (Siri/Dictation disabled — the
+      // default on App-Review devices): switch to our Whisper pipeline
+      // seamlessly instead of a dead-end error notification.
+      if (isFatalSpeechError(event.error) && whisperAvailable()) {
+        whisperFallbackRef.current = true;
+        try {
+          recognition.abort();
+        } catch {
+          /* ignore */
+        }
+        recognitionRef.current = null;
+        startWhisperRecording();
+        return;
+      }
+
       switch (event.error) {
         case "no-speech":
           setError("No speech detected. Please try again.");
@@ -697,6 +719,31 @@ function VoxNoteTab() {
     }
   }, [sourceLang, translateText]);
 
+  // ── Whisper fallback (webkitSpeechRecognition exists but doesn't work) ────
+  const whisperFallbackRef = useRef(false);
+  const whisperHandleRef = useRef<WhisperCaptureHandle | null>(null);
+  const startWhisperRecording = useCallback(async () => {
+    setError("");
+    const handle = await startWhisperCapture({
+      lang: sourceLang,
+      onFinal: (text) => {
+        finalTranscriptRef.current = text;
+        translateText(text);
+      },
+      onError: (msg) => {
+        setError(msg);
+        setIsRecording(false);
+      },
+    });
+    if (!handle) return;
+    whisperHandleRef.current = handle;
+    setIsRecording(true);
+    if (!timerRef.current) {
+      timerRef.current = setInterval(() => setRecordingTime((t) => t + 1), 1000);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceLang, translateText]);
+
   // Stop recording
   const stopRecording = useCallback(() => {
     setIsRecording(false);
@@ -705,6 +752,13 @@ function VoxNoteTab() {
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
+    }
+
+    // Whisper mode: finishing the tap-to-talk → transcribe → translate.
+    if (whisperHandleRef.current) {
+      whisperHandleRef.current.stop();
+      whisperHandleRef.current = null;
+      return;
     }
 
     if (recognitionRef.current) {
@@ -717,8 +771,11 @@ function VoxNoteTab() {
 
   // Toggle recording
   const toggleRecording = () => {
+    if (!isRecording && !ensureAIConsent()) return; // permission BEFORE sending audio
     if (isRecording) {
       stopRecording();
+    } else if (whisperFallbackRef.current) {
+      startWhisperRecording();
     } else {
       startRecording();
     }

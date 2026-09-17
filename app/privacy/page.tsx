@@ -137,44 +137,79 @@ export default function PrivacyPage() {
             </h2>
             <div className="space-y-4 text-gray-300">
               <p>
-                Entrevoz uses the following third-party services to provide
-                translation functionality:
+                Entrevoz provides live translation by sending the content you
+                choose to translate to the following AI and infrastructure
+                services. We ask for your explicit consent in-app before any of
+                this data is sent, and it is used solely to provide the
+                translation features — never sold and never used for
+                advertising.
               </p>
               <div className="space-y-3">
                 <div className="p-4 bg-[#1a1a2e] rounded-xl border border-gray-700">
                   <h3 className="text-white font-medium mb-1">
-                    MyMemory Translation API
+                    OpenAI (Whisper) — speech-to-text
                   </h3>
                   <p className="text-sm text-gray-400">
-                    Processes text for translation. Subject to MyMemory&apos;s
-                    privacy policy.
+                    Receives short recordings of your voice and returns the
+                    transcript so your speech can be translated. Audio is
+                    processed for transcription only.
                   </p>
                 </div>
                 <div className="p-4 bg-[#1a1a2e] rounded-xl border border-gray-700">
                   <h3 className="text-white font-medium mb-1">
-                    LibreTranslate API
+                    Anthropic (Claude) — translation
                   </h3>
                   <p className="text-sm text-gray-400">
-                    Open-source translation service used as a fallback.
+                    Receives the words you speak or type (plus recent
+                    conversation context) and returns the translation.
                   </p>
                 </div>
                 <div className="p-4 bg-[#1a1a2e] rounded-xl border border-gray-700">
                   <h3 className="text-white font-medium mb-1">
-                    Google Translate API
+                    ElevenLabs — voice generation (optional)
                   </h3>
                   <p className="text-sm text-gray-400">
-                    May be used for certain translation requests. Subject to
-                    Google&apos;s privacy policy.
+                    Only if you enable spoken voice output or Voice Mimic:
+                    receives translated text (and, for Voice Mimic, short voice
+                    samples) to generate natural speech. Temporary voice models
+                    are deleted automatically.
                   </p>
                 </div>
                 <div className="p-4 bg-[#1a1a2e] rounded-xl border border-gray-700">
-                  <h3 className="text-white font-medium mb-1">PeerJS/WebRTC</h3>
+                  <h3 className="text-white font-medium mb-1">
+                    Daily.co — video call connection
+                  </h3>
                   <p className="text-sm text-gray-400">
-                    Enables peer-to-peer video and audio connections. Connection
-                    signaling may use PeerJS servers.
+                    Carries the live audio/video between you and your call
+                    partner. Calls are not recorded by us unless you press
+                    Record.
+                  </p>
+                </div>
+                <div className="p-4 bg-[#1a1a2e] rounded-xl border border-gray-700">
+                  <h3 className="text-white font-medium mb-1">
+                    MyMemory / LibreTranslate / Lingva — fast text translation
+                  </h3>
+                  <p className="text-sm text-gray-400">
+                    Free translation services that may receive the text being
+                    translated for quick results.
+                  </p>
+                </div>
+                <div className="p-4 bg-[#1a1a2e] rounded-xl border border-gray-700">
+                  <h3 className="text-white font-medium mb-1">
+                    PeerJS/WebRTC — voice-call connection
+                  </h3>
+                  <p className="text-sm text-gray-400">
+                    Enables peer-to-peer audio connections. Connection signaling
+                    may use PeerJS servers.
                   </p>
                 </div>
               </div>
+              <p className="text-sm text-gray-400">
+                Each provider processes this data under its own privacy policy
+                with protections equivalent to ours. You can withdraw consent
+                and delete your data at any time from Settings → Clear All Data
+                or Account → Delete My Account.
+              </p>
             </div>
           </section>
 

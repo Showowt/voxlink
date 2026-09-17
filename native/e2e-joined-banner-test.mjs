@@ -30,6 +30,7 @@ async function newDevice(deviceId, name, lang) {
       localStorage.setItem("entrevoz_lang", l);
       localStorage.setItem("entrevoz_name_prompted", "true");
       localStorage.setItem("entrevoz_onboarding_complete", "true");
+      localStorage.setItem("entrevoz_ai_consent", "granted:test");
     },
     deviceId,
     name,

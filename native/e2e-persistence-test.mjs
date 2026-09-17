@@ -36,6 +36,7 @@ async function newDevice(name, deviceId, myName, lang) {
   await page.evaluateOnNewDocument(
     (id, n, l) => {
       localStorage.setItem("los_device_id", id);
+      localStorage.setItem("entrevoz_ai_consent", "granted:test");
       localStorage.setItem("entrevoz_name", n);
       localStorage.setItem("entrevoz_lang", l);
       localStorage.setItem("entrevoz_name_prompted", "true");

@@ -24,6 +24,7 @@ import { shareJoinLink } from "../../lib/share-link";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { addTranslation } from "@/app/lib/translation-history";
 import { checkMicPermission } from "@/app/lib/mic-permission";
+import { ensureAIConsent } from "@/app/lib/ai-consent";
 import MicReminder from "@/app/components/MicReminder";
 import LearningMode, { useLearningMode, TappableCaption, LearningInsightCard } from "../../components/LearningMode";
 
@@ -701,6 +702,7 @@ function TalkContent() {
   // ═══════════════════════════════════════════════════════════════════════════
 
   const startListening = useCallback(() => {
+    if (!ensureAIConsent()) return; // permission BEFORE sending audio
     const SpeechRecognitionAPI: SpeechRecognitionConstructor | undefined =
       typeof window !== "undefined"
         ? window.SpeechRecognition || window.webkitSpeechRecognition

@@ -265,6 +265,7 @@ export function useTranscription({
 
   // Resilience: restart backoff and visibility tracking
   const restartCountRef = useRef(0);
+  const networkErrCountRef = useRef(0); // consecutive Web Speech network errors
   const restartBackoffRef = useRef<NodeJS.Timeout | null>(null);
   const wasBackgroundedRef = useRef(false);
   const maxConsecutiveRestarts = 20;
@@ -572,8 +573,31 @@ export function useTranscription({
         return;
       }
 
-      // Network error (offline, server issue)
+      // Apple's speech service is unavailable (Siri/Dictation disabled — the
+      // DEFAULT on App-Review devices — or unsupported language). The API
+      // existing does NOT mean it works: fall back to our own Whisper pipeline
+      // seamlessly instead of surfacing a dead-end error notification.
+      if (e.error === "service-not-allowed" || e.error === "language-not-supported") {
+        if (typeof MediaRecorder !== "undefined") {
+          console.warn(`[STT] Web Speech ${e.error} — falling back to Whisper`);
+          fallBackToWhisper();
+          return;
+        }
+        setError("Voice input unavailable — enable Siri & Dictation in Settings.");
+        isRunRef.current = false;
+        setIsListening(false);
+        return;
+      }
+
+      // Network error (offline, server issue). Web Speech needs Apple/Google
+      // servers — after repeated failures switch to Whisper (our own API).
       if (e.error === "network") {
+        networkErrCountRef.current++;
+        if (networkErrCountRef.current >= 2 && typeof MediaRecorder !== "undefined") {
+          console.warn("[STT] Repeated Web Speech network errors — falling back to Whisper");
+          fallBackToWhisper();
+          return;
+        }
         console.warn("[STT] Network error — will retry");
         return;
       }
@@ -825,6 +849,27 @@ export function useTranscription({
     if (abortRef.current) abortRef.current.abort();
     if (debounceRef.current) clearTimeout(debounceRef.current);
   }, []);
+
+  // Web Speech exists but doesn't WORK (Siri/Dictation off — the default on
+  // App-Review devices — or repeated service failures): switch this session to
+  // the Whisper pipeline seamlessly. The user just keeps talking.
+  const fallBackToWhisper = useCallback(() => {
+    if (mode.current === "whisper") return;
+    mode.current = "whisper";
+    networkErrCountRef.current = 0;
+    restartCountRef.current = 0;
+    if (recRef.current) {
+      try {
+        recRef.current.abort();
+      } catch {
+        /* ignore */
+      }
+      recRef.current = null;
+    }
+    setError(null);
+    if (isRunRef.current) startWhisper();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startWhisper]);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Lifecycle: start/stop based on isActive

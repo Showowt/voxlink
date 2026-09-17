@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import ErrorBoundary from "./ErrorBoundary";
 import BottomNav from "./BottomNav";
 import IncomingCallOverlay from "./IncomingCallOverlay";
+import AIConsentSheet from "./AIConsentSheet";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // APP SHELL - Wraps entire app with error handling and self-healing
@@ -127,6 +128,7 @@ export default function AppShell({ children }: AppShellProps) {
       </div>
       <BottomNav />
       <IncomingCallOverlay />
+      <AIConsentSheet />
     </ErrorBoundary>
   );
 }
