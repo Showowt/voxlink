@@ -64,8 +64,14 @@ export async function initNativeRing(navigate: (path: string) => void): Promise<
 
   const goToRoom = (d: Record<string, string>) => {
     if (!d?.room) return;
-    const q = d.fromLang ? `&hostLang=${d.fromLang}` : "";
-    navigate(`/call/${d.room}?host=false${q}`);
+    const q =
+      (d.fromLang ? `&hostLang=${d.fromLang}` : "") +
+      (d.fromDevice ? `&pd=${encodeURIComponent(d.fromDevice)}` : "") +
+      (d.fromName ? `&pn=${encodeURIComponent(d.fromName)}` : "");
+    // Route by the INVITE's type — an answered AUDIO call must land on /talk,
+    // not the video page (whose lobby demands the camera).
+    const path = d.type === "audio" ? "/talk" : "/call";
+    navigate(`${path}/${d.room}?host=false${q}`);
   };
   p.addListener("callAnswered", goToRoom).catch(() => {});
 

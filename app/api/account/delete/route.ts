@@ -55,7 +55,11 @@ export async function POST(req: NextRequest) {
 
   const { deviceId, confirmText } = body;
 
-  if (!deviceId || typeof deviceId !== "string" || deviceId.length < 8) {
+  if (
+    !deviceId ||
+    typeof deviceId !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(deviceId)
+  ) {
     return NextResponse.json(
       { error: "Valid deviceId is required" },
       { status: 400 },

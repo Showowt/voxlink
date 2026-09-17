@@ -1222,13 +1222,15 @@ function HomeContent() {
     }
   };
 
-  // Start Video Call
+  // Start Video Call — use the DISPLAYED room code (the one Copy/Share Link
+  // already sent to the friend); generating a fresh one here stranded the
+  // link-recipient in an empty room.
   const startVideoCall = () => {
     if (!name.trim()) {
       setToast({ message: "Please enter your name", type: "error" });
       return;
     }
-    const code = generateCode();
+    const code = roomCode || generateCode();
     router.push(
       `/call/${code}?host=true&name=${encodeURIComponent(name)}&lang=${language}`,
     );
@@ -1255,7 +1257,7 @@ function HomeContent() {
       setToast({ message: "Please enter your name", type: "error" });
       return;
     }
-    const code = generateCode();
+    const code = roomCode || generateCode();
     router.push(
       `/talk/${code}?host=true&name=${encodeURIComponent(name)}&lang=${language}`,
     );

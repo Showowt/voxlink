@@ -34,6 +34,14 @@ export default function IncomingCallOverlay() {
     return stop;
   }, [active]);
 
+  // Ring timeout: if the caller abandoned (no cancel signal reached us), don't
+  // leave a full-screen ring forever — auto-dismiss after 45s.
+  useEffect(() => {
+    if (!active) return;
+    const t = setTimeout(dismiss, 45000);
+    return () => clearTimeout(t);
+  }, [active, dismiss]);
+
   // The callee picks THEIR language BEFORE answering so translation is right
   // from the first word. Pre-filled from their saved preference; changing it
   // persists app-wide.

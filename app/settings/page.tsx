@@ -166,7 +166,12 @@ export default function SettingsPage() {
   const handleClearAllData = useCallback(() => {
     if (typeof window === "undefined") return;
     try {
+      // Preserve the permanent device identity — wiping los_device_id would
+      // change the user's Entrevoz code and orphan every contact/history row
+      // their friends have for them.
+      const deviceId = localStorage.getItem("los_device_id");
       localStorage.clear();
+      if (deviceId) localStorage.setItem("los_device_id", deviceId);
       resetSettings();
       setCleared(true);
       setShowClearConfirm(false);

@@ -44,6 +44,7 @@ import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { addTranslation } from "@/app/lib/translation-history";
 import { checkMicPermission } from "@/app/lib/mic-permission";
 import MicReminder from "@/app/components/MicReminder";
+import { sendCallSignal } from "@/app/lib/ring-signal";
 import { useCallRecording } from "@/hooks/useCallRecording";
 import RecordingIndicator from "../../components/RecordingIndicator";
 import { saveRecording } from "@/app/lib/recording-storage";
@@ -695,13 +696,17 @@ function VideoCallContent() {
           ownerDeviceId: getDeviceId(),
           contactDeviceId,
           displayName: partnerNameRef.current || "Unknown",
-          language: partnerLangRef.current || "en",
+          // Prefer the handshake language, then the URL-seeded expectation —
+          // a hard "en" here permanently poisoned contacts saved before the
+          // handshake landed.
+          language: partnerLangRef.current || expectedPartnerLang || "en",
         }),
       }).catch(() => {});
     } catch {
       /* ignore */
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expectedPartnerLang]);
 
   // Log this call to durable cross-device history. Safe to fire more than once
   // (the API upserts one row per participant+room); requires only that a
@@ -740,6 +745,20 @@ function VideoCallContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userLang, expectedPartnerLang, roomCode]);
 
+  // Tell the callee we gave up BEFORE they answered — otherwise their phone
+  // keeps ringing a full-screen overlay for a call that no longer exists.
+  // Target = the pd-seeded partner (set by dial/contacts/add); fired on the
+  // no-answer timeout, on End-before-connect, and on page close.
+  const cancelSentRef = useRef(false);
+  const cancelOutgoingRing = useCallback(() => {
+    if (cancelSentRef.current || hadPartnerRef.current) return;
+    const target = searchParams.get("pd") || "";
+    if (!target || !isHost) return;
+    cancelSentRef.current = true;
+    sendCallSignal(target, "call-canceled", roomCode).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomCode, isHost]);
+
   // Seed the partner's identity from the URL (set by dial/contacts/add/accept)
   // so contact-save + history work even if the in-call handshake never lands.
   useEffect(() => {
@@ -760,6 +779,7 @@ function VideoCallContent() {
     const flush = () => {
       saveContactOnce();
       saveCallHistory();
+      cancelOutgoingRing();
     };
     const onHide = () => {
       if (document.visibilityState === "hidden") flush();
@@ -770,7 +790,7 @@ function VideoCallContent() {
       window.removeEventListener("pagehide", flush);
       document.removeEventListener("visibilitychange", onHide);
     };
-  }, [saveContactOnce, saveCallHistory]);
+  }, [saveContactOnce, saveCallHistory, cancelOutgoingRing]);
 
   // Media state
   const [isMuted, setIsMuted] = useState(false);
@@ -853,7 +873,11 @@ function VideoCallContent() {
     theirLanguage: partnerLang || expectedPartnerLang,
     localStream: lobbyStream || localStreamRef.current,
     sendMessage: sendWebRTCMessage,
-    isActive: status === "connected" && hasPartner && !inLobby && translationEnabled,
+    // !isMuted: mute must ALSO stop speech-to-text — otherwise everything said
+    // while "muted" was still transcribed, translated and broadcast to the
+    // partner as captions/TTS (a privacy hole).
+    isActive:
+      status === "connected" && hasPartner && !inLobby && translationEnabled && !isMuted,
     isSuppressed: micSuppressed,
   });
 
@@ -1372,20 +1396,33 @@ function VideoCallContent() {
       setNoAnswer(false);
       return;
     }
-    const t = setTimeout(() => setNoAnswer(true), 45000);
+    const t = setTimeout(() => {
+      setNoAnswer(true);
+      cancelOutgoingRing(); // stop the callee's phone ringing for a dead call
+    }, 45000);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasPartner, inLobby, isHost, status]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // WEBRTC CONNECTION SETUP - Only runs after leaving lobby
   // ═══════════════════════════════════════════════════════════════════════════
 
+  // Ref mirror so the connection effect can read the freshest lobby stream
+  // WITHOUT depending on it — recovery calls setLobbyStream(newStream) (to
+  // re-feed STT), and having lobbyStream in the deps made that state change
+  // tear down and rebuild the whole Daily connection mid-recovery.
+  const lobbyStreamRef2 = useRef<MediaStream | null>(null);
+  useEffect(() => {
+    lobbyStreamRef2.current = lobbyStream;
+  }, [lobbyStream]);
+
   useEffect(() => {
     // Don't initialize until we leave the lobby
     if (inLobby) return;
 
     mountedRef.current = true;
-    let localStream: MediaStream | null = lobbyStream;
+    let localStream: MediaStream | null = lobbyStreamRef2.current;
 
     const init = async () => {
       try {
@@ -1502,7 +1539,21 @@ function VideoCallContent() {
             if (info.deviceId) partnerDeviceIdRef.current = info.deviceId;
             if (info.lang) {
               setPartnerLang(info.lang);
+              const isNewLang = partnerLangRef.current !== info.lang;
               partnerLangRef.current = info.lang;
+              // The contact may have been saved BEFORE the real language
+              // arrived — upgrade the stored row.
+              if (isNewLang && contactSavedRef.current && partnerDeviceIdRef.current) {
+                fetch("/api/contacts", {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    ownerDeviceId: getDeviceId(),
+                    contactDeviceId: partnerDeviceIdRef.current,
+                    language: info.lang,
+                  }),
+                }).catch(() => {});
+              }
             }
             saveContactOnce();
           },
@@ -1644,7 +1695,8 @@ function VideoCallContent() {
         }
       }, 500);
     };
-  }, [roomCode, isHost, userName, inLobby, lobbyStream]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomCode, isHost, userName, inLobby]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // DATA MESSAGE HANDLING (captions from partner)
@@ -1893,7 +1945,15 @@ function VideoCallContent() {
   // startListening / stopListening now just toggle the translationEnabled state
   // The useTranscription hook handles actual speech recognition
   const startListening = useCallback(() => {
-    setTranslationEnabled(true);
+    // If translation is already "on" but STT gave up ("tap mic to restart"),
+    // setting true again is a no-op — cycle isActive so the hook truly restarts.
+    setTranslationEnabled((prev) => {
+      if (prev) {
+        setTimeout(() => setTranslationEnabled(true), 250);
+        return false;
+      }
+      return true;
+    });
   }, []);
 
   const stopListening = useCallback(() => {
@@ -1952,6 +2012,14 @@ function VideoCallContent() {
     setIsMuted(next);
   };
 
+  // Honor the lobby's "Join Audio Only" / camera-off choice on the PUBLISHED
+  // track: Daily joins with videoSource:true and acquires its own camera, so
+  // without this the partner still received video after "audio only".
+  useEffect(() => {
+    if (status !== "connected" && status !== "waiting") return;
+    peerRef.current?.setLocalVideo(!isVideoOff);
+  }, [status, isVideoOff]);
+
   const toggleVideo = () => {
     const next = !isVideoOff;
     peerRef.current?.setLocalVideo(!next);
@@ -1987,6 +2055,7 @@ function VideoCallContent() {
   };
 
   const endCall = async () => {
+    cancelOutgoingRing(); // ending before they answered → stop their ring
     stopListening();
     cleanupDubbing();
     cyrano.deactivate();

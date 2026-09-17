@@ -315,24 +315,9 @@ function ProximityContent() {
 
     const checkRequestStatus = async () => {
       try {
-        const response = await fetch(
-          `/api/proximity/request?sessionId=${sessionId}`,
-        );
-        const data = await response.json();
-
-        // Check if our outgoing request was accepted by looking at proximity_requests
-        // We need to check the request we sent
-        const checkResponse = await fetch(`/api/proximity/respond`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            requestId: pendingRequest.id,
-            checkOnly: true,
-            sessionId: sessionId,
-          }),
-        });
-
-        // Actually, let's use a simpler approach - just poll the request status
+        // Poll ONLY the status endpoint — two leftover experimental fetches
+        // here (an unused GET + a checkOnly POST the API ignores) tripled the
+        // request volume per tick and could 429 the accept flow.
         const statusResponse = await fetch(
           `/api/proximity/request/status?requestId=${pendingRequest.id}`,
         );

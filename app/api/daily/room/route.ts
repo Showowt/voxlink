@@ -26,7 +26,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const roomCode = body.roomCode || "";
     const roomName = `entrevoz-${roomCode.toLowerCase()}`;
-    const exp = Math.floor(Date.now() / 1000) + 3600; // 1 hour
+    // 4h: at 1h with eject_at_token_exp, calls hard-dropped both sides at the
+    // 60-minute mark. Rooms are private + 2-person and this route re-mints
+    // fresh tokens on every (re)join, so a longer window is safe.
+    const exp = Math.floor(Date.now() / 1000) + 14400;
 
     // Create-or-get a PRIVATE room. Private means the raw daily.co URL can't be
     // joined without a server-minted token — so possession of the 6-char code

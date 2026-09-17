@@ -38,7 +38,12 @@ export async function GET(req: NextRequest) {
   }
 
   const deviceId = req.nextUrl.searchParams.get("deviceId");
-  if (!deviceId || typeof deviceId !== "string" || deviceId.length < 8) {
+  // Full UUID format only — device ids are v4 UUIDs; anything shorter/looser
+  // makes brute-force sweeps cheaper against this service-role read.
+  if (
+    !deviceId ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(deviceId)
+  ) {
     return NextResponse.json(
       { error: "Valid deviceId is required" },
       { status: 400 },

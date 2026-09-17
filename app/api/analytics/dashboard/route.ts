@@ -102,6 +102,15 @@ async function safeCount(
 // ─── Main Handler ────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
+  // Admin-only: this endpoint runs on the service-role key (RLS bypassed) and
+  // exposes the whole business dashboard — it must never be public. Gate on a
+  // shared secret header; if none is configured, deny by default.
+  const secret = process.env.ANALYTICS_DASHBOARD_KEY;
+  const provided = req.headers.get("x-analytics-key") || "";
+  if (!secret || provided !== secret) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const supabase = getAdminClient();
 
   if (!supabase) {

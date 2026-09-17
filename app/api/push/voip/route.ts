@@ -95,10 +95,17 @@ export async function POST(req: NextRequest) {
     const { target, targetDeviceId, targetDialCode, room, type, fromName, fromLang, fromDevice } =
       await req.json();
     // `target` is an ambiguous address (device id OR dial code — the caller has
-    // one from the invite); explicit fields override it.
-    const dev = typeof targetDeviceId === "string" ? targetDeviceId : undefined;
-    const code = typeof targetDialCode === "string" ? targetDialCode : undefined;
-    const any = typeof target === "string" ? target : undefined;
+    // one from the invite); explicit fields override it. Sanitize hard: these
+    // values are interpolated into a PostgREST .or() filter, so anything
+    // outside [A-Za-z0-9-] is an injection vector (filter breakout).
+    const clean = (v: unknown): string | undefined => {
+      if (typeof v !== "string") return undefined;
+      const s = v.trim();
+      return s && s.length <= 64 && /^[A-Za-z0-9-]+$/.test(s) ? s : undefined;
+    };
+    const dev = clean(targetDeviceId);
+    const code = clean(targetDialCode);
+    const any = clean(target);
     if (!room || (!dev && !code && !any)) {
       return NextResponse.json({ error: "room + target required" }, { status: 400 });
     }

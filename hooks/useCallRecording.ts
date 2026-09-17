@@ -24,13 +24,17 @@ function getSupportedMimeType(): string {
     "video/webm;codecs=vp9",
     "video/webm;codecs=vp8",
     "video/webm",
+    // iOS Safari/WKWebView supports NONE of the webm variants — without the
+    // mp4 fallbacks, Record was a silent no-op on the primary platform.
+    "video/mp4;codecs=avc1,mp4a.40.2",
+    "video/mp4",
   ];
   for (const mime of candidates) {
     if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(mime)) {
       return mime;
     }
   }
-  return "video/webm";
+  return "video/mp4";
 }
 
 export function useCallRecording(): UseCallRecordingReturn {

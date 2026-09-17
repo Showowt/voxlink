@@ -328,6 +328,21 @@ export function getRecommendedBrowsers(): Array<{
 }
 
 export function getPermissionInstructions(browserName: string): string[] {
+  // Native iOS shell: browser site-settings don't exist — the OS-level toggle
+  // in the Settings app is the only path. (Previously shell users were shown
+  // Chrome desktop instructions.)
+  try {
+    if (typeof navigator !== "undefined" && /EntrevozApp/i.test(navigator.userAgent)) {
+      return [
+        "Open the iPhone Settings app",
+        "Scroll to Entrevoz",
+        "Turn ON Microphone and Camera",
+        "Return here — no restart needed",
+      ];
+    }
+  } catch {
+    /* ignore */
+  }
   const instructions: Record<string, string[]> = {
     Chrome: [
       "Click the lock icon (🔒) in the address bar",

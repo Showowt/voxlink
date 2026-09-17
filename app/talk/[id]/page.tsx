@@ -92,8 +92,13 @@ function TalkContent() {
   const isHost = searchParams.get("host") === "true";
   const userName = searchParams.get("name") || "User";
   const userLang = searchParams.get("lang") || "en";
-  // Default target language - used before partner connects
-  const defaultTargetLang = userLang === "en" ? "es" : "en";
+  // Default target language — every connection surface seeds the partner's
+  // language (&partnerLang= from dial/contacts//add//i, &hostLang= from the
+  // ring-accept), so use it; only guess en↔es when nothing was seeded.
+  const seededPartnerLang =
+    searchParams.get("partnerLang") || searchParams.get("hostLang") || "";
+  const defaultTargetLang =
+    seededPartnerLang || (userLang === "en" ? "es" : "en");
 
   // Error state
   const [error, setError] = useState<string | null>(null);
@@ -575,7 +580,21 @@ function TalkContent() {
         // Set partner's language immediately on connect
         if (lang) {
           setPartnerLang(lang);
+          const isNewLang = partnerLangRef.current !== lang;
           partnerLangRef.current = lang;
+          // Upgrade the stored contact if it was saved (pd-seed) before the
+          // real language arrived.
+          if (isNewLang && contactSavedRef.current && partnerDeviceIdRef.current) {
+            fetch("/api/contacts", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                ownerDeviceId: getDeviceId(),
+                contactDeviceId: partnerDeviceIdRef.current,
+                language: lang,
+              }),
+            }).catch(() => {});
+          }
         }
         hadPartnerRef.current = true;
         if (!callStartRef.current) callStartRef.current = Date.now();
@@ -874,6 +893,11 @@ function TalkContent() {
       if (e.error === "not-allowed") {
         console.error("[Talk STT] Mic permission denied");
         setIsListening(false);
+        // Foreground denial at the moment of the tap — surface the reminder
+        // (with instructions) instead of failing silently.
+        if (document.visibilityState === "visible" && !micReminderDismissedRef.current) {
+          setShowMicReminder(true);
+        }
         return;
       }
       if (e.error === "audio-capture") {

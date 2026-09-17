@@ -329,6 +329,16 @@ export default function ContactsPage() {
     const msg = encodeURIComponent(`Let's catch up with live translation! Join here: ${url}`);
     window.open(`https://wa.me/?text=${msg}`, '_blank');
     setActiveMenu(null);
+    // Join the shared room OURSELVES — sharing a room and not entering it
+    // stranded the recipient alone in an empty call.
+    const myLang = localStorage.getItem('entrevoz_lang') || 'en';
+    const myName = localStorage.getItem('entrevoz_name') || 'Someone';
+    const seed = isCodeContact(c)
+      ? ''
+      : `&pd=${encodeURIComponent(c.contact_device_id)}&pn=${encodeURIComponent(c.display_name)}`;
+    router.push(
+      `/call/${code}?lang=${myLang}&hostLang=${c.language}&host=true&name=${encodeURIComponent(myName)}${seed}`,
+    );
   };
 
   const favorites = contacts.filter(c => c.is_favorite);

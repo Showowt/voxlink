@@ -72,3 +72,8 @@ can subscribe to a given `ring-*`/`call-*` topic.
 Secrets/keys are correctly server-side only — no `NEXT_PUBLIC_*` leakage of
 TURN/Daily/Twilio credentials; `/api/turn` is the only route on the real
 Upstash limiter.
+
+## ANALYTICS_DASHBOARD_KEY (Sep 17)
+/api/analytics/dashboard was public on the service-role key — now requires
+header `x-analytics-key: <ANALYTICS_DASHBOARD_KEY env>`. Key set on Vercel
+prod. Retrieve: npx vercel env pull. No in-app consumers existed.

@@ -176,6 +176,12 @@ export async function PATCH(req: NextRequest) {
     if (typeof displayName === "string" && displayName.trim()) {
       patch.display_name = displayName.trim().slice(0, 60);
     }
+    // Late language upgrade: the real language often arrives via the in-call
+    // handshake AFTER the contact was first saved.
+    const { language } = body as { language?: unknown };
+    if (typeof language === "string" && /^[a-z]{2}(-[A-Za-z]{2,4})?$/.test(language)) {
+      patch.language = language;
+    }
 
     const { error: updateError } = await supabase
       .from("contacts")
