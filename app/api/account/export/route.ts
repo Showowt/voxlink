@@ -38,11 +38,11 @@ export async function GET(req: NextRequest) {
   }
 
   const deviceId = req.nextUrl.searchParams.get("deviceId");
-  // Full UUID format only — device ids are v4 UUIDs; anything shorter/looser
-  // makes brute-force sweeps cheaper against this service-role read.
+  // Sane id shape only (8-64 url-safe chars) — blocks sweeps/injection without
+  // rejecting legacy non-UUID device ids that getDeviceId still honors.
   if (
     !deviceId ||
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(deviceId)
+    !/^[A-Za-z0-9-]{8,64}$/.test(deviceId)
   ) {
     return NextResponse.json(
       { error: "Valid deviceId is required" },

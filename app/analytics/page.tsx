@@ -241,7 +241,29 @@ export default function AnalyticsDashboard() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/analytics/dashboard?range=${selectedRange}`);
+      // The dashboard API is admin-gated (service-role data). Ask for the key
+      // once per browser and send it as a header.
+      let key = "";
+      try {
+        key = localStorage.getItem("ez_analytics_key") || "";
+        if (!key) {
+          key = window.prompt("Analytics access key:") || "";
+          if (key) localStorage.setItem("ez_analytics_key", key.trim());
+        }
+      } catch {
+        /* ignore */
+      }
+      const res = await fetch(`/api/analytics/dashboard?range=${selectedRange}`, {
+        headers: key ? { "x-analytics-key": key.trim() } : undefined,
+      });
+      if (res.status === 401) {
+        try {
+          localStorage.removeItem("ez_analytics_key"); // bad key — re-prompt next load
+        } catch {
+          /* ignore */
+        }
+        throw new Error("Unauthorized — reload and enter the analytics key");
+      }
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `HTTP ${res.status}`);

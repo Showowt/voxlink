@@ -75,6 +75,15 @@ export async function initNativeRing(navigate: (path: string) => void): Promise<
   };
   p.addListener("callAnswered", goToRoom).catch(() => {});
 
+  // Declining on the native CallKit screen previously vanished — the caller
+  // waited forever. Forward it as the standard declined signal.
+  p.addListener("callDeclined", (d) => {
+    if (!d?.fromDevice || !d?.room) return;
+    import("@/app/lib/ring-signal")
+      .then(({ sendCallSignal }) => sendCallSignal(d.fromDevice, "call-declined", d.room))
+      .catch(() => {});
+  }).catch(() => {});
+
   // If the app was cold-launched by answering the push, honor the pending call.
   try {
     const pending = await p.getPendingAnswered();

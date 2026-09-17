@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { isNativeShell, requestMic } from "@/app/lib/mic-permission";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -20,6 +20,12 @@ export default function MicReminder({
 }) {
   const [busy, setBusy] = useState(false);
   const [denied, setDenied] = useState(false);
+
+  // Fresh incident, fresh state — the component stays mounted between shows,
+  // so a past denial must not lock every future reminder into "blocked" copy.
+  useEffect(() => {
+    if (visible) setDenied(false);
+  }, [visible]);
 
   if (!visible) return null;
 

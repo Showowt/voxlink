@@ -234,6 +234,32 @@ function TalkContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Tell the callee we gave up BEFORE they answered — audio calls previously
+  // had NO cancel sender, so an abandoned dial rang the callee's phone until
+  // the 45s overlay timeout. Fired from End + our own 45s no-answer + unload.
+  const cancelSentRef = useRef(false);
+  const cancelOutgoingRing = useCallback(() => {
+    if (cancelSentRef.current || hadPartnerRef.current) return;
+    const target = searchParams.get("pd") || "";
+    if (!target || !isHost) return;
+    cancelSentRef.current = true;
+    import("@/app/lib/ring-signal")
+      .then(({ sendCallSignal }) => sendCallSignal(target, "call-canceled", roomId))
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId, isHost]);
+  useEffect(() => {
+    if (!isHost) return;
+    const t = setTimeout(() => {
+      if (!hadPartnerRef.current) cancelOutgoingRing();
+    }, 45000);
+    window.addEventListener("pagehide", cancelOutgoingRing);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("pagehide", cancelOutgoingRing);
+    };
+  }, [isHost, cancelOutgoingRing]);
+
   const historyEndRef = useRef<HTMLDivElement>(null);
   const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const liveTextTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -1084,6 +1110,7 @@ function TalkContent() {
   }, [roomId]);
 
   const endSession = useCallback(() => {
+    cancelOutgoingRing(); // ending before they answered → stop their ring
     stopListening();
     // Save the partner as a contact (idempotent — usually already fired mid-call).
     saveContactOnce();
@@ -1092,7 +1119,7 @@ function TalkContent() {
     saveTalkHistory();
     connectionRef.current?.disconnect();
     router.push("/");
-  }, [stopListening, router, saveContactOnce, saveTalkHistory]);
+  }, [stopListening, router, saveContactOnce, saveTalkHistory, cancelOutgoingRing]);
 
   const speak = useCallback((text: string, lang: string) => {
     speechSynthesis.cancel();
@@ -1167,7 +1194,9 @@ function TalkContent() {
     const t = setTimeout(async () => {
       if (!mountedRef.current || micReminderDismissedRef.current || isListening) return;
       const perm = await checkMicPermission();
-      if (perm === "denied" || perm === "prompt") setShowMicReminder(true);
+      // /talk is tap-to-talk — "prompt" before the first tap is NORMAL, only a
+      // hard denial deserves the reminder (tap-time denials surface it too).
+      if (perm === "denied") setShowMicReminder(true);
     }, 5000);
     return () => clearTimeout(t);
   }, [isConnected, isListening]);

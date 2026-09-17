@@ -42,6 +42,15 @@ export default function IncomingCallOverlay() {
     return () => clearTimeout(t);
   }, [active, dismiss]);
 
+  // Busy signal: an invite arriving while we're IN another call is never shown
+  // — without this it sat queued (a delayed ghost ring) while the caller waited
+  // forever. Auto-decline so the caller gets immediate "declined" feedback.
+  useEffect(() => {
+    if (!invite || !suppressed) return;
+    sendCallSignal(invite.fromDevice, "call-declined", invite.room).catch(() => {});
+    dismiss();
+  }, [invite, suppressed, dismiss]);
+
   // The callee picks THEIR language BEFORE answering so translation is right
   // from the first word. Pre-filled from their saved preference; changing it
   // persists app-wide.

@@ -409,12 +409,18 @@ export class DailyConnection {
   // After an iOS interruption released the mic/camera, ask Daily to discard its
   // (possibly dead) internal tracks and acquire fresh ones — the safe, public
   // alternative to pushing external tracks via setInputDevicesAsync (which
-  // silently switches Daily into custom-track mode).
-  refreshLocalMedia(): void {
+  // silently switches Daily into custom-track mode). RESPECTS user intent:
+  // callers pass the current mute/camera state so recovery never silently
+  // unmutes a muted user or republishes a turned-off camera.
+  refreshLocalMedia(audioOn = true, videoOn = true): void {
     if (this.isDestroyed || !this.call) return;
     try {
-      this.call.setLocalAudio(true, { forceDiscardTrack: true });
-      this.call.setLocalVideo(true);
+      if (audioOn) {
+        this.call.setLocalAudio(true, { forceDiscardTrack: true });
+      } else {
+        this.call.setLocalAudio(false);
+      }
+      this.call.setLocalVideo(videoOn);
     } catch {
       /* ignore */
     }

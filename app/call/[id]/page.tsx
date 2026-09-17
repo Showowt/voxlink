@@ -776,18 +776,24 @@ function VideoCallContent() {
   // persist the contact + call history. iOS suspends the WebView on
   // background/lock, so this is the last reliable moment to fire keepalive.
   useEffect(() => {
+    // NOTE: cancelOutgoingRing is deliberately NOT in this flush — locking the
+    // phone or switching apps while the outbound call rings is normal caller
+    // behavior and must not kill the callee's ring. Cancel fires only from
+    // End, the 45s no-answer timeout, and real page unload (pagehide).
     const flush = () => {
       saveContactOnce();
       saveCallHistory();
-      cancelOutgoingRing();
     };
+    const onUnload = () => cancelOutgoingRing();
     const onHide = () => {
       if (document.visibilityState === "hidden") flush();
     };
     window.addEventListener("pagehide", flush);
+    window.addEventListener("pagehide", onUnload);
     document.addEventListener("visibilitychange", onHide);
     return () => {
       window.removeEventListener("pagehide", flush);
+      window.removeEventListener("pagehide", onUnload);
       document.removeEventListener("visibilitychange", onHide);
     };
   }, [saveContactOnce, saveCallHistory, cancelOutgoingRing]);
@@ -795,6 +801,14 @@ function VideoCallContent() {
   // Media state
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
+  // Live mirrors so recovery callbacks respect the CURRENT mute/camera intent
+  // (never silently unmute or republish a turned-off camera).
+  const isMutedRef = useRef(false);
+  const isVideoOffRef = useRef(false);
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+    isVideoOffRef.current = isVideoOff;
+  }, [isMuted, isVideoOff]);
 
   // Translation state
   const [translationEnabled, setTranslationEnabled] = useState(true); // User toggle for mic/translation
@@ -1105,7 +1119,7 @@ function VideoCallContent() {
     setShowMicReminder(false);
     // Fresh permission: let Daily re-acquire its mic and restart STT by
     // cycling the translation toggle (flips the hook's isActive).
-    peerRef.current?.refreshLocalMedia();
+    peerRef.current?.refreshLocalMedia(!isMutedRef.current, !isVideoOffRef.current);
     setTranslationEnabled(false);
     setTimeout(() => {
       if (mountedRef.current) setTranslationEnabled(true);
@@ -1160,7 +1174,7 @@ function VideoCallContent() {
       if (peer.getMeetingState() === "joined-meeting") {
         // Light: connection survived — refresh Daily's own tracks (they may be
         // dead after the OS seized the mic/cam) and resume playback.
-        peer.refreshLocalMedia();
+        peer.refreshLocalMedia(!isMutedRef.current, !isVideoOffRef.current);
         remoteVideoRef.current?.play().catch(() => setNeedsAudioUnmute(true));
         // Re-arm: daily-js often still reports "joined" right after resume and
         // only notices the dead socket seconds later — check again shortly.
@@ -1669,7 +1683,7 @@ function VideoCallContent() {
         // (setInputDevicesAsync with raw tracks silently switches Daily into
         // custom-track mode). Ask it to refresh its internal mic/cam instead,
         // and let the recovery engine handle a dead meeting.
-        peerRef.current?.refreshLocalMedia();
+        peerRef.current?.refreshLocalMedia(!isMutedRef.current, !isVideoOffRef.current);
         attemptRecoveryRef.current();
         console.log("[Entrevoz] Media re-acquired after phone call interruption");
       } catch (err) {

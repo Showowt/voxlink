@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
   if (
     !deviceId ||
     typeof deviceId !== "string" ||
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(deviceId)
+    !/^[A-Za-z0-9-]{8,64}$/.test(deviceId)
   ) {
     return NextResponse.json(
       { error: "Valid deviceId is required" },
