@@ -137,8 +137,17 @@ await tGuest.goto(`${BASE}/talk/${TALK}?lang=es&host=false&name=Guest%20QA`, {
   waitUntil: "networkidle2",
   timeout: 45000,
 });
+// Tap-to-talk: "prompt" alone must NOT nag — the reminder fires on the
+// tap-time DENIAL. Tap the big mic button (headless denies the permission).
+await new Promise((r) => setTimeout(r, 3000));
+await tHost.evaluate(() => {
+  const mic = [...document.querySelectorAll("button")].find((b) =>
+    b.className.includes("w-20 h-20"),
+  );
+  mic?.click();
+});
 let reminder = false;
-for (let i = 0; i < 25; i++) {
+for (let i = 0; i < 20; i++) {
   await new Promise((r) => setTimeout(r, 1000));
   const t = await body(tHost).catch(() => "");
   if (/mic isn't on|Microphone is blocked|Enable microphone/i.test(t)) {
@@ -146,7 +155,7 @@ for (let i = 0; i < 25; i++) {
     break;
   }
 }
-console.log(`C. /talk mic reminder shown    : ${reminder ? "✅" : "❌"}`);
+console.log(`C. /talk mic reminder on denial: ${reminder ? "✅" : "❌"}`);
 
 console.log("\n══════ RESULTS ══════");
 const pass = dialHasPicker && persisted === "es" && rang && overlayHasPicker && langCarried && reminder;
