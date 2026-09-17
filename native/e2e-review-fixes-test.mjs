@@ -85,20 +85,14 @@ await a.page.evaluate(() => {
 });
 await new Promise((r) => setTimeout(r, 800));
 await a.page.evaluate(() => {
-  const rec = [...document.querySelectorAll("button")].find(
-    (b) => /start recording|tap to speak|record/i.test(b.innerText) || b.className.includes("rounded-full"),
-  );
-  rec?.click();
+  document.querySelector('button[aria-label="Start recording"]')?.click();
 });
 await new Promise((r) => setTimeout(r, 2500)); // stub errors at 150ms → fallback kicks in
 let txt = await body(a.page);
 const homeNoError = !/error|not allowed|denied/i.test(txt);
 // finish the utterance → whisper transcription fires
 await a.page.evaluate(() => {
-  const rec = [...document.querySelectorAll("button")].find(
-    (b) => /stop|recording/i.test(b.innerText) || b.className.includes("rounded-full"),
-  );
-  rec?.click();
+  document.querySelector('button[aria-label="Stop recording"]')?.click();
 });
 await new Promise((r) => setTimeout(r, 3000));
 const homeWhisper = a.transcribeCalls.length > 0;
@@ -156,10 +150,7 @@ await c.page.evaluate(() => {
 });
 await new Promise((r) => setTimeout(r, 600));
 await c.page.evaluate(() => {
-  const rec = [...document.querySelectorAll("button")].find(
-    (b) => /start recording|tap to speak|record/i.test(b.innerText) || b.className.includes("rounded-full"),
-  );
-  rec?.click();
+  document.querySelector('button[aria-label="Start recording"]')?.click();
 });
 await new Promise((r) => setTimeout(r, 1000));
 txt = await body(c.page);
