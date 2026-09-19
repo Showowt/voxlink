@@ -1,16 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { LANGUAGES as MASTER_LANGUAGES } from '../lib/languages';
+import { LANGUAGE_MAP, getLanguage } from '../lib/languages';
 import { getDeviceId } from '../lib/language-os/device-id';
+import LanguagePick from '../components/LanguagePick';
 
-// Use master language list — all 31 languages
-const LANGUAGES = MASTER_LANGUAGES.map((l) => ({
-  code: l.code,
-  name: l.name,
-  flag: l.flag,
-}));
+// The app-wide language the user already chose (entrevoz_lang), else the
+// first supported browser language — defaulting everyone to English made
+// Spanish speakers create calls whose captions ran in English.
+function savedOrBrowserLanguage(): string {
+  try {
+    const saved = localStorage.getItem('entrevoz_lang') ?? '';
+    if (LANGUAGE_MAP[saved]) return saved;
+  } catch {
+    /* storage blocked */
+  }
+  const list = navigator.languages?.length ? navigator.languages : [navigator.language];
+  for (const raw of list) {
+    const base = (raw || '').toLowerCase().split('-')[0];
+    const code = base === 'fil' ? 'tl' : base === 'nb' || base === 'nn' ? 'no' : base === 'iw' ? 'he' : base === 'in' ? 'id' : base;
+    if (LANGUAGE_MAP[code]) return code;
+  }
+  return 'en';
+}
 
 
 export default function GroupLandingPage() {
@@ -21,6 +34,17 @@ export default function GroupLandingPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState('');
+
+  // After mount (not during render) so server and client markup agree
+  useEffect(() => {
+    setMyLanguage(savedOrBrowserLanguage());
+  }, []);
+
+  const pickLanguage = (code: string) => {
+    if (!LANGUAGE_MAP[code]) return;
+    setMyLanguage(code);
+    try { localStorage.setItem('entrevoz_lang', code); } catch { /* storage blocked */ }
+  };
 
   const handleCreate = async () => {
     setIsCreating(true);
@@ -94,23 +118,11 @@ export default function GroupLandingPage() {
 
           {/* Language */}
           <div className="mb-4">
-            <div className="text-white/40 text-xs mb-2">Your language</div>
-            <div className="grid grid-cols-4 gap-1.5 max-h-32 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
-              {LANGUAGES.map(l => (
-                <button
-                  key={l.code}
-                  onClick={() => setMyLanguage(l.code)}
-                  className={`py-2 rounded-lg text-xs flex flex-col items-center gap-0.5 transition-all ${
-                    myLanguage === l.code
-                      ? 'bg-[#00C896]/20 border border-[#00C896]/40 text-[#00C896]'
-                      : 'bg-white/5 border border-transparent text-white/50 hover:bg-white/10'
-                  }`}
-                >
-                  <span className="text-base leading-none">{l.flag}</span>
-                  <span className="truncate w-full text-center leading-tight">{l.name.split(' ')[0]}</span>
-                </button>
-              ))}
-            </div>
+            <div className="text-white/40 text-xs mb-2">I speak / Hablo</div>
+            <LanguagePick value={myLanguage} onChange={pickLanguage} accent="#00C896" />
+            <p className="text-white/35 text-[11px] mt-2">
+              {getLanguage(myLanguage).flag} {getLanguage(myLanguage).nativeName} — everyone else is translated into it for you
+            </p>
           </div>
 
           <button

@@ -52,6 +52,27 @@ export async function POST(req: NextRequest) {
       ? room.participant_slots
       : [null, null, null, null];
 
+    // Only clear the slot if it still belongs to the session that is leaving:
+    // a refreshed tab's late "leave" (sent on page close) must not evict the
+    // NEW session that already re-claimed the same slot.
+    const current = slots[slotIndex] as { peerId?: unknown; deviceId?: unknown; joinedAt?: unknown } | null | undefined;
+    if (!current) {
+      return NextResponse.json({ ok: true });
+    }
+    const peerId = typeof body.peerId === 'string' ? body.peerId.slice(0, 120) : '';
+    const deviceId = typeof body.deviceId === 'string' ? body.deviceId.slice(0, 64) : '';
+    if (peerId && typeof current.peerId === 'string' && current.peerId !== peerId) {
+      return NextResponse.json({ ok: true, skipped: 'slot-reclaimed' });
+    }
+    if (!peerId && deviceId && typeof current.deviceId === 'string' && current.deviceId !== deviceId) {
+      return NextResponse.json({ ok: true, skipped: 'slot-reclaimed' });
+    }
+    // Older clients identify only by deviceId, which is identical across a
+    // refresh — a stale leave racing a fresh (re)join must not clear it.
+    if (!peerId && typeof current.joinedAt === 'number' && Date.now() - current.joinedAt < 10000) {
+      return NextResponse.json({ ok: true, skipped: 'slot-reclaimed-recent' });
+    }
+
     // Clear the slot
     slots[slotIndex] = null;
 

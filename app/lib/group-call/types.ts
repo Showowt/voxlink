@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // ENTREVOZ GROUP CALL — TYPE DEFINITIONS
-// Mesh P2P, 2-4 participants, distributed translation
+// Mesh P2P, 2-4 participants. Each person transcribes their OWN voice;
+// each receiver translates into THEIR OWN selected language.
 // ═══════════════════════════════════════════════════════════════
 
 export type SlotIndex = 0 | 1 | 2 | 3;
@@ -32,15 +33,30 @@ export interface Participant {
   connectionQuality: ConnectionQuality;
 }
 
+// One conversation-feed line per UTTERANCE. Interim speech updates the line in
+// place; the final text locks it and — when the speaker's language differs
+// from mine — triggers translation into MY language.
+export type SubtitleStatus =
+  | 'live' // speaker still talking; text is provisional
+  | 'translating' // final text in, translation in flight
+  | 'done' // translated into targetLanguage
+  | 'same' // already in my language (or my own line)
+  | 'failed'; // translation failed after retries — original shown + retry
+
 export interface SubtitleEntry {
   id: string;
   speakerSlot: SlotIndex;
   speakerName: string;
   speakerLanguage: string;
+  isMe: boolean;
   original: string;
-  translated: string | null;
+  translated: string | null; // final translation, in targetLanguage
+  liveTranslated: string | null; // provisional translation while still live
+  targetLanguage: string;
   isFinal: boolean;
-  timestamp: number;
+  status: SubtitleStatus;
+  timestamp: number; // first seen
+  updatedAt: number; // last text change
 }
 
 export interface JoinOptions {
@@ -51,14 +67,32 @@ export interface JoinOptions {
   existingStream?: MediaStream;
 }
 
+// Caption engine for MY voice: the browser's speech service, or our own
+// Whisper endpoint when that service is missing or broken on this device.
+export type SttEngine = 'webspeech' | 'whisper' | 'none';
+export type SttState =
+  | 'idle'
+  | 'starting'
+  | 'listening'
+  | 'recovering'
+  | 'muted'
+  | 'blocked'
+  | 'unavailable';
+
 // DataChannel messages (peer-to-peer, after connection established)
 export type DataChannelMessage =
-  | { type: 'transcript'; text: string; isFinal: boolean; language: string; speakerSlot: SlotIndex }
+  // `uid` ties the interim + final results of ONE utterance together so
+  // receivers update a single line in place. Optional: clients from before
+  // utterance ids omit it.
+  | { type: 'transcript'; text: string; isFinal: boolean; language: string; speakerSlot: SlotIndex; uid?: string }
   | { type: 'mute'; muted: boolean }
   | { type: 'camera'; off: boolean }
   | { type: 'ping'; ts: number }
   | { type: 'pong'; ts: number }
-  | { type: 'presence'; displayName: string; language: string; slotIndex: SlotIndex };
+  | { type: 'presence'; displayName: string; language: string; slotIndex: SlotIndex }
+  // Sent on Leave so the tile disappears at once — a closed data channel
+  // alone can take ~30s to surface on the other side.
+  | { type: 'bye' };
 
 // Supabase Realtime room state
 export interface GroupRoomRow {
@@ -87,9 +121,17 @@ export interface UseGroupCallReturn {
   participants: (Participant | null)[];
   subtitles: SubtitleEntry[];
   participantCount: number;
+  sttState: SttState;
+  sttEngine: SttEngine;
+  localSpeaking: boolean;
   joinRoom: (roomCode: string, opts: JoinOptions) => Promise<void>;
   leaveRoom: () => void;
   toggleMute: () => void;
   toggleCamera: () => void;
   setMyLanguage: (lang: string) => void;
+  primeAudio: () => void;
+  retryTranslation: (id: string) => void;
+  restartCaptions: () => void;
+  switchToBackupCaptions: () => void;
+  retryConnection: (slotIndex: number) => void;
 }
