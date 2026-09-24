@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ConfirmDeleteModal } from "@/app/components/ConfirmDeleteModal";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
+import {
+  ensureAIConsent,
+  getAIConsent,
+  setAIConsent,
+} from "@/app/lib/ai-consent";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ACCOUNT & PRIVACY — GDPR Data Export + Delete Account
@@ -96,6 +101,79 @@ async function clearAllIndexedDB(): Promise<void> {
 function clearAllLocalStorage(): void {
   if (typeof window === "undefined") return;
   localStorage.clear();
+}
+
+// ── AI Data Sharing ──────────────────────────────────────────────────────────
+// Review, grant or withdraw the in-app AI consent (App Review 5.1.1/5.1.2).
+function AIDataSharingCard() {
+  const [consent, setConsent] = useState<"granted" | "declined" | "unset">("unset");
+
+  useEffect(() => {
+    setConsent(getAIConsent());
+    const sync = () => setConsent(getAIConsent());
+    window.addEventListener("entrevoz:ai-consent-changed", sync);
+    return () => window.removeEventListener("entrevoz:ai-consent-changed", sync);
+  }, []);
+
+  const allowed = consent === "granted";
+
+  return (
+    <div
+      className="rounded-2xl border border-emerald-500/20 p-5 sm:p-6 mb-5"
+      style={{
+        background:
+          "linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(16, 185, 129, 0.01) 100%)",
+        boxShadow:
+          "0 4px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.03)",
+      }}
+    >
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div>
+          <h2 className="text-lg font-semibold text-white">AI Data Sharing</h2>
+          <p className="text-white/40 text-xs">Compartir datos con IA</p>
+        </div>
+        <span
+          className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${
+            allowed
+              ? "bg-emerald-500/15 text-emerald-300"
+              : "bg-white/[0.06] text-white/50"
+          }`}
+        >
+          {allowed ? "Allowed · Permitido" : "Off · Desactivado"}
+        </span>
+      </div>
+
+      <p className="text-white/55 text-sm leading-relaxed mb-3">
+        When allowed, what you say or type is sent to third-party services to
+        translate it: voice recordings to OpenAI (speech-to-text); text and
+        recent conversation lines to Anthropic (Claude), Google Translate,
+        MyMemory and LibreTranslate (translation); Practice and Wingman
+        messages to Anthropic; translated text and, only with Voice Mimic,
+        short voice samples to ElevenLabs (spoken voice). When off, nothing is
+        sent and translation features stay paused.
+      </p>
+      <p className="text-white/35 text-xs leading-relaxed mb-4">
+        Si lo permites, lo que dices o escribes se envía a estos servicios solo
+        para traducirlo. Si lo desactivas, no se envía nada.
+      </p>
+
+      {allowed ? (
+        <button
+          onClick={() => setAIConsent(false)}
+          className="w-full py-3 min-h-[44px] rounded-xl font-semibold text-sm text-white/80 bg-white/[0.05] border border-white/[0.1] hover:bg-white/[0.08] transition-all active:scale-[0.98]"
+        >
+          Turn Off AI Data Sharing · Desactivar
+        </button>
+      ) : (
+        <button
+          onClick={() => ensureAIConsent()}
+          className="w-full py-3 min-h-[44px] rounded-xl font-semibold text-sm text-black bg-[#00E5A0] transition-all active:scale-[0.98]"
+        >
+          Review &amp; Allow · Revisar y permitir
+        </button>
+      )}
+    </div>
+  );
 }
 
 export default function AccountPage() {
@@ -280,6 +358,8 @@ export default function AccountPage() {
           </p>
         </div>
 
+        <AIDataSharingCard />
+
         {/* ── Section 1: Export Data ────────────────────────────────────────── */}
         <div
           className="rounded-2xl border border-cyan-500/20 p-5 sm:p-6 mb-5"
@@ -389,8 +469,9 @@ export default function AccountPage() {
               </h2>
               <p className="text-white/50 text-sm mt-1">
                 Permanently delete all your data from our servers and this
-                device. This includes contacts, learning progress, flashcards,
-                and all local storage. This action cannot be undone.
+                device. This includes contacts, call history, invites,
+                learning progress, flashcards, and all local storage. This
+                action cannot be undone.
               </p>
             </div>
           </div>

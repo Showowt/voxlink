@@ -7,11 +7,11 @@ import puppeteer from "puppeteer-core";
 //    notification, the mic stays "recording", and finishing the tap fires a
 //    POST /api/transcribe (Whisper fallback) — on HOME and FACE-TO-FACE.
 // B) AI consent (5.1.1): fresh device sees the consent sheet BEFORE any AI
-//    use; Agree dismisses it; after "Not now", tapping the mic re-opens it.
+//    use; Allow dismisses it; after "Don't Allow", tapping the mic re-opens it.
 // usage: node native/e2e-review-fixes-test.mjs
 // ─────────────────────────────────────────────────────────────────────────────
 
-const BASE = "https://www.entrevoz.co";
+const BASE = process.env.BASE || "https://www.entrevoz.co";
 const UA =
   "Mozilla/5.0 (iPad; CPU OS 27_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/22A3354 EntrevozApp/1.0";
 
@@ -136,10 +136,10 @@ const c = await newPage({ consent: false, stubSpeech: false });
 await c.page.goto(`${BASE}/`, { waitUntil: "networkidle2", timeout: 45000 });
 await new Promise((r) => setTimeout(r, 2500));
 txt = await body(c.page);
-const sheetShown = /your words power the translation/i.test(txt);
-// "Not now" → dismiss
+const sheetShown = /allow ai translation\?/i.test(txt);
+// "Don't Allow" → dismiss
 await c.page.evaluate(() => {
-  const b = [...document.querySelectorAll("button")].find((x) => /not now/i.test(x.innerText));
+  const b = [...document.querySelectorAll("button")].find((x) => /^don.t allow$/i.test(x.innerText.trim()));
   b?.click();
 });
 await new Promise((r) => setTimeout(r, 800));
@@ -154,19 +154,19 @@ await c.page.evaluate(() => {
 });
 await new Promise((r) => setTimeout(r, 1000));
 txt = await body(c.page);
-const sheetReshown = /your words power the translation/i.test(txt);
-// Agree → gone
+const sheetReshown = /allow ai translation\?/i.test(txt);
+// Allow → gone
 await c.page.evaluate(() => {
-  const b = [...document.querySelectorAll("button")].find((x) => /agree/i.test(x.innerText));
+  const b = [...document.querySelectorAll("button")].find((x) => /^allow$/i.test(x.innerText.trim()));
   b?.click();
 });
 await new Promise((r) => setTimeout(r, 800));
 txt = await body(c.page);
-const sheetGone = !/your words power the translation/i.test(txt);
+const sheetGone = !/allow ai translation\?/i.test(txt);
 const persisted = await c.page.evaluate(() => localStorage.getItem("entrevoz_ai_consent") || "");
 console.log(`B consent: shown on first launch : ${sheetShown ? "✅" : "❌"}`);
 console.log(`B consent: re-shown on AI use    : ${sheetReshown ? "✅" : "❌"}`);
-console.log(`B consent: Agree dismisses+saves : ${sheetGone && persisted.startsWith("granted") ? "✅" : `❌ (${persisted})`}`);
+console.log(`B consent: Allow dismisses+saves : ${sheetGone && persisted.startsWith("granted") ? "✅" : `❌ (${persisted})`}`);
 await c.page.browserContext().close().catch(() => {});
 
 const pass = homeNoError && homeWhisper && f2fNoError && f2fListening && f2fWhisper && sheetShown && sheetReshown && sheetGone;

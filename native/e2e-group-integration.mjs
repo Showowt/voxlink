@@ -224,7 +224,7 @@ await sleep(1500);
 const sheetFirst = await fresh.page.evaluate(() => !!document.querySelector('[role="dialog"][aria-label="AI translation consent"]'));
 check("consent: sheet appears on first launch", sheetFirst);
 await fresh.page.evaluate(() => {
-  [...document.querySelectorAll("button")].find((b) => /not now/i.test(b.textContent))?.click();
+  [...document.querySelectorAll("button")].find((b) => /^\s*(don.t allow|no permitir)\s*$/i.test(b.textContent))?.click();
 });
 await sleep(400);
 await fresh.page.type("#gc-name", "Nora");
@@ -239,7 +239,7 @@ const afterDecline = {
 check("consent: declining blocks the join (nothing sent)", afterDecline.phase !== "active" && !afterDecline.joined && !afterDecline.sent, JSON.stringify(afterDecline));
 check("consent: tapping Join re-opens the sheet", afterDecline.sheet);
 await fresh.page.evaluate(() => {
-  [...document.querySelectorAll("button")].find((b) => /agree & continue|aceptar y continuar/i.test(b.textContent))?.click();
+  [...document.querySelectorAll("button")].find((b) => /^\s*(allow|permitir)\s*$/i.test(b.textContent))?.click();
 });
 const consentJoined = await waitFor(async () => (await phaseOf(fresh.page)) === "active", 30000);
 check("consent: agreeing continues the join automatically", !!consentJoined);

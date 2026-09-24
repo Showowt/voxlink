@@ -15,7 +15,11 @@ import {
 } from "./components/LanguageSelector";
 import { addTranslation } from "./lib/translation-history";
 import { registerDirectory } from "./lib/directory";
-import { ensureAIConsent } from "./lib/ai-consent";
+import {
+  AI_CONSENT_BLOCKED_MESSAGE,
+  AI_CONSENT_BLOCKED_STATUS,
+  ensureAIConsent,
+} from "./lib/ai-consent";
 import {
   startWhisperCapture,
   whisperAvailable,
@@ -110,6 +114,10 @@ function VoxTypeTab() {
           }),
         });
 
+        if (response1.status === AI_CONSENT_BLOCKED_STATUS) {
+          setError(AI_CONSENT_BLOCKED_MESSAGE);
+          return;
+        }
         if (!response1.ok) throw new Error("Translation failed");
         const data1 = await response1.json();
 
@@ -575,6 +583,10 @@ function VoxNoteTab() {
           }),
         });
 
+        if (response.status === AI_CONSENT_BLOCKED_STATUS) {
+          setError(AI_CONSENT_BLOCKED_MESSAGE);
+          return;
+        }
         if (!response.ok) {
           throw new Error("Translation failed");
         }

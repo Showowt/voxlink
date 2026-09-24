@@ -10,7 +10,7 @@ import puppeteer from "puppeteer-core";
 // usage: node native/e2e-lang-mic-test.mjs
 // ─────────────────────────────────────────────────────────────────────────────
 
-const BASE = "https://www.entrevoz.co";
+const BASE = process.env.BASE || "https://www.entrevoz.co";
 const ts = Date.now().toString().slice(-12);
 const CALLER_ID = `e2el1000-0000-4000-8000-${ts}`;
 const CALLEE_ID = `e2el2000-0000-4000-8000-${ts}`;

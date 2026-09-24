@@ -10,7 +10,7 @@ import puppeteer from "puppeteer-core";
 // usage: node native/e2e-interruption-test.mjs
 // ─────────────────────────────────────────────────────────────────────────────
 
-const BASE = "https://www.entrevoz.co";
+const BASE = process.env.BASE || "https://www.entrevoz.co";
 const CODE = `QI${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 const ts = Date.now().toString().slice(-12);
 const A_ID = `e2ex1000-0000-4000-8000-${ts}`;

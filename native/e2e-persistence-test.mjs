@@ -9,7 +9,7 @@ import puppeteer from "puppeteer-core";
 // usage: node native/e2e-persistence-test.mjs
 // ─────────────────────────────────────────────────────────────────────────────
 
-const BASE = "https://www.entrevoz.co";
+const BASE = process.env.BASE || "https://www.entrevoz.co";
 const CODE = `QA${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 const A_ID = "e2e0a000-0000-4000-8000-" + Date.now().toString().slice(-12);
 const B_ID = "e2e0b000-0000-4000-8000-" + Date.now().toString().slice(-12);

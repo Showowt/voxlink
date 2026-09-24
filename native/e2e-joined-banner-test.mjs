@@ -8,7 +8,7 @@ import puppeteer from "puppeteer-core";
 // usage: node native/e2e-joined-banner-test.mjs
 // ─────────────────────────────────────────────────────────────────────────────
 
-const BASE = "https://www.entrevoz.co";
+const BASE = process.env.BASE || "https://www.entrevoz.co";
 const ts = Date.now().toString().slice(-12);
 const PHIL_ID = `e2ej1000-0000-4000-8000-${ts}`;
 const MOM_ID = `e2ej2000-0000-4000-8000-${ts}`;

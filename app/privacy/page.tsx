@@ -1,14 +1,117 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 export const metadata: Metadata = {
   title: "Privacy Policy | Entrevoz - MachineMind",
   description:
-    "Privacy Policy for Entrevoz real-time voice translation app. Learn how we handle your data, microphone access, and third-party services.",
+    "Privacy Policy for Entrevoz real-time voice translation. What data we collect, how we collect it, how it is used, and every third-party service it is shared with, including AI services.",
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Every statement below must match the code. When a feature starts sending
+// data somewhere new, add the recipient to section 4 AND to the in-app consent
+// sheet (app/components/AIConsentSheet.tsx) in the same change.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface Processor {
+  name: string;
+  purpose: string;
+  data: string;
+}
+
+const AI_PROCESSORS: Processor[] = [
+  {
+    name: "OpenAI (Whisper)",
+    purpose: "Speech-to-text",
+    data: "Short recordings of your voice while you use a voice feature, when your device's built-in speech recognition is unavailable or not used. Returns the transcript.",
+  },
+  {
+    name: "Anthropic (Claude)",
+    purpose: "Translation, AI tutor (Practice), AI coach (Wingman), call summaries",
+    data: "Text you type or speak, recent lines of the same conversation (for accurate translation), messages you send in Practice and Wingman, and call transcripts when you ask for a post-call summary or turn on Learning Mode.",
+  },
+  {
+    name: "Google Translate, MyMemory (Translated srl), LibreTranslate",
+    purpose: "Fast text translation",
+    data: "The individual phrase being translated (and single vocabulary words from your calls for Practice flashcards). No account or device identifiers are sent.",
+  },
+  {
+    name: "ElevenLabs",
+    purpose: "Spoken voice output (optional)",
+    data: "Only if you turn voice output or Voice Mimic on: translated text to be spoken and, for Voice Mimic, short samples of your voice used to create a temporary voice that is deleted automatically within about 2 hours.",
+  },
+];
+
+const INFRA_PROCESSORS: Processor[] = [
+  {
+    name: "Daily.co",
+    purpose: "Video calls",
+    data: "Live audio and video of 1:1 video calls, carried between you and your partner. Daily does not record calls for us.",
+  },
+  {
+    name: "PeerJS and Metered (TURN relay)",
+    purpose: "Peer-to-peer connections",
+    data: "Connection signaling and, when a direct connection is not possible, relayed encrypted audio/video for talk, group and face-to-face features.",
+  },
+  {
+    name: "Supabase",
+    purpose: "Database and sign-in",
+    data: "The account, contacts, call history, directory, invite, learning-progress and push-token records described in section 2.",
+  },
+  {
+    name: "Vercel and Upstash",
+    purpose: "Hosting and abuse prevention",
+    data: "Serves the app; processes IP addresses transiently for security and rate limiting.",
+  },
+  {
+    name: "Apple",
+    purpose: "Push notifications and on-device speech recognition",
+    data: "A push token to deliver incoming-call alerts. When iOS speech recognition is used, audio is handled by Apple under Apple's privacy policy.",
+  },
+  {
+    name: "Stripe",
+    purpose: "Payments on our website",
+    data: "Payment details for purchases made on entrevoz.co. The iOS app does not process payments. We never receive your full card number.",
+  },
+];
+
+function Section({ n, title, children }: { n: number; title: string; children: ReactNode }) {
+  return (
+    <section>
+      <h2 className="text-xl font-semibold text-white mb-4">
+        {n}. {title}
+      </h2>
+      <div className="space-y-4 text-gray-300 leading-relaxed">{children}</div>
+    </section>
+  );
+}
+
+function Sub({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div>
+      <h3 className="text-cyan-400 font-medium mb-2">{title}</h3>
+      {children}
+    </div>
+  );
+}
+
+function ProcessorList({ items }: { items: Processor[] }) {
+  return (
+    <div className="space-y-3">
+      {items.map((p) => (
+        <div key={p.name} className="p-4 bg-[#1a1a2e] rounded-xl border border-gray-700">
+          <h4 className="text-white font-medium">{p.name}</h4>
+          <p className="text-xs text-cyan-300/80 mb-1">{p.purpose}</p>
+          <p className="text-sm text-gray-400">{p.data}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function PrivacyPage() {
-  const lastUpdated = "March 6, 2026";
+  const lastUpdated = "September 24, 2026";
 
   return (
     <div className="min-h-[100dvh] bg-gradient-to-br from-[#0a0a0f] via-[#0d1117] to-[#0a0a0f] py-8 px-4 sm:py-12 sm:px-6">
@@ -19,323 +122,212 @@ export default function PrivacyPage() {
             href="/"
             className="inline-flex items-center gap-2 text-cyan-400 hover:text-cyan-300 transition mb-6"
           >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 19l-7-7 7-7"
-              />
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
             Back to Entrevoz
           </Link>
-          <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2">
-            Privacy Policy
-          </h1>
+          <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2">Privacy Policy</h1>
           <p className="text-gray-400">Last updated: {lastUpdated}</p>
         </div>
 
-        {/* Content */}
         <div className="bg-[#12121a] rounded-2xl border border-gray-800 p-6 sm:p-8 space-y-8">
-          {/* Introduction */}
-          <section>
-            <h2 className="text-xl font-semibold text-white mb-4">
-              1. Introduction
-            </h2>
-            <p className="text-gray-300 leading-relaxed">
-              MachineMind (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;)
-              operates Entrevoz, a real-time voice translation application. This
-              Privacy Policy explains how we collect, use, disclose, and
-              safeguard your information when you use our service. We are
-              committed to protecting your privacy and complying with applicable
-              data protection laws, including GDPR and CCPA.
+          <Section n={1} title="Introduction">
+            <p>
+              MachineMind (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;) operates Entrevoz, a
+              real-time translation app for conversations, calls and language practice, on iOS
+              and at entrevoz.co. This policy explains what information we collect, how we
+              collect it, every way we use it, and every third party we share it with —
+              including third-party AI services. We comply with applicable data protection
+              laws, including the GDPR and CCPA.
             </p>
-          </section>
-
-          {/* Data Collection */}
-          <section>
-            <h2 className="text-xl font-semibold text-white mb-4">
-              2. Information We Collect
-            </h2>
-            <div className="space-y-4 text-gray-300">
-              <div>
-                <h3 className="text-cyan-400 font-medium mb-2">
-                  2.1 Information You Provide
-                </h3>
-                <ul className="list-disc list-inside space-y-1 ml-2">
-                  <li>Display name (stored locally on your device)</li>
-                  <li>Language preferences</li>
-                  <li>
-                    Text and speech input for translation (processed in
-                    real-time, not stored)
-                  </li>
-                </ul>
-              </div>
-              <div>
-                <h3 className="text-cyan-400 font-medium mb-2">
-                  2.2 Automatically Collected Information
-                </h3>
-                <ul className="list-disc list-inside space-y-1 ml-2">
-                  <li>Session tokens (stored in browser sessionStorage)</li>
-                  <li>Device type and browser information</li>
-                  <li>Connection metadata for WebRTC peer connections</li>
-                </ul>
-              </div>
-            </div>
-          </section>
-
-          {/* Microphone and Camera Access */}
-          <section>
-            <h2 className="text-xl font-semibold text-white mb-4">
-              3. Microphone and Camera Access
-            </h2>
-            <div className="space-y-4 text-gray-300">
-              <p>
-                Entrevoz requires access to your device&apos;s microphone and
-                camera to provide translation services:
-              </p>
-              <div>
-                <h3 className="text-cyan-400 font-medium mb-2">
-                  3.1 Microphone Access
-                </h3>
-                <p className="ml-2">
-                  Used for speech recognition and real-time voice translation.
-                  Audio is processed locally using your browser&apos;s Web
-                  Speech API and is not recorded or stored on our servers.
-                </p>
-              </div>
-              <div>
-                <h3 className="text-cyan-400 font-medium mb-2">
-                  3.2 Camera Access
-                </h3>
-                <p className="ml-2">
-                  Used for video calls between users. Video streams are
-                  transmitted directly between participants via WebRTC
-                  peer-to-peer connections and are not routed through or stored
-                  on our servers.
-                </p>
-              </div>
-              <div className="p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-xl">
-                <p className="text-cyan-100 text-sm">
-                  You can revoke microphone and camera permissions at any time
-                  through your browser settings. The app will request permission
-                  each session unless you grant persistent access.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {/* Third-Party Services */}
-          <section>
-            <h2 className="text-xl font-semibold text-white mb-4">
-              4. Third-Party Services
-            </h2>
-            <div className="space-y-4 text-gray-300">
-              <p>
-                Entrevoz provides live translation by sending the content you
-                choose to translate to the following AI and infrastructure
-                services. We ask for your explicit consent in-app before any of
-                this data is sent, and it is used solely to provide the
-                translation features — never sold and never used for
-                advertising.
-              </p>
-              <div className="space-y-3">
-                <div className="p-4 bg-[#1a1a2e] rounded-xl border border-gray-700">
-                  <h3 className="text-white font-medium mb-1">
-                    OpenAI (Whisper) — speech-to-text
-                  </h3>
-                  <p className="text-sm text-gray-400">
-                    Receives short recordings of your voice and returns the
-                    transcript so your speech can be translated. Audio is
-                    processed for transcription only.
-                  </p>
-                </div>
-                <div className="p-4 bg-[#1a1a2e] rounded-xl border border-gray-700">
-                  <h3 className="text-white font-medium mb-1">
-                    Anthropic (Claude) — translation
-                  </h3>
-                  <p className="text-sm text-gray-400">
-                    Receives the words you speak or type (plus recent
-                    conversation context) and returns the translation.
-                  </p>
-                </div>
-                <div className="p-4 bg-[#1a1a2e] rounded-xl border border-gray-700">
-                  <h3 className="text-white font-medium mb-1">
-                    ElevenLabs — voice generation (optional)
-                  </h3>
-                  <p className="text-sm text-gray-400">
-                    Only if you enable spoken voice output or Voice Mimic:
-                    receives translated text (and, for Voice Mimic, short voice
-                    samples) to generate natural speech. Temporary voice models
-                    are deleted automatically.
-                  </p>
-                </div>
-                <div className="p-4 bg-[#1a1a2e] rounded-xl border border-gray-700">
-                  <h3 className="text-white font-medium mb-1">
-                    Daily.co — video call connection
-                  </h3>
-                  <p className="text-sm text-gray-400">
-                    Carries the live audio/video between you and your call
-                    partner. Calls are not recorded by us unless you press
-                    Record.
-                  </p>
-                </div>
-                <div className="p-4 bg-[#1a1a2e] rounded-xl border border-gray-700">
-                  <h3 className="text-white font-medium mb-1">
-                    MyMemory / LibreTranslate / Lingva — fast text translation
-                  </h3>
-                  <p className="text-sm text-gray-400">
-                    Free translation services that may receive the text being
-                    translated for quick results.
-                  </p>
-                </div>
-                <div className="p-4 bg-[#1a1a2e] rounded-xl border border-gray-700">
-                  <h3 className="text-white font-medium mb-1">
-                    PeerJS/WebRTC — voice-call connection
-                  </h3>
-                  <p className="text-sm text-gray-400">
-                    Enables peer-to-peer audio connections. Connection signaling
-                    may use PeerJS servers.
-                  </p>
-                </div>
-              </div>
-              <p className="text-sm text-gray-400">
-                Each provider processes this data under its own privacy policy
-                with protections equivalent to ours. You can withdraw consent
-                and delete your data at any time from Settings → Clear All Data
-                or Account → Delete My Account.
+            <div className="p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-xl">
+              <p className="text-cyan-100 text-sm">
+                <span className="font-semibold">Your permission comes first.</span> Translation
+                works by sending what you say or type to AI and translation services. The app
+                shows you exactly what is sent and to whom, and sends nothing to them until you
+                tap <span className="font-semibold">Allow</span>. You can withdraw permission at
+                any time in Profile → Account &amp; Privacy → AI Data Sharing.
               </p>
             </div>
-          </section>
+          </Section>
 
-          {/* Data Retention */}
-          <section>
-            <h2 className="text-xl font-semibold text-white mb-4">
-              5. Data Retention
-            </h2>
-            <div className="space-y-3 text-gray-300">
-              <p>We minimize data retention:</p>
-              <ul className="list-disc list-inside space-y-2 ml-2">
-                <li>
-                  <span className="text-white">Session tokens:</span> Stored in
-                  sessionStorage, cleared when you close your browser tab
-                </li>
-                <li>
-                  <span className="text-white">User preferences:</span> Stored
-                  in localStorage on your device only
-                </li>
-                <li>
-                  <span className="text-white">
-                    Audio/video and translations:
-                  </span>{" "}
-                  Processed in real-time, not stored
-                </li>
-                <li>
-                  <span className="text-white">WebRTC connections:</span>{" "}
-                  Terminated when the call ends
-                </li>
+          <Section n={2} title="Information We Collect and How">
+            <Sub title="2.1 Content you choose to translate (only after you allow AI data sharing)">
+              <ul className="list-disc list-inside space-y-1 ml-2">
+                <li>Your voice, captured through the microphone only while you use a voice feature (you start it by tapping the microphone or joining a call).</li>
+                <li>Transcripts of what you say and text you type into the translator.</li>
+                <li>Messages you send to the AI tutor (Practice) and AI coach (Wingman).</li>
+                <li>Short voice samples, only if you turn on Voice Mimic.</li>
               </ul>
-            </div>
-          </section>
-
-          {/* User Rights */}
-          <section>
-            <h2 className="text-xl font-semibold text-white mb-4">
-              6. Your Rights
-            </h2>
-            <div className="space-y-4 text-gray-300">
-              <p>
-                Under GDPR, CCPA, and other applicable laws, you have the right
-                to:
-              </p>
-              <ul className="list-disc list-inside space-y-2 ml-2">
-                <li>
-                  <span className="text-white">Access:</span> Request
-                  information about data we process about you
-                </li>
-                <li>
-                  <span className="text-white">Deletion:</span> Request deletion
-                  of your data (clear browser storage)
-                </li>
-                <li>
-                  <span className="text-white">Portability:</span> Receive your
-                  data in a portable format
-                </li>
-                <li>
-                  <span className="text-white">Opt-out:</span> Revoke camera and
-                  microphone permissions at any time
-                </li>
-                <li>
-                  <span className="text-white">Non-discrimination:</span> We
-                  will not discriminate against you for exercising your rights
-                </li>
+            </Sub>
+            <Sub title="2.2 Information you provide">
+              <ul className="list-disc list-inside space-y-1 ml-2">
+                <li>Optional account: email address, name and password (the password is stored only as a secure hash by our sign-in provider).</li>
+                <li>Display name and preferred language.</li>
+                <li>Contacts you save: their display name, language and a random app identifier (never phone numbers or your address book).</li>
+                <li>Invites you create: your name, language and the label you give the invite.</li>
               </ul>
-              <div className="p-4 bg-[#1a1a2e] rounded-xl border border-gray-700">
-                <p className="text-sm">
-                  <span className="text-cyan-400">
-                    California Residents (CCPA):
-                  </span>{" "}
-                  You have the right to know what personal information we
-                  collect, request deletion, and opt-out of sale of personal
-                  information. We do not sell your personal information.
-                </p>
-              </div>
+            </Sub>
+            <Sub title="2.3 Information created as you use the app">
+              <ul className="list-disc list-inside space-y-1 ml-2">
+                <li>A random device identifier generated by the app, and your personal dial code derived from it.</li>
+                <li>Call history: partner name, date, duration, languages, and the call&apos;s translated transcript (up to 60 lines), so you can review past calls on any device.</li>
+                <li>Language-practice progress: flashcards, fluency level, and vocabulary words taken from your calls.</li>
+                <li>A push token, so incoming calls can ring your phone.</li>
+                <li>Recordings you make with the Record button — saved only on your device.</li>
+                <li>Translation phrasebook and preferences — saved only on your device.</li>
+              </ul>
+            </Sub>
+            <Sub title="2.4 Collected automatically">
+              <ul className="list-disc list-inside space-y-1 ml-2">
+                <li>IP address and approximate country when you create an account, and IP addresses processed transiently for security and rate limiting.</li>
+                <li>Device and browser type.</li>
+                <li>Usage statistics without content: language pair, text length, which translation service answered, and response time.</li>
+                <li>Nearby (optional): your approximate location while the Nearby screen is open and only if you grant location permission, used to show other users nearby. It expires automatically after 30 minutes.</li>
+              </ul>
+            </Sub>
+            <Sub title="2.5 Microphone and camera">
+              <p className="ml-2">
+                Used only while you use a voice or call feature, after you grant permission in
+                iOS. Speech is converted to text by your device&apos;s speech recognition or, when
+                that is unavailable, by OpenAI Whisper. Camera video is used only in video calls.
+                We do not record calls; only you can record, and recordings stay on your device.
+                You can revoke access anytime in iOS Settings → Entrevoz.
+              </p>
+            </Sub>
+          </Section>
+
+          <Section n={3} title="How We Use Information">
+            <ul className="list-disc list-inside space-y-2 ml-2">
+              <li>To transcribe, translate and optionally speak your conversations.</li>
+              <li>To connect calls, ring the people you call, and show who is calling you.</li>
+              <li>To keep your contacts, call history and practice progress available to you.</li>
+              <li>To run the AI tutor, AI coach and call summaries you request.</li>
+              <li>To secure the service, prevent abuse and fix problems.</li>
+              <li>To manage your account and, on the website, purchases.</li>
+            </ul>
+            <p>
+              We do not sell your personal information, do not use it for advertising, and do
+              not track you across other companies&apos; apps or websites.
+            </p>
+          </Section>
+
+          <Section n={4} title="Third Parties We Share Data With">
+            <p>
+              We share data only with the service providers below, only after you allow AI data
+              sharing where AI is involved, and only as needed to provide the feature you are
+              using.
+            </p>
+            <Sub title="4.1 AI and translation services">
+              <ProcessorList items={AI_PROCESSORS} />
+              <p className="text-sm text-gray-400 mt-3">
+                Under their API terms, OpenAI and Anthropic do not use data submitted through
+                their business APIs to train their models.
+              </p>
+            </Sub>
+            <Sub title="4.2 Infrastructure services">
+              <ProcessorList items={INFRA_PROCESSORS} />
+            </Sub>
+            <div className="p-4 bg-[#1a1a2e] rounded-xl border border-gray-700">
+              <p className="text-sm">
+                <span className="text-white font-medium">Equal protection.</span> We confirm
+                that each third party we share user data with provides the same or equal
+                protection of that data as stated in this policy: they may use it only to
+                provide their service to us, must keep it confidential and secure, and may not
+                sell it or use it for advertising. Each also processes data under its own
+                privacy policy.
+              </p>
             </div>
-          </section>
+          </Section>
 
-          {/* Security */}
-          <section>
-            <h2 className="text-xl font-semibold text-white mb-4">
-              7. Security
-            </h2>
-            <p className="text-gray-300 leading-relaxed">
-              We implement appropriate technical and organizational measures to
-              protect your data. WebRTC connections use DTLS encryption for
-              media streams. However, no method of transmission over the
-              internet is 100% secure, and we cannot guarantee absolute
-              security.
-            </p>
-          </section>
+          <Section n={5} title="Data Retention">
+            <ul className="list-disc list-inside space-y-2 ml-2">
+              <li>
+                <span className="text-white">Audio and text sent for transcription or translation:</span>{" "}
+                not stored by us after the result is returned (except the call history you
+                keep). AI providers may retain it for a limited period for safety and abuse
+                monitoring, as described in their own policies.
+              </li>
+              <li>
+                <span className="text-white">Account, contacts, call history, invites, directory entry and practice progress:</span>{" "}
+                kept until you delete them or delete your account.
+              </li>
+              <li>
+                <span className="text-white">Voice Mimic voices:</span> deleted automatically
+                within about 2 hours.
+              </li>
+              <li>
+                <span className="text-white">Nearby location:</span> expires after 30 minutes.
+              </li>
+              <li>
+                <span className="text-white">On-device data</span> (recordings, phrasebook,
+                preferences): stays on your device until you clear it or delete the app.
+              </li>
+            </ul>
+          </Section>
 
-          {/* Children */}
-          <section>
-            <h2 className="text-xl font-semibold text-white mb-4">
-              8. Children&apos;s Privacy
-            </h2>
-            <p className="text-gray-300 leading-relaxed">
-              Entrevoz is not intended for children under 13 years of age. We do
-              not knowingly collect personal information from children under 13.
-              If you believe we have collected information from a child under
-              13, please contact us immediately.
+          <Section n={6} title="Your Choices and Rights">
+            <ul className="list-disc list-inside space-y-2 ml-2">
+              <li>
+                <span className="text-white">Withdraw AI permission:</span> Profile → Account
+                &amp; Privacy → AI Data Sharing → Turn Off. Translation features then pause and
+                nothing more is sent.
+              </li>
+              <li>
+                <span className="text-white">Delete everything:</span> Profile → Account &amp;
+                Privacy → Delete My Account. This deletes your account and your server-side
+                contacts, call history, directory entry, invites, push token and practice
+                progress, and clears this device.
+              </li>
+              <li>
+                <span className="text-white">Access and portability:</span> Account &amp;
+                Privacy → Export My Data.
+              </li>
+              <li>
+                <span className="text-white">Microphone, camera and notifications:</span>{" "}
+                iOS Settings → Entrevoz.
+              </li>
+            </ul>
+            <p>
+              Under the GDPR, CCPA and similar laws you may also request access, correction or
+              deletion by contacting us (section 11). We will not discriminate against you for
+              exercising your rights.
             </p>
-          </section>
+          </Section>
 
-          {/* Changes */}
-          <section>
-            <h2 className="text-xl font-semibold text-white mb-4">
-              9. Changes to This Policy
-            </h2>
-            <p className="text-gray-300 leading-relaxed">
-              We may update this Privacy Policy from time to time. We will
-              notify you of any changes by posting the new Privacy Policy on
-              this page and updating the &quot;Last updated&quot; date.
+          <Section n={7} title="Security">
+            <p>
+              Data is encrypted in transit (HTTPS/TLS; call media uses DTLS-SRTP). Server records
+              are protected by access controls. No method of transmission over the internet is
+              100% secure, and we cannot guarantee absolute security.
             </p>
-          </section>
+          </Section>
 
-          {/* Contact */}
-          <section>
-            <h2 className="text-xl font-semibold text-white mb-4">
-              10. Contact Us
-            </h2>
-            <p className="text-gray-300 mb-4">
-              If you have questions about this Privacy Policy or wish to
-              exercise your rights, contact us at:
+          <Section n={8} title="International Transfers">
+            <p>
+              We and our providers process data in the United States and other countries where
+              they operate.
             </p>
+          </Section>
+
+          <Section n={9} title="Children's Privacy">
+            <p>
+              Entrevoz is not intended for children under 13, and we do not knowingly collect
+              personal information from children under 13. If you believe a child has provided
+              us information, contact us and we will delete it.
+            </p>
+          </Section>
+
+          <Section n={10} title="Changes to This Policy">
+            <p>
+              We will post any changes on this page and update the &quot;Last updated&quot; date.
+              If a change adds a new recipient of your data, the app will ask for your
+              permission again before sending anything to it.
+            </p>
+          </Section>
+
+          <Section n={11} title="Contact Us">
             <div className="p-4 bg-[#1a1a2e] rounded-xl border border-gray-700">
               <p className="text-white font-medium">MachineMind</p>
               <a
@@ -345,28 +337,29 @@ export default function PrivacyPage() {
                 support@machinemindconsulting.com
               </a>
             </div>
+          </Section>
+
+          <section className="p-4 bg-[#1a1a2e] rounded-xl border border-gray-700" lang="es">
+            <h2 className="text-lg font-semibold text-white mb-3">Resumen en español</h2>
+            <ul className="list-disc list-inside space-y-1 text-sm text-gray-300 ml-2">
+              <li>Para traducir, Entrevoz envía lo que dices o escribes a OpenAI (voz a texto), Anthropic Claude, Google Translate, MyMemory y LibreTranslate (traducción) y, solo si activas la voz, a ElevenLabs.</li>
+              <li>No se envía nada hasta que tocas <span className="text-white">Permitir</span>. Puedes desactivarlo en Perfil → Cuenta y privacidad → Compartir datos con IA.</li>
+              <li>Guardamos tu cuenta (opcional), contactos, historial de llamadas con transcripción, progreso de práctica y token de notificaciones hasta que los borres.</li>
+              <li>No vendemos tus datos ni los usamos para publicidad. Borra todo en Cuenta y privacidad → Eliminar mi cuenta.</li>
+            </ul>
           </section>
         </div>
 
         {/* Footer Links */}
         <div className="mt-8 text-center space-y-4">
           <div className="flex justify-center gap-6 text-sm">
-            <Link
-              href="/terms"
-              className="text-gray-400 hover:text-cyan-400 transition"
-            >
+            <Link href="/terms" className="text-gray-400 hover:text-cyan-400 transition">
               Terms of Service
             </Link>
-            <Link
-              href="/account"
-              className="text-gray-400 hover:text-cyan-400 transition"
-            >
-              Account & Privacy
+            <Link href="/account" className="text-gray-400 hover:text-cyan-400 transition">
+              Account &amp; Privacy
             </Link>
-            <Link
-              href="/"
-              className="text-gray-400 hover:text-cyan-400 transition"
-            >
+            <Link href="/" className="text-gray-400 hover:text-cyan-400 transition">
               Back to App
             </Link>
           </div>

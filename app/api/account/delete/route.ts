@@ -90,7 +90,16 @@ export async function POST(req: NextRequest) {
 
   try {
     // Delete from all tables where user_id or device_id matches
-    const [progressDel, srsDel, importsDel, contactsDel] = await Promise.all([
+    const [
+      progressDel,
+      srsDel,
+      importsDel,
+      contactsDel,
+      historyDel,
+      directoryDel,
+      pushDel,
+      invitesDel,
+    ] = await Promise.all([
       supabase
         .from("language_os_progress")
         .delete()
@@ -111,6 +120,27 @@ export async function POST(req: NextRequest) {
         .delete()
         .eq("owner_device_id", deviceId)
         .select("id"),
+      // Call history (transcripts) this device saved — one row per participant.
+      supabase
+        .from("conversations")
+        .delete()
+        .eq("participant_1", deviceId)
+        .select("id"),
+      supabase
+        .from("dial_directory")
+        .delete()
+        .eq("device_id", deviceId)
+        .select("device_id"),
+      supabase
+        .from("push_tokens")
+        .delete()
+        .eq("device_id", deviceId)
+        .select("device_id"),
+      supabase
+        .from("invites")
+        .delete()
+        .eq("inviter_device_id", deviceId)
+        .select("invite_code"),
     ]);
 
     const deletedCounts = {
@@ -118,6 +148,10 @@ export async function POST(req: NextRequest) {
       srsCards: srsDel.data?.length ?? 0,
       entrevozImports: importsDel.data?.length ?? 0,
       contacts: contactsDel.data?.length ?? 0,
+      callHistory: historyDel.data?.length ?? 0,
+      directory: directoryDel.data?.length ?? 0,
+      pushTokens: pushDel.data?.length ?? 0,
+      invites: invitesDel.data?.length ?? 0,
       accountDeleted: false,
     };
 
@@ -137,6 +171,7 @@ export async function POST(req: NextRequest) {
           supabase.from("user_limits").delete().eq("user_id", user.id),
           supabase.from("feature_usage").delete().eq("user_id", user.id),
           supabase.from("profiles").delete().eq("id", user.id),
+          supabase.from("usage_events").delete().eq("user_id", user.id),
         ]);
         const { error: adminError } =
           await supabase.auth.admin.deleteUser(user.id);
@@ -159,6 +194,10 @@ export async function POST(req: NextRequest) {
     if (srsDel.error) errors.push(`srs: ${srsDel.error.message}`);
     if (importsDel.error) errors.push(`imports: ${importsDel.error.message}`);
     if (contactsDel.error) errors.push(`contacts: ${contactsDel.error.message}`);
+    if (historyDel.error) errors.push(`history: ${historyDel.error.message}`);
+    if (directoryDel.error) errors.push(`directory: ${directoryDel.error.message}`);
+    if (pushDel.error) errors.push(`push: ${pushDel.error.message}`);
+    if (invitesDel.error) errors.push(`invites: ${invitesDel.error.message}`);
 
     if (errors.length > 0) {
       console.error("[Account Delete] Partial errors:", errors.join("; "));

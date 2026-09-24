@@ -10,7 +10,7 @@ const SAFARI_UA =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/22A3354 Safari/604.1";
 const DEMO_EMAIL = "reviewer@entrevoz.co";
 const DEMO_PASS = "EntrevozDemo2026!";
-const BASE = "https://www.entrevoz.co";
+const BASE = process.env.BASE || "https://www.entrevoz.co";
 
 const PAID_WORDS = [
   "7-day free trial",

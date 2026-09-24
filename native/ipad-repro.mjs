@@ -3,7 +3,7 @@ import puppeteer from "puppeteer-core";
 // install, try voice translation on home + f2f. Two passes: mic denied
 // (headless default) and mic granted (fake media).
 const UA = "Mozilla/5.0 (iPad; CPU OS 27_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/22A3354 EntrevozApp/1.0";
-const BASE = "https://www.entrevoz.co";
+const BASE = process.env.BASE || "https://www.entrevoz.co";
 
 async function run(label, extraArgs) {
   const browser = await puppeteer.launch({
