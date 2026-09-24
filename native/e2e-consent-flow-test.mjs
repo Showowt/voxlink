@@ -130,18 +130,23 @@ check("D4 no permission error after Allow", !/needs your permission/.test(typeTe
 
 // ── E. Account & Privacy toggle ─────────────────────────────────────────────
 await page.goto(BASE + "/account", { waitUntil: "networkidle2", timeout: 60000 });
-await sleep(1500);
+// The card renders its default until hydration reads the stored choice.
+const waitText = (re) =>
+  page
+    .waitForFunction((src) => new RegExp(src).test(document.body.innerText), { timeout: 10000 }, re.source)
+    .catch(() => {});
+await waitText(/Allowed · Permitido/);
 let acct = await bodyText();
 check("E1 AI Data Sharing card shows Allowed", /AI Data Sharing/.test(acct) && /Allowed/.test(acct));
 await click(/Turn Off AI Data Sharing/);
-await sleep(600);
+await waitText(/Off · Desactivado/);
 acct = await bodyText();
 check("E2 Turn Off → Off + stored declined", /Off · Desactivado/.test(acct) && /^declined:/.test((await consent()) || ""));
 await click(/Review & Allow/);
 await sleep(600);
 check("E3 Review & Allow opens the sheet", await sheetOpen());
 await click(/^Allow$/, SHEET);
-await sleep(600);
+await waitText(/Allowed · Permitido/);
 acct = await bodyText();
 check("E4 Allow → Allowed + stored granted", /Allowed · Permitido/.test(acct) && /^granted:/.test((await consent()) || ""));
 

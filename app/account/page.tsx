@@ -107,9 +107,13 @@ function clearAllLocalStorage(): void {
 // Review, grant or withdraw the in-app AI consent (App Review 5.1.1/5.1.2).
 function AIDataSharingCard() {
   const [consent, setConsent] = useState<"granted" | "declined" | "unset">("unset");
+  // The stored choice is only readable after mount; render no state until then
+  // so the card never flashes "Off" for someone who allowed it.
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     setConsent(getAIConsent());
+    setReady(true);
     const sync = () => setConsent(getAIConsent());
     window.addEventListener("entrevoz:ai-consent-changed", sync);
     return () => window.removeEventListener("entrevoz:ai-consent-changed", sync);
@@ -134,6 +138,8 @@ function AIDataSharingCard() {
         </div>
         <span
           className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${
+            ready ? "" : "invisible"
+          } ${
             allowed
               ? "bg-emerald-500/15 text-emerald-300"
               : "bg-white/[0.06] text-white/50"
@@ -157,7 +163,9 @@ function AIDataSharingCard() {
         para traducirlo. Si lo desactivas, no se envía nada.
       </p>
 
-      {allowed ? (
+      {!ready ? (
+        <div className="min-h-[44px]" aria-hidden="true" />
+      ) : allowed ? (
         <button
           onClick={() => setAIConsent(false)}
           className="w-full py-3 min-h-[44px] rounded-xl font-semibold text-sm text-white/80 bg-white/[0.05] border border-white/[0.1] hover:bg-white/[0.08] transition-all active:scale-[0.98]"
