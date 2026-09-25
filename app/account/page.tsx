@@ -152,8 +152,8 @@ function AIDataSharingCard() {
       <p className="text-white/55 text-sm leading-relaxed mb-3">
         When allowed, what you say or type is sent to third-party services to
         translate it: voice recordings to OpenAI (speech-to-text); text and
-        recent conversation lines to Anthropic (Claude), Google Translate,
-        MyMemory and LibreTranslate (translation); Practice and Wingman
+        recent conversation lines to Anthropic (Claude), Google Translate and
+        MyMemory (translation); Practice and Wingman
         messages to Anthropic; translated text and, only with Voice Mimic,
         short voice samples to ElevenLabs (spoken voice). When off, nothing is
         sent and translation features stay paused.

@@ -19,7 +19,7 @@ On first launch the app shows an "Allow AI translation?" screen that lists
 each type of data and who receives it:
 - Recordings of your voice → OpenAI (Whisper), speech-to-text
 - Words you type or speak, with recent lines of the conversation → Anthropic
-  (Claude), Google Translate, MyMemory, LibreTranslate — translation
+  (Claude), Google Translate, MyMemory — translation
 - Messages sent in Practice and Wingman → Anthropic (Claude) — AI tutor and
   coach replies
 - Translated text, plus short voice samples only if the user turns on Voice

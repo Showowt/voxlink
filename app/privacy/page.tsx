@@ -32,7 +32,7 @@ const AI_PROCESSORS: Processor[] = [
     data: "Text you type or speak, recent lines of the same conversation (for accurate translation), messages you send in Practice and Wingman, and call transcripts when you ask for a post-call summary or turn on Learning Mode.",
   },
   {
-    name: "Google Translate, MyMemory (Translated srl), LibreTranslate",
+    name: "Google Translate, MyMemory (Translated srl)",
     purpose: "Fast text translation",
     data: "The individual phrase being translated (and single vocabulary words from your calls for Practice flashcards). No account or device identifiers are sent.",
   },
@@ -342,7 +342,7 @@ export default function PrivacyPage() {
           <section className="p-4 bg-[#1a1a2e] rounded-xl border border-gray-700" lang="es">
             <h2 className="text-lg font-semibold text-white mb-3">Resumen en español</h2>
             <ul className="list-disc list-inside space-y-1 text-sm text-gray-300 ml-2">
-              <li>Para traducir, Entrevoz envía lo que dices o escribes a OpenAI (voz a texto), Anthropic Claude, Google Translate, MyMemory y LibreTranslate (traducción) y, solo si activas la voz, a ElevenLabs.</li>
+              <li>Para traducir, Entrevoz envía lo que dices o escribes a OpenAI (voz a texto), Anthropic Claude, Google Translate y MyMemory (traducción) y, solo si activas la voz, a ElevenLabs.</li>
               <li>No se envía nada hasta que tocas <span className="text-white">Permitir</span>. Puedes desactivarlo en Perfil → Cuenta y privacidad → Compartir datos con IA.</li>
               <li>Guardamos tu cuenta (opcional), contactos, historial de llamadas con transcripción, progreso de práctica y token de notificaciones hasta que los borres.</li>
               <li>No vendemos tus datos ni los usamos para publicidad. Borra todo en Cuenta y privacidad → Eliminar mi cuenta.</li>

@@ -65,7 +65,7 @@ await page.goto(BASE + "/", { waitUntil: "networkidle2", timeout: 60000 });
 await sleep(2500);
 check("A1 sheet shown on first launch", await sheetOpen());
 const sheetText = await page.$eval(SHEET, (e) => e.innerText).catch(() => "");
-const recipients = ["OpenAI", "Anthropic", "Google Translate", "MyMemory", "LibreTranslate", "ElevenLabs", "Daily.co"];
+const recipients = ["OpenAI", "Anthropic", "Google Translate", "MyMemory", "ElevenLabs", "Daily.co"];
 const missing = recipients.filter((r) => !sheetText.includes(r));
 check("A2 sheet names every recipient", missing.length === 0, missing.length ? "missing " + missing.join(", ") : "");
 check("A3 explicit Allow / Don't Allow", /\bAllow\b/.test(sheetText) && /Don.t Allow/.test(sheetText));

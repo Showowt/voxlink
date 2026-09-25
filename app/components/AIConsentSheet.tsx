@@ -48,8 +48,8 @@ const RECIPIENTS: Recipient[] = [
       es: "Lo que escribes o dices, con las últimas frases de la conversación",
     },
     who: {
-      en: "Anthropic (Claude), Google Translate, MyMemory, LibreTranslate — translation",
-      es: "Anthropic (Claude), Google Translate, MyMemory, LibreTranslate — traducción",
+      en: "Anthropic (Claude), Google Translate, MyMemory — translation",
+      es: "Anthropic (Claude), Google Translate, MyMemory — traducción",
     },
   },
   {

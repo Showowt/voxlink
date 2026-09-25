@@ -495,39 +495,6 @@ async function translateMyMemory(
   }
 }
 
-// LibreTranslate - Backup
-async function translateLibre(
-  text: string,
-  from: string,
-  to: string,
-): Promise<string | null> {
-  const instances = [
-    "https://translate.fedilab.app",
-    "https://translate.adminforge.de",
-  ];
-  for (const instance of instances) {
-    try {
-      const res = await fetch(`${instance}/translate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          q: text,
-          source: from,
-          target: to,
-          format: "text",
-        }),
-        signal: AbortSignal.timeout(FAST_TIMEOUT),
-      });
-      if (!res.ok) continue;
-      const data = await res.json();
-      if (data?.translatedText) return data.translatedText;
-    } catch {
-      continue;
-    }
-  }
-  return null;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN TRANSLATION HANDLER
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -705,7 +672,6 @@ export async function POST(req: NextRequest) {
     const providerBatch = Promise.allSettled([
       withTimeout(translateGoogle(cleanText, from, to), 1500, null),
       withTimeout(translateMyMemory(cleanText, from, to), 1500, null),
-      withTimeout(translateLibre(cleanText, from, to), 1500, null),
     ]);
 
     let translation: string | null = null;
@@ -725,18 +691,15 @@ export async function POST(req: NextRequest) {
       if (translation) source = "claude-context";
     }
 
-    // 5b. Fast providers — preference Google (most accurate) > MyMemory > Libre.
+    // 5b. Fast providers — preference Google (most accurate) > MyMemory.
     if (!translation) {
-      const [googleResult, myMemoryResult, libreResult] = await providerBatch;
+      const [googleResult, myMemoryResult] = await providerBatch;
       if (googleResult.status === "fulfilled" && googleResult.value) {
         translation = googleResult.value;
         source = "google";
       } else if (myMemoryResult.status === "fulfilled" && myMemoryResult.value) {
         translation = myMemoryResult.value;
         source = "mymemory";
-      } else if (libreResult.status === "fulfilled" && libreResult.value) {
-        translation = libreResult.value;
-        source = "libre";
       }
     }
 

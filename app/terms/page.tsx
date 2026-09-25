@@ -216,11 +216,17 @@ export default function TermsPage() {
                 terms and privacy policies:
               </p>
               <ul className="list-disc list-inside space-y-2 ml-2">
-                <li>MyMemory Translation API</li>
-                <li>LibreTranslate</li>
-                <li>Google Translate API</li>
-                <li>PeerJS for WebRTC signaling</li>
+                <li>OpenAI (speech-to-text)</li>
+                <li>Anthropic Claude (translation, AI tutor and coach)</li>
+                <li>Google Translate and MyMemory (text translation)</li>
+                <li>ElevenLabs (optional spoken voice)</li>
+                <li>Daily.co, PeerJS and Metered (call connections)</li>
               </ul>
+              <p>
+                Content is sent to the AI and translation services only after
+                you allow AI data sharing in the app. Our Privacy Policy
+                (section 4) explains what each service receives.
+              </p>
               <p className="mt-4">
                 We are not responsible for the practices or content of
                 third-party services. Your use of third-party services is at
