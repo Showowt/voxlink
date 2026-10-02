@@ -3,6 +3,33 @@ import { z } from "zod";
 import { checkRateLimit, rateLimitHeaders, trackEvent } from "@/lib/rate-limit";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { offlineTranslate } from "@/lib/offline-dictionary";
+import { looksLikeArtifact } from "@/lib/hallucination-artifacts";
+
+// A live interpreter returns ONLY the translation. If the LLM instead refuses,
+// explains, or chats ("Sure, here's the translation:", "I can't translate…",
+// "As an AI…"), that meta-text is NOT a translation — reject it so the caller
+// falls through to the free providers (and never shows commentary as a caption).
+const LLM_META_RE =
+  /^(sure|certainly|of course|here('?s| is)|i'?(m| am)|i can(not|'?t)|i'?d be happy|as an ai|unfortunately|the translation|translation:|note:|okay,|ok,|it (seems|looks) like|this (means|appears)|that (means|translates))/i;
+
+function sanitizeLLMTranslation(
+  raw: string | null,
+  sourceText: string,
+): string | null {
+  if (!raw) return null;
+  let out = raw.trim();
+  // Strip a single layer of wrapping quotes the model sometimes adds.
+  const m = out.match(/^["'“”«»]([\s\S]*)["'“”«»]$/);
+  if (m) out = m[1].trim();
+  if (!out) return null;
+  // Reject chatty/refusal meta-text (first line only — translations rarely
+  // begin with these openers).
+  if (LLM_META_RE.test(out)) return null;
+  // Reject a runaway completion: a real translation is roughly the length of
+  // the source, not an essay. Allow generous headroom for script expansion.
+  if (out.length > Math.max(80, sourceText.trim().length * 6)) return null;
+  return out;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // VOXLINK ULTRA-FAST TRANSLATION API
@@ -332,7 +359,7 @@ async function translateClaude(
     if (!res.ok) return null;
     const data = await res.json();
     const content = data?.content?.[0]?.text?.trim();
-    return content || null;
+    return sanitizeLLMTranslation(content || null, text);
   } catch {
     return null;
   }
@@ -420,7 +447,7 @@ async function translateClaudeContext(
     if (!res.ok) return null;
     const data = await res.json();
     const content = data?.content?.[0]?.text?.trim();
-    return content || null;
+    return sanitizeLLMTranslation(content || null, text);
   } catch {
     return null;
   }
@@ -627,6 +654,26 @@ export async function POST(req: NextRequest) {
       );
     }
     const langPair = `${from}-${to}`;
+
+    // Refuse to translate a known STT hallucination. A Spanish silence artifact
+    // ("Gracias por ver el video") would otherwise become a fluent English
+    // phantom ("Thanks for watching the video") that no source-language filter
+    // downstream could ever catch. Treat it as a total failure (show nothing).
+    if (looksLikeArtifact(cleanText)) {
+      console.warn(`[Translate] refused artifact (${from}->${to}): "${cleanText.slice(0, 60)}"`);
+      return NextResponse.json(
+        {
+          translation: "",
+          translated: "",
+          original: cleanText,
+          from,
+          to,
+          source: "artifact-refused",
+          untranslated: true,
+        },
+        { headers: { ...corsHeaders, ...rateLimitHeaders(rateLimit) } },
+      );
+    }
 
     // 1-3. Fast lookups (cache → dictionary → partial). SKIPPED for
     // context-aware requests: their accuracy depends on the conversation, so a

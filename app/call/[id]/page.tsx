@@ -1002,7 +1002,10 @@ function VideoCallContent() {
     onPartnerMessageRef.current = remoteTranscription.onPartnerMessage;
   }, [remoteTranscription.onPartnerMessage]);
 
-  // Show fallback remote transcription when active
+  // Show fallback remote transcription when active (the fallback itself is
+  // disabled by default — see useRemoteTranscription). Captions only: fallback
+  // output is NEVER spoken aloud, since a Whisper hallucination on the partner's
+  // silence would otherwise be read out in the user's own language.
   useEffect(() => {
     if (remoteTranscription.isFallbackActive && remoteTranscription.remoteText) {
       setTheirLiveText(remoteTranscription.remoteText);
@@ -1012,10 +1015,8 @@ function VideoCallContent() {
   useEffect(() => {
     if (remoteTranscription.isFallbackActive && remoteTranscription.remoteTranslation) {
       setTheirLiveTranslation(remoteTranscription.remoteTranslation);
-      // Speak the translation
-      speakTranslation(remoteTranscription.remoteTranslation, partnerLang || expectedPartnerLang);
     }
-  }, [remoteTranscription.remoteTranslation, remoteTranscription.isFallbackActive]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [remoteTranscription.remoteTranslation, remoteTranscription.isFallbackActive]);
 
   // Ref so handleDataMessage can access dubbing without stale closure
   const processDubRef = useRef(processDub);
@@ -1857,7 +1858,12 @@ function VideoCallContent() {
         // Track partner's language
         if (lang) setPartnerLang(lang);
 
-        // Show only last 150 chars of interim (prevents wall of text)
+        // New raw text arrived. Clear the PREVIOUS sentence's translation so we
+        // never show the new source line above a stale, mismatched translation
+        // (the raw 'transcription' always races ahead of its 'translation', and
+        // if that translation is dropped/aborted/rate-limited it never arrives).
+        // The matching 'translation' message refills it a moment later.
+        setTheirLiveTranslation("");
         setTheirLiveText(text);
 
         // Keep interim visible for 5s (partner is still speaking)

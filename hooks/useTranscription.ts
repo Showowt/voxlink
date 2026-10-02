@@ -113,6 +113,19 @@ for (const [phrase, translation] of Object.entries(INSTANT_DICT["en-es"])) {
   INSTANT_DICT["es-en"][translation] = phrase;
 }
 
+// Half-duplex hangover: keep the mic gated this long after our own TTS/dub
+// playback ends, so the reverb / Bluetooth-latency tail doesn't leak back in as
+// "You:" text and get re-translated.
+const SUPPRESS_HANGOVER_MS = 800;
+
+// The translate API caps each conversation-context line at 600 chars; a single
+// longer final used to 400 the next 8 requests (it rode along as context).
+// Keep context lines safely under that.
+const MAX_CONTEXT_LINE = 500;
+function capContextLine(s: string): string {
+  return s.length > MAX_CONTEXT_LINE ? s.slice(0, MAX_CONTEXT_LINE) : s;
+}
+
 // Whisper chunk duration
 const WHISPER_CHUNK_MS = 1200;
 // RMS below this over the whole chunk = silence → don't send to Whisper.
@@ -270,15 +283,41 @@ export function useTranscription({
   const wasBackgroundedRef = useRef(false);
   const maxConsecutiveRestarts = 20;
 
+  // FINAL translations get their own lane: a committed final must NEVER be
+  // cancelled by the next interim or clip (that silently dropped ~half of all
+  // finals on long calls). Order finals by a monotonic seq so a late result
+  // can't overwrite a newer one. Only INTERIM translations use abortRef.
+  const finalSeqRef = useRef(0);
+  // STT generation — bumped on every intentional stop / restart / fallback so a
+  // "stopped" recognizer's late events (and its self-restart in onend) are
+  // ignored. Without this, background/foreground cycles and language changes
+  // left zombie recognizers running in parallel, fighting over the mic.
+  const sttGenRef = useRef(0);
+  const sessionStartRef = useRef(0);
+  const keepAliveRef = useRef<NodeJS.Timeout | null>(null);
+  // Half-duplex hangover deadline (see SUPPRESS_HANGOVER_MS).
+  const suppressedUntilRef = useRef(0);
+
   // Keep language refs fresh
   useEffect(() => {
     langRef.current = { my: myLanguage, their: theirLanguage };
   }, [myLanguage, theirLanguage]);
 
-  // Keep mic-suppression flag fresh (half-duplex gating during playback)
+  // Keep mic-suppression flag fresh (half-duplex gating during playback). When
+  // playback ends, keep suppressing for a short hangover so the audio tail is
+  // not transcribed as our own speech.
   useEffect(() => {
     suppressRef.current = isSuppressed;
+    if (!isSuppressed) {
+      suppressedUntilRef.current = Date.now() + SUPPRESS_HANGOVER_MS;
+    }
   }, [isSuppressed]);
+
+  // True while our own output is playing OR within the hangover tail after it.
+  const isMicSuppressedNow = useCallback(
+    () => suppressRef.current || Date.now() < suppressedUntilRef.current,
+    [],
+  );
 
   // ── STREAMING TRANSLATE — translates interim text with cancellation ────────
   const streamingTranslate = useCallback(
@@ -289,11 +328,6 @@ export function useTranscription({
 
       // Skip if we already sent this exact text
       if (!isFinal && trimmed === lastSentTextRef.current) return;
-
-      // Cancel any in-flight interim translation
-      if (abortRef.current) {
-        abortRef.current.abort();
-      }
 
       // Always broadcast raw text immediately (partner sees live typing)
       const rawSent = sendMessage(
@@ -312,20 +346,24 @@ export function useTranscription({
       // client cache (context-free shortcuts that cause gender/register drift)
       // and send the recent conversation so the server translates in context.
       if (isFinal) {
-        const controller = new AbortController();
-        abortRef.current = controller;
-        const context = recentTurnsRef.current.slice(-8);
-        const translated = await translateAPI(
-          trimmed,
-          my,
-          their,
-          controller.signal,
-          { context },
-        );
-        if (controller.signal.aborted) return;
-        // Record this finalized line as context for the NEXT turn (recorded
-        // after translating, so a line is never context for itself).
-        recentTurnsRef.current = [...recentTurnsRef.current, trimmed].slice(-8);
+        // A later interim must not cancel this final, so it gets NO abort
+        // signal (the server has its own timeout). Ordering is enforced by a
+        // monotonic seq so only the newest final's result is applied/sent.
+        const mySeq = ++finalSeqRef.current;
+        // A brand-new final supersedes any in-flight interim preview.
+        if (abortRef.current) abortRef.current.abort();
+        const context = recentTurnsRef.current.slice(-8).map(capContextLine);
+        const translated = await translateAPI(trimmed, my, their, undefined, {
+          context,
+        });
+        // Record this finalized line as context for the NEXT turn regardless of
+        // whether translation succeeded (so context never thins out on failures).
+        recentTurnsRef.current = [
+          ...recentTurnsRef.current,
+          capContextLine(trimmed),
+        ].slice(-8);
+        // A newer final started while we were awaiting — drop this stale result.
+        if (mySeq !== finalSeqRef.current) return;
         if (translated) {
           setLocalTranslated(translated);
           lastSentTextRef.current = trimmed;
@@ -339,6 +377,10 @@ export function useTranscription({
               isFinal: true,
             }),
           );
+        } else {
+          // Don't leave the PREVIOUS sentence's translation sitting under the
+          // new text when this final can't be translated.
+          setLocalTranslated("");
         }
         return;
       }
@@ -380,6 +422,8 @@ export function useTranscription({
         return;
       }
 
+      // Cancel only the PREVIOUS interim (never a final — that has no signal).
+      if (abortRef.current) abortRef.current.abort();
       const controller = new AbortController();
       abortRef.current = controller;
       const translated = await translateAPI(trimmed, my, their, controller.signal);
@@ -497,6 +541,11 @@ export function useTranscription({
     if (!SR) return;
 
     const rec: SpeechRecognitionInstance = new SR();
+    // This instance's generation. Any later stop/restart/fallback bumps
+    // sttGenRef; every handler below bails when its generation is stale, so a
+    // "stopped" recognizer can't process results or restart itself.
+    const myGen = ++sttGenRef.current;
+    recRef.current = rec;
 
     rec.continuous = true;
     rec.interimResults = true;
@@ -504,17 +553,25 @@ export function useTranscription({
     rec.lang = SPEECH_LANG_MAP[langRef.current.my] ?? "en-US";
 
     rec.onstart = () => {
+      if (myGen !== sttGenRef.current) return;
+      sessionStartRef.current = Date.now();
       setIsListening(true);
       setError(null);
     };
 
     rec.onresult = (e: SpeechRecognitionEvent) => {
-      // Reset backoff counter on successful speech
+      if (myGen !== sttGenRef.current) return; // stale (zombie) recognizer
+      // Real speech arrived — reset BOTH the restart backoff and the
+      // network-error counter (it's meant to count CONSECUTIVE failures; never
+      // resetting it permanently switched the session to Whisper after two
+      // unrelated blips minutes apart).
       restartCountRef.current = 0;
+      networkErrCountRef.current = 0;
 
-      // Half-duplex gate: while our own dub/TTS is playing, ignore the mic so
-      // we don't transcribe & re-translate our own output ("not said" bug).
-      if (suppressRef.current) {
+      // Half-duplex gate: while our own dub/TTS is playing (or in the hangover
+      // tail just after), ignore the mic so we don't transcribe & re-translate
+      // our own output ("not said" bug).
+      if (isMicSuppressedNow()) {
         setLocalCaption("");
         return;
       }
@@ -547,6 +604,7 @@ export function useTranscription({
     };
 
     rec.onerror = (e: SpeechRecognitionErrorEvent) => {
+      if (myGen !== sttGenRef.current) return; // stale (zombie) recognizer
       // Benign errors — recognition auto-restarts via onend
       if (e.error === "no-speech" || e.error === "aborted") return;
 
@@ -608,51 +666,80 @@ export function useTranscription({
 
     rec.onend = () => {
       setLocalCaption("");
-      if (isRunRef.current) {
-        // Exponential backoff to prevent rapid restart loops
-        restartCountRef.current++;
-        if (restartCountRef.current > maxConsecutiveRestarts) {
-          console.warn("[STT] Too many restarts, pausing recognition");
-          setError("Speech recognition interrupted. Tap mic to restart.");
-          setIsListening(false);
-          return;
-        }
-
-        // Backoff: 0ms for first few, then escalate
-        const delay = restartCountRef.current <= 3 ? 0
-          : Math.min(300 * Math.pow(1.5, restartCountRef.current - 3), 5000);
-
-        const doRestart = () => {
-          if (!isRunRef.current) { setIsListening(false); return; }
-          try {
-            rec.start();
-          } catch {
-            // If start fails, try creating fresh instance after delay
-            setTimeout(() => {
-              if (isRunRef.current) startWebSpeech();
-            }, 1000);
-          }
-        };
-
-        if (delay === 0) {
-          doRestart();
-        } else {
-          restartBackoffRef.current = setTimeout(doRestart, delay);
-        }
-      } else {
+      // Only the CURRENT recognizer, still in Web Speech mode, may restart
+      // itself. A stale instance (after a stop/fallback/visibility restart)
+      // just dies here instead of resurrecting and fighting the live one.
+      if (myGen !== sttGenRef.current || rec !== recRef.current || mode.current !== "webspeech") {
+        return;
+      }
+      if (!isRunRef.current) {
         setIsListening(false);
+        return;
+      }
+
+      // A session that ran a while before ending is a benign silence timeout
+      // (Chrome/WebKit end continuous recognition every few seconds of quiet) —
+      // NOT a failure. Counting those toward the cap made the engine "give up"
+      // after a few minutes of just listening. Only rapid failures count.
+      const ranMs = Date.now() - sessionStartRef.current;
+      if (ranMs > 1500) {
+        restartCountRef.current = 0;
+      } else {
+        restartCountRef.current++;
+      }
+
+      if (restartCountRef.current > maxConsecutiveRestarts) {
+        // Never permanently stop during an active call — a dead mic would hand
+        // the whole call to the partner's (hallucination-prone) remote fallback.
+        // Back off and keep a slow keep-alive retry instead.
+        console.warn("[STT] Rapid restart storm — backing off, will keep retrying");
+        setIsListening(false);
+        if (keepAliveRef.current) clearTimeout(keepAliveRef.current);
+        keepAliveRef.current = setTimeout(() => {
+          restartCountRef.current = 0;
+          if (isRunRef.current && mode.current === "webspeech") startWebSpeech();
+        }, 5000);
+        return;
+      }
+
+      // Backoff: 0ms for first few, then escalate
+      const delay = restartCountRef.current <= 3 ? 0
+        : Math.min(300 * Math.pow(1.5, restartCountRef.current - 3), 5000);
+
+      const doRestart = () => {
+        if (!isRunRef.current || myGen !== sttGenRef.current) { setIsListening(false); return; }
+        try {
+          rec.start();
+        } catch {
+          // If start fails, create a fresh instance after a delay
+          setTimeout(() => {
+            if (isRunRef.current && mode.current === "webspeech") startWebSpeech();
+          }, 1000);
+        }
+      };
+
+      if (delay === 0) {
+        doRestart();
+      } else {
+        restartBackoffRef.current = setTimeout(doRestart, delay);
       }
     };
 
     try {
       rec.start();
-      recRef.current = rec;
     } catch {
       setError("Could not start microphone. Check browser permissions.");
     }
-  }, [translateInterim, translateFinal]);
+  }, [translateInterim, translateFinal, isMicSuppressedNow]);
 
   const stopWebSpeech = useCallback(() => {
+    // Invalidate the current recognizer's generation so its onend can't restart
+    // it and its late onresult/onerror are ignored.
+    sttGenRef.current++;
+    if (keepAliveRef.current) {
+      clearTimeout(keepAliveRef.current);
+      keepAliveRef.current = null;
+    }
     if (recRef.current) {
       try { recRef.current.abort(); } catch { /* ignore */ }
       recRef.current = null;
@@ -664,7 +751,7 @@ export function useTranscription({
       clearTimeout(restartBackoffRef.current);
       restartBackoffRef.current = null;
     }
-    // Cancel any pending translations
+    // Cancel any pending interim translation (finals have no abort signal)
     if (abortRef.current) abortRef.current.abort();
     if (debounceRef.current) clearTimeout(debounceRef.current);
   }, []);
@@ -773,7 +860,8 @@ export function useTranscription({
       }
 
       // Half-duplex gate: drop clips recorded while our own dub/TTS was playing
-      if (suppressRef.current) return;
+      // (or in the hangover tail just after it ended).
+      if (isMicSuppressedNow()) return;
 
       // Local silence gate — skip empty/silent clips entirely (no API, no hallucination)
       if (blob.size < 1400) return;
@@ -811,7 +899,7 @@ export function useTranscription({
     mr.onerror = () => { setError("Recording error. Please reload."); };
     mr.start();
     scheduleStop();
-  }, [localStream, translateFinal]);
+  }, [localStream, translateFinal, isMicSuppressedNow]);
 
   const stopWhisper = useCallback(() => {
     // Stop the chunk-cycle timers first so onstop won't reschedule
@@ -858,6 +946,18 @@ export function useTranscription({
     mode.current = "whisper";
     networkErrCountRef.current = 0;
     restartCountRef.current = 0;
+    // Invalidate the Web Speech recognizer so its onend can't restart it to run
+    // in parallel with the Whisper loop (both would broadcast, aborting and
+    // duplicating each other's captions).
+    sttGenRef.current++;
+    if (keepAliveRef.current) {
+      clearTimeout(keepAliveRef.current);
+      keepAliveRef.current = null;
+    }
+    if (restartBackoffRef.current) {
+      clearTimeout(restartBackoffRef.current);
+      restartBackoffRef.current = null;
+    }
     if (recRef.current) {
       try {
         recRef.current.abort();
@@ -928,13 +1028,20 @@ export function useTranscription({
 
       console.log("[STT] Returning from background — restarting recognition");
       restartCountRef.current = 0; // Reset backoff
+      // Cancel any pending backoff restart so it can't fire a second recognizer.
+      if (restartBackoffRef.current) {
+        clearTimeout(restartBackoffRef.current);
+        restartBackoffRef.current = null;
+      }
 
       // Small delay to let OS release audio resources
       setTimeout(() => {
         if (!isRunRef.current) return;
 
         if (mode.current === "webspeech") {
-          // Kill existing and create fresh instance
+          // Invalidate + kill the existing instance, then create a fresh one.
+          // The generation bump stops the old onend from also restarting.
+          sttGenRef.current++;
           if (recRef.current) {
             try { recRef.current.abort(); } catch { /* ignore */ }
             recRef.current = null;

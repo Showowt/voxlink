@@ -21,22 +21,32 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import {
+  looksLikeArtifact,
+  isAmbiguousFiller,
+  normalizeArtifact,
+} from "@/lib/hallucination-artifacts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-// ─── Rate limiter (30 req/min per IP - transcription is expensive) ────────────
+// ─── Rate limiter (per IP) ────────────────────────────────────────────────────
+// One active caller's LOCAL Whisper loop sends ~46-50 clips/min while talking;
+// two phones behind one NAT/Wi-Fi (common on mobile carriers) share this bucket.
+// The old 30/min cap blacked out captions for 20-40s of every busy minute once
+// both Whisper loops ran. Sized for real traffic now.
+const RL_MAX = 120;
 const rl = new Map<string, { n: number; resetAt: number }>();
-function rateLimit(ip: string, max = 30): boolean {
+function rateLimit(ip: string, max = RL_MAX): { ok: boolean; retryAfter: number } {
   const now = Date.now();
   const r = rl.get(ip);
   if (!r || now > r.resetAt) {
     rl.set(ip, { n: 1, resetAt: now + 60_000 });
-    return true;
+    return { ok: true, retryAfter: 0 };
   }
-  if (r.n >= max) return false;
+  if (r.n >= max) return { ok: false, retryAfter: Math.ceil((r.resetAt - now) / 1000) };
   r.n++;
-  return true;
+  return { ok: true, retryAfter: 0 };
 }
 // Prevent unbounded growth of the rate-limit map on long-lived instances
 setInterval(() => {
@@ -71,84 +81,21 @@ interface WhisperSegment {
   compression_ratio?: number;
 }
 
-// ─── Known Whisper-on-silence artifacts (normalized, exact-match only) ─────────
-// Deliberately tight: YouTube caption residue + pure filler that Whisper emits
-// on silence. We only drop when the WHOLE transcript equals one of these, so
-// real conversation is never affected.
-// Phrases that are NEVER real conversation — safe to drop unconditionally.
-const ARTIFACT_PHRASES = new Set<string>([
-  "thanks for watching",
-  "thanks for watching!",
-  "thank you for watching",
-  "thank you for watching.",
-  "please subscribe",
-  "please subscribe.",
-  "like and subscribe",
-  "subtitles by the amara.org community",
-  "subtitles by",
-  "transcription by",
-  "amara.org",
-  "www.",
-  "♪",
-  "♪♪",
-  "[music]",
-  "[silence]",
-  "(silence)",
-  "[applause]",
-  "[blank_audio]",
-  "ご視聴ありがとうございました",
-  "字幕",
-  "感谢观看",
-  "请不吝点赞",
-  "subscribe to my channel",
-]);
+// Whisper-hallucination signatures (subtitle credits, outros, ad-reads, music
+// markers) and ambiguous fillers now live in one shared module so /api/translate
+// applies the SAME check — a Spanish hallucination can't slip through as an
+// English phantom after translation. See lib/hallucination-artifacts.ts.
+const isSubtitleArtifact = looksLikeArtifact;
 
-// Phrases Whisper emits on silence but that people ALSO genuinely say.
-// Only dropped when segment confidence corroborates silence — otherwise a
-// real "Thank you." or "Bye" vanishes from the conversation.
-const AMBIGUOUS_FILLER_PHRASES = new Set<string>([
-  "thank you",
-  "you",
-  "bye",
-  "bye bye",
-  "the end",
-  "音",
-  "はい",
-]);
+// A transcript of this many words or fewer must clear a stricter silence bar:
+// short clips are where Whisper invents stock phrases, and no_speech_prob is
+// least reliable there.
+const SHORT_TRANSCRIPT_WORDS = 6;
+const SHORT_NO_SPEECH_MAX = 0.3;
 
-// Multilingual subtitle-credit hallucinations (Whisper training-data residue).
-// "amara.org" anywhere is safe to drop — no real conversation contains it.
-// The rest are whole-transcript prefix matches per language.
-const HALLUCINATION_PATTERNS: RegExp[] = [
-  /amara\s*\.\s*org/i,
-  /^subt[ií]tulos?\s+(realizados?\s+)?(por|creados)/i, // es
-  /^legendas\s+(pela|por|feitas)/i, // pt
-  /^sous[-\s]?titr(es|age)\s+(r[ée]alis[ée]s?\s+)?par/i, // fr
-  /^untertitel\s+(von|der|im\s+auftrag)/i, // de
-  /^sottotitoli\s+(creati|a\s+cura)/i, // it
-  /^(sub|subs|subtitles|captions|transcription|transcribed)\s+by\b/i, // en
-  /^перевод\s+субтитров/i, // ru
-];
-
-function normalize(t: string): string {
-  return t.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-function isSubtitleArtifact(text: string): boolean {
-  const n = normalize(text);
-  if (!n) return true;
-  if (ARTIFACT_PHRASES.has(n)) return true;
-  if (HALLUCINATION_PATTERNS.some((re) => re.test(n))) return true;
-  const stripped = n.replace(/[.!?。！？\s]+$/g, "");
-  if (ARTIFACT_PHRASES.has(stripped)) return true;
-  // Pure punctuation / symbols only
-  if (/^[\s.,!?…♪·・。！？]+$/.test(n)) return true;
-  return false;
-}
-
-function isAmbiguousFiller(text: string): boolean {
-  const stripped = normalize(text).replace(/[.!?。！？\s]+$/g, "");
-  return AMBIGUOUS_FILLER_PHRASES.has(stripped);
+function wordCount(t: string): number {
+  const n = normalizeArtifact(t);
+  return n ? n.split(/\s+/).length : 0;
 }
 
 export async function POST(req: NextRequest) {
@@ -162,8 +109,13 @@ export async function POST(req: NextRequest) {
 
   const ip =
     req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "local";
-  if (!rateLimit(ip)) {
-    return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
+  const limit = rateLimit(ip);
+  if (!limit.ok) {
+    console.warn(`[Whisper] 429 rate-limited ip=${ip} (retry ${limit.retryAfter}s)`);
+    return NextResponse.json(
+      { error: "Rate limit exceeded" },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfter) } },
+    );
   }
 
   try {
@@ -258,11 +210,29 @@ export async function POST(req: NextRequest) {
       text = (data.text ?? "").trim();
     }
 
-    // Final whole-transcript artifact guard (subtitle credits only — the
-    // ambiguous fillers were already confidence-gated per segment)
+    // Final whole-transcript artifact guard (subtitle credits, outros, ad-reads,
+    // music markers — multilingual, substring/prefix matched via the shared lib)
     if (text && isSubtitleArtifact(text)) {
+      console.warn(`[Whisper] dropped artifact (${normalizedLang}): "${text.slice(0, 60)}"`);
       text = "";
       reason = "artifact";
+    }
+
+    // Short-transcript silence gate: a handful of words is exactly where Whisper
+    // invents stock phrases. Require strong voice evidence (low no_speech) for
+    // any transcript of SHORT_TRANSCRIPT_WORDS or fewer; otherwise drop it.
+    if (text) {
+      const wc = wordCount(text);
+      if (wc > 0 && wc <= SHORT_TRANSCRIPT_WORDS && segments.length > 0) {
+        const minNoSpeech = Math.min(
+          ...segments.map((s) => s.no_speech_prob ?? 0),
+        );
+        if (minNoSpeech > SHORT_NO_SPEECH_MAX) {
+          console.warn(`[Whisper] dropped short/low-confidence (${normalizedLang}, no_speech=${minNoSpeech.toFixed(2)}): "${text}"`);
+          text = "";
+          reason = "short_low_confidence";
+        }
+      }
     }
 
     return NextResponse.json({
