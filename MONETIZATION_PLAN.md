@@ -69,10 +69,22 @@ Referral: both sides get **+7 days Premium** when an invited contact completes a
 ### Phase 4 — iOS IAP (post-revenue, optional)
 RevenueCat + StoreKit 2, subscription group "Entrevoz Premium", submit with new app version. Only when web revenue proves the funnel.
 
-## Decisions Phil owns
-1. Price point: $5.99/mo (+$39.99/yr) replacing the coded $12.99 — confirm.
-2. App Store countries (blocker for go-live; recommendation: all territories, it's free to download).
-3. Free video minutes: 10/mo (recommended) vs 0 (current code).
+## Decisions — LOCKED 2026-10-15
+1. ✅ Price: $5.99/mo + $39.99/yr (shipped in UI/checkout; Stripe Price objects pending key).
+2. ✅ App Store: ALL 175 territories — availability set, "Processing to Available".
+3. ✅ Free video minutes: 10/month (enforced server-side).
+
+## Status
+- **Phase 0: SHIPPED** (commit 54d3de1) — all money routes gated, per-identity daily
+  budgets + global kill-switches (Redis), video minutes metered with hard token-expiry
+  cap, device↔account linking, launch limits, $5.99/$39.99 pricing UI.
+- **BLOCKER for payments (Phil):** create a Stripe account/get the secret key, then:
+  Stripe dashboard → Products → create "Entrevoz Premium" with two prices
+  ($5.99/mo, $39.99/yr, both with 7-day trial allowed); add to Vercel env:
+  `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` (webhook → https://www.entrevoz.co/api/stripe/webhook,
+  events: checkout.session.completed, customer.subscription.updated, customer.subscription.deleted),
+  `STRIPE_PRICE_PRO_MONTHLY`, `STRIPE_PRICE_PRO_YEARLY`. Until then: trials work, checkout 503s.
+- Next: Phase 1 (upgrade-moment modal, trial countdown, share card) → Phase 2 (referral credits).
 
 ## Worst-case cost per free user per day with Phase 0 caps
 Whisper 20 min ≈ $0.12 · TTS 10k chars ≈ $0.15 (only if ElevenLabs left on for free tier — default: browser TTS = $0) · Claude ≈ $0.01 · video 10 min/mo ≈ $0.04/mo · TURN relay ≈ pennies. **Bounded by design; global kill-switch behind it.**
