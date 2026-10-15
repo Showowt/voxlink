@@ -7,6 +7,7 @@ import {
   createContext,
   useContext,
 } from "react";
+import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { createBrowserClient } from "@/lib/supabase-browser";
 import type { User, Session } from "@supabase/supabase-js";
 
@@ -132,6 +133,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const uid = session.user.id;
         setTimeout(() => {
           if (active) loadProfile(uid);
+        }, 0);
+        // Link this device to the account (server-verified) so Premium/trial
+        // entitlements apply on device-keyed routes (voice, video, Whisper)
+        // even on requests that carry no auth session. Fire-and-forget +
+        // deduped per device+user per session.
+        const token = session.access_token;
+        setTimeout(() => {
+          try {
+            const deviceId = getDeviceId();
+            const dedupeKey = `ev_linked_${uid.slice(0, 8)}_${deviceId.slice(0, 8)}`;
+            if (sessionStorage.getItem(dedupeKey)) return;
+            sessionStorage.setItem(dedupeKey, "1");
+            fetch("/api/account/link-device", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ deviceId, accessToken: token }),
+            }).catch(() => {});
+          } catch {
+            /* storage blocked — skip linking this session */
+          }
         }, 0);
       } else {
         setProfile(null);

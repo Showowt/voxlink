@@ -1,3 +1,4 @@
+import { getDeviceId } from "./language-os/device-id";
 // ─────────────────────────────────────────────────────────────────────────────
 // WHISPER CAPTURE — tap-to-talk speech recognition that does NOT depend on
 // Apple's speech service. webkitSpeechRecognition can EXIST but not WORK
@@ -76,6 +77,7 @@ export async function startWhisperCapture(opts: {
       const form = new FormData();
       form.append("audio", blob);
       form.append("language", opts.lang);
+      form.append("deviceId", getDeviceId());
       const res = await fetch("/api/transcribe", { method: "POST", body: form });
       if (!res.ok) {
         opts.onError("Couldn't transcribe — check your connection and try again.");

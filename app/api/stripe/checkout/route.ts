@@ -82,7 +82,13 @@ export async function POST(req: NextRequest) {
         .eq("id", user.id);
     }
 
-    const priceId = plan === "pro" ? STRIPE_PRICES.PRO_MONTHLY : null;
+    const interval = body?.interval === "year" ? "year" : "month";
+    const priceId =
+      plan === "pro"
+        ? interval === "year"
+          ? STRIPE_PRICES.PRO_YEARLY
+          : STRIPE_PRICES.PRO_MONTHLY
+        : null;
 
     if (!priceId) {
       return NextResponse.json({ error: "Invalid plan" }, { status: 400 });

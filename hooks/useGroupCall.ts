@@ -14,6 +14,7 @@
 // renders the state the engine dispatches.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { getDeviceId } from '@/app/lib/language-os/device-id';
 import { useReducer, useRef, useEffect } from 'react';
 import type { Dispatch } from 'react';
 import Peer, { DataConnection, MediaConnection } from 'peerjs';
@@ -1196,6 +1197,7 @@ function createGroupEngine(dispatch: Dispatch<Action>): GroupEngine {
       const form = new FormData();
       form.append('audio', blob);
       form.append('language', lang);
+      form.append('deviceId', getDeviceId());
       const res = await fetch('/api/transcribe', { method: 'POST', body: form });
       if (res.status === 501) {
         if (engine === 'whisper') {

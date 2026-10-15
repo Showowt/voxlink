@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { getDeviceId } from "@/app/lib/language-os/device-id";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -277,6 +278,7 @@ export function useVoiceDubbing(
             audioBase64: base64,
             mimeType,
             sessionKey: sessionKeyRef.current,
+            deviceId: getDeviceId(),
           }),
         });
 
@@ -439,6 +441,7 @@ export function useVoiceDubbing(
             voiceId: voiceIdRef.current,
             targetLang: targetLang || targetLangRef.current,
             skipTranslation: true,
+            deviceId: getDeviceId(),
           }),
         });
 

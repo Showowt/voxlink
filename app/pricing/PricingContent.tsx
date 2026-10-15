@@ -35,31 +35,30 @@ const pricingTiers: PricingTier[] = [
     name: "Free",
     price: "$0",
     period: "/forever",
-    description: "Everything you need to get started",
+    description: "Real conversations, free forever",
     features: [
-      { text: "VoxType (unlimited text translation)", included: true },
-      { text: "VoxNote (unlimited voice memos)", included: true },
-      { text: "Face-to-Face mode (unlimited)", included: true },
+      { text: "Unlimited audio calls with live translated captions", included: true },
+      { text: "Unlimited group calls, Face-to-Face, VoxType & VoxNote", included: true },
+      { text: "10 video call minutes/month", included: true },
       { text: "10 Wingman sessions/month", included: true },
-      { text: "30 languages", included: true },
+      { text: "31 languages", included: true },
     ],
     cta: "Start Free",
   },
   {
-    name: "Pro",
-    price: "$12.99",
+    name: "Premium",
+    price: "$5.99",
     period: "/month",
-    description: "Unlimited power for serious users",
+    description: "7-day free trial · or $39.99/year (save 44%)",
     features: [
       { text: "Everything in Free", included: true },
-      { text: "Unlimited Wingman AI coaching", included: true },
-      { text: "AirPods stealth mode", included: true },
-      { text: "Proximity Connect radar", included: true },
-      { text: "Video Call translation", included: true },
+      { text: "Unlimited video call translation", included: true },
+      { text: "Natural AI voices + Voice Mimic (your own voice)", included: true },
+      { text: "Unlimited Wingman AI coaching + AirPods mode", included: true },
+      { text: "AI call summaries & unlimited practice", included: true },
       { text: "Priority AI responses", included: true },
-      { text: "No ads, no limits", included: true },
     ],
-    cta: "Upgrade to Pro",
+    cta: "Start 7-Day Free Trial",
     highlighted: true,
     badge: "Most Popular",
   },
@@ -125,13 +124,13 @@ function ChevronIcon({
 function PricingCard({ tier }: { tier: PricingTier }) {
   const [upgradeError, setUpgradeError] = useState("");
 
-  const handleUpgrade = async () => {
+  const handleUpgrade = async (interval: "month" | "year" = "month") => {
     setUpgradeError("");
     try {
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: "pro" }),
+        body: JSON.stringify({ plan: "pro", interval }),
       });
       const data = await res.json();
       if (res.status === 401) {
@@ -198,15 +197,23 @@ function PricingCard({ tier }: { tier: PricingTier }) {
 
         {/* CTA */}
         {tier.highlighted ? (
-          <GlowButton
-            onClick={handleUpgrade}
-            variant="primary"
-            size="lg"
-            fullWidth
-            className="min-h-[56px]"
-          >
-            {tier.cta}
-          </GlowButton>
+          <div>
+            <GlowButton
+              onClick={() => handleUpgrade("month")}
+              variant="primary"
+              size="lg"
+              fullWidth
+              className="min-h-[56px]"
+            >
+              {tier.cta}
+            </GlowButton>
+            <button
+              onClick={() => handleUpgrade("year")}
+              className="block w-full text-center text-voxxo-400 text-sm mt-3 underline underline-offset-2 min-h-[44px]"
+            >
+              Or $39.99/year — save 44%
+            </button>
+          </div>
         ) : (
           <Link href="/" className="block">
             {/* free tier goes home */}

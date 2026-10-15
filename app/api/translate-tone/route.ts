@@ -2,18 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-const limiter = new Map<string, { count: number; reset: number }>();
-function checkLimit(ip: string, max: number): boolean {
-  const now = Date.now();
-  const e = limiter.get(ip);
-  if (!e || now > e.reset) {
-    limiter.set(ip, { count: 1, reset: now + 60000 });
-    return true;
-  }
-  if (e.count >= max) return false;
-  e.count++;
-  return true;
-}
+import { checkRateLimit } from "@/lib/rate-limit";
+import { deviceBudget, serviceBudgetOk } from "@/lib/budget";
 
 const LANG_NAMES: Record<string, string> = {
   en: "English", es: "Spanish", fr: "French", pt: "Portuguese",
@@ -37,9 +27,18 @@ const TONE_PROMPTS: Record<Tone, string> = {
 
 export async function POST(req: NextRequest) {
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
-  if (!checkLimit(ip, 20)) {
+  const rl = await checkRateLimit(`tone:${ip}`, 20, 60000);
+  if (!rl.allowed) {
     return NextResponse.json({ error: "Rate limited" }, { status: 429 });
   }
+  if (!(await serviceBudgetOk("claude"))) {
+    return NextResponse.json({ error: "Temporarily unavailable" }, { status: 503 });
+  }
+  const dayBudget = await deviceBudget("claude", ip, true, 1000, 2000);
+  if (!dayBudget.allowed) {
+    return NextResponse.json({ error: "Daily allowance used" }, { status: 429 });
+  }
+
 
   try {
     const { text, from, to, tone } = (await req.json()) as {

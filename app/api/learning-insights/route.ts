@@ -2,19 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-// Rate limiter — 30 requests per minute per IP
-const limiter = new Map<string, { count: number; reset: number }>();
-function checkLimit(ip: string): boolean {
-  const now = Date.now();
-  const e = limiter.get(ip);
-  if (!e || now > e.reset) {
-    limiter.set(ip, { count: 1, reset: now + 60000 });
-    return true;
-  }
-  if (e.count >= 30) return false;
-  e.count++;
-  return true;
-}
+import { checkRateLimit } from "@/lib/rate-limit";
+import { deviceBudget, serviceBudgetOk } from "@/lib/budget";
 
 const LANG_NAMES: Record<string, string> = {
   en: "English", es: "Spanish", fr: "French", de: "German",
@@ -36,9 +25,18 @@ interface ConversationTurn {
 
 export async function POST(req: NextRequest) {
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
-  if (!checkLimit(ip)) {
+  const rl = await checkRateLimit(`insights:${ip}`, 30, 60000);
+  if (!rl.allowed) {
     return NextResponse.json({ error: "Rate limited" }, { status: 429 });
   }
+  if (!(await serviceBudgetOk("claude"))) {
+    return NextResponse.json({ error: "Temporarily unavailable" }, { status: 503 });
+  }
+  const dayBudget = await deviceBudget("claude", ip, true, 1000, 2000);
+  if (!dayBudget.allowed) {
+    return NextResponse.json({ error: "Daily allowance used" }, { status: 429 });
+  }
+
 
   try {
     const body = await req.json();

@@ -32,7 +32,7 @@ export default function SRSReviewPage() {
       const res = await fetch("/api/language-os/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: JSON.stringify({ deviceId: getDeviceId(),
           text,
           voiceId: defaultVoiceId,
           lang: config?.targetLanguage,

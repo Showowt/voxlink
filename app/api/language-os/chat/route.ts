@@ -34,6 +34,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "RATE_LIMITED", retryAfter: 60 }, { status: 429 });
     }
 
+    // Global Claude kill-switch + per-IP daily budget (MONETIZATION_PLAN Phase 0)
+    const { serviceBudgetOk, deviceBudget } = await import("@/lib/budget");
+    if (!(await serviceBudgetOk("claude"))) {
+      return NextResponse.json({ error: "UNAVAILABLE" }, { status: 503 });
+    }
+    const dayBudget = await deviceBudget("claude", ip, true, 1000, 2000);
+    if (!dayBudget.allowed) {
+      return NextResponse.json({ error: "RATE_LIMITED", retryAfter: 3600 }, { status: 429 });
+    }
+
     const totalChars = (messages || []).reduce(
       (n, m) => n + (m.content?.length ?? 0),
       0,

@@ -2,19 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-// Rate limiter
-const store = new Map<string, { count: number; resetAt: number }>();
-function isRateLimited(ip: string): boolean {
-  const now = Date.now();
-  const entry = store.get(ip);
-  if (!entry || now > entry.resetAt) {
-    store.set(ip, { count: 1, resetAt: now + 60000 });
-    return false;
-  }
-  if (entry.count >= 10) return true;
-  entry.count++;
-  return false;
-}
+import { checkRateLimit } from "@/lib/rate-limit";
+import { deviceBudget, serviceBudgetOk } from "@/lib/budget";
 
 interface Message {
   original: string;
@@ -25,9 +14,21 @@ interface Message {
 
 export async function POST(req: NextRequest) {
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0] || "unknown";
-  if (isRateLimited(ip)) {
+  const rl = await checkRateLimit(`summary:${ip}`, 10, 60000);
+  if (!rl.allowed) {
     return NextResponse.json({ error: "Rate limited" }, { status: 429 });
   }
+  // Shared Claude spend caps: Redis-backed per-minute limit (survives cold
+  // starts), a per-IP daily budget, and the global daily kill-switch — a
+  // runaway loop or viral spike degrades instead of billing.
+  if (!(await serviceBudgetOk("claude"))) {
+    return NextResponse.json({ error: "Temporarily unavailable" }, { status: 503 });
+  }
+  const dayBudget = await deviceBudget("claude", ip, true, 1000, 2000);
+  if (!dayBudget.allowed) {
+    return NextResponse.json({ error: "Daily allowance used" }, { status: 429 });
+  }
+
 
   try {
     const { messages, duration, languages } = (await req.json()) as {

@@ -9,38 +9,9 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { deviceBudget, serviceBudgetOk } from "@/lib/budget";
 
-// ═══════════════════════════════════════════════════════════════════════════
-// RATE LIMITER WITH CLEANUP (prevents memory leak)
-// ═══════════════════════════════════════════════════════════════════════════
-const WINDOW_MS = 60_000;
-const MAX_PER_WIN = 30;
-const MAX_STORE_SIZE = 10_000; // Prevent unbounded growth
-const store = new Map<string, { count: number; resetAt: number }>();
-
-function cleanupExpiredEntries(): void {
-  const now = Date.now();
-  store.forEach((rec, ip) => {
-    if (now > rec.resetAt) store.delete(ip);
-  });
-}
-
-function isRateLimited(ip: string): boolean {
-  // Periodic cleanup (1% of requests) + size-based cleanup
-  if (Math.random() < 0.01 || store.size > MAX_STORE_SIZE) {
-    cleanupExpiredEntries();
-  }
-
-  const now = Date.now();
-  const rec = store.get(ip);
-  if (!rec || now > rec.resetAt) {
-    store.set(ip, { count: 1, resetAt: now + WINDOW_MS });
-    return false;
-  }
-  if (rec.count >= MAX_PER_WIN) return true;
-  rec.count++;
-  return false;
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // VALIDATION CONSTANTS
@@ -53,12 +24,24 @@ export async function POST(req: NextRequest) {
   // ── Rate limit ────────────────────────────────────────────────────────────
   const ip =
     req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "local";
-  if (isRateLimited(ip)) {
+  const rl = await checkRateLimit(`cyrano:${ip}`, 30, 60000);
+  if (!rl.allowed) {
     return NextResponse.json(
       { error: "Rate limit exceeded. Try again in 60 seconds." },
       { status: 429 },
     );
   }
+  // Shared Claude spend caps: Redis-backed per-minute limit (survives cold
+  // starts), a per-IP daily budget, and the global daily kill-switch — a
+  // runaway loop or viral spike degrades instead of billing.
+  if (!(await serviceBudgetOk("claude"))) {
+    return NextResponse.json({ error: "Temporarily unavailable" }, { status: 503 });
+  }
+  const dayBudget = await deviceBudget("claude", ip, true, 1000, 2000);
+  if (!dayBudget.allowed) {
+    return NextResponse.json({ error: "Daily allowance used" }, { status: 429 });
+  }
+
 
   // ── Parse body ────────────────────────────────────────────────────────────
   let systemPrompt: string, userPrompt: string;

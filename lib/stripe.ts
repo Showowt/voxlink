@@ -64,7 +64,8 @@ export function getStripe(): Stripe | null {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const STRIPE_PRICES = {
-  PRO_MONTHLY: process.env.STRIPE_PRICE_PRO_MONTHLY,
+  PRO_MONTHLY: process.env.STRIPE_PRICE_PRO_MONTHLY, // $5.99/mo
+  PRO_YEARLY: process.env.STRIPE_PRICE_PRO_YEARLY, // $39.99/yr
 } as const;
 
 export const SUBSCRIPTION_TIERS = {

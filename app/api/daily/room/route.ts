@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
+import { getEntitlement } from "@/lib/entitlement";
+import { serviceBudgetOk } from "@/lib/budget";
+import { getMonthlyVideoMinutes, FREE_VIDEO_MINUTES } from "@/lib/video-minutes";
 
 const DAILY_API_KEY = process.env.DAILY_API_KEY;
 const DAILY_API_URL = "https://api.daily.co/v1";
@@ -25,11 +28,44 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const roomCode = body.roomCode || "";
+    const deviceId = typeof body.deviceId === "string" ? body.deviceId : "";
+    const userId = typeof body.userId === "string" ? body.userId : "";
     const roomName = `entrevoz-${roomCode.toLowerCase()}`;
-    // 4h: at 1h with eject_at_token_exp, calls hard-dropped both sides at the
-    // 60-minute mark. Rooms are private + 2-person and this route re-mints
-    // fresh tokens on every (re)join, so a longer window is safe.
-    const exp = Math.floor(Date.now() / 1000) + 14400;
+
+    // ── Spend gates (MONETIZATION_PLAN Phase 0) ─────────────────────────────
+    // Daily.co bills per participant-minute — this is the one rail where a
+    // viral spike translates directly into an invoice. Free tier gets
+    // FREE_VIDEO_MINUTES per month; the token's eject_at_token_exp makes the
+    // remaining allowance a HARD server-side cap (not client-honor-system).
+    // Audio calls are unaffected (they run on free P2P, never through here).
+    if (!(await serviceBudgetOk("daily"))) {
+      return NextResponse.json(
+        { error: "Video temporarily unavailable — audio calls still work", videoLimit: true },
+        { status: 503 },
+      );
+    }
+    const ent = await getEntitlement({ userId: userId || undefined, deviceId: deviceId || undefined });
+    let maxSeconds = 14400; // premium: 4h window (re-minted on every rejoin)
+    if (!ent.entitled) {
+      const used = await getMonthlyVideoMinutes(ent.userId, deviceId);
+      const remaining = FREE_VIDEO_MINUTES() - used;
+      if (remaining <= 0) {
+        return NextResponse.json(
+          {
+            error: "Free video minutes used for this month — audio calls are unlimited",
+            videoLimit: true,
+            upgrade: true,
+          },
+          { status: 402 },
+        );
+      }
+      // Remaining allowance + 2 min grace to say goodbye.
+      maxSeconds = Math.min(14400, remaining * 60 + 120);
+    }
+    // 4h for premium: at 1h with eject_at_token_exp, calls hard-dropped both
+    // sides at the 60-minute mark. Rooms are private + 2-person and this route
+    // re-mints fresh tokens on every (re)join, so a longer window is safe.
+    const exp = Math.floor(Date.now() / 1000) + maxSeconds;
 
     // Create-or-get a PRIVATE room. Private means the raw daily.co URL can't be
     // joined without a server-minted token — so possession of the 6-char code

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getEntitlement } from "@/lib/entitlement";
+import { deviceBudget, serviceBudgetOk, DAILY_ALLOWANCES } from "@/lib/budget";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 15;
@@ -22,12 +24,35 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}) as Record<string, unknown>);
-  const { text, voiceId, targetLang = "en", skipTranslation = false } = body as {
+  const { text, voiceId, targetLang = "en", skipTranslation = false, deviceId, userId } = body as {
     text?: string;
     voiceId?: string;
     targetLang?: string;
     skipTranslation?: boolean;
+    deviceId?: string;
+    userId?: string;
   };
+
+  // ── Spend gates (MONETIZATION_PLAN Phase 0) ────────────────────────────────
+  // ElevenLabs is a premium rail: free identities get a small daily taste so
+  // first-call demos keep their wow, then the client's existing browser-TTS
+  // fallback takes over (`fallback: true` is the signal it already honors).
+  if (!(await serviceBudgetOk("elevenlabs"))) {
+    return NextResponse.json(
+      { error: "Natural voice temporarily unavailable", fallback: true },
+      { status: 503 },
+    );
+  }
+  const ent = await getEntitlement({ userId, deviceId });
+  const identity = typeof deviceId === "string" && deviceId.length >= 8 ? deviceId : ip;
+  const allowance = DAILY_ALLOWANCES.tts();
+  const budget = await deviceBudget("tts", identity, ent.entitled, allowance.free, allowance.premium);
+  if (!budget.allowed) {
+    return NextResponse.json(
+      { error: "Daily natural-voice allowance used", fallback: true, upgrade: !ent.entitled },
+      { status: 402 },
+    );
+  }
 
   if (!text?.trim() || !voiceId) {
     return NextResponse.json(

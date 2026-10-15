@@ -1,25 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { getEntitlement } from "@/lib/entitlement";
+import { deviceBudget, serviceBudgetOk, DAILY_ALLOWANCES } from "@/lib/budget";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 15;
 
-// Rate limit: 120 TTS requests per minute per IP
-const limiter = new Map<string, { count: number; reset: number }>();
-function checkLimit(ip: string): boolean {
-  const now = Date.now();
-  const e = limiter.get(ip);
-  if (!e || now > e.reset) {
-    limiter.set(ip, { count: 1, reset: now + 60000 });
-    return true;
-  }
-  if (e.count >= 120) return false;
-  e.count++;
-  return true;
-}
-
 export async function POST(req: NextRequest) {
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
-  if (!checkLimit(ip)) {
+  const rl = await checkRateLimit(`los-tts:${ip}`, 120, 60000);
+  if (!rl.allowed) {
     return NextResponse.json({ error: "Rate limited" }, { status: 429 });
   }
 
@@ -29,14 +19,34 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}) as Record<string, unknown>);
-  const { text, voiceId, lang } = body as {
+  const { text, voiceId, lang, deviceId } = body as {
     text?: string;
     voiceId?: string;
     lang?: string;
+    deviceId?: string;
   };
 
   if (!text?.trim() || !voiceId) {
     return NextResponse.json({ error: "Missing text or voiceId" }, { status: 400 });
+  }
+
+  // ── Spend gates (MONETIZATION_PLAN Phase 0) — shares the voice-dub TTS
+  // allowance; over budget → client's device-voice fallback.
+  if (!(await serviceBudgetOk("elevenlabs"))) {
+    return NextResponse.json(
+      { error: "Natural voice temporarily unavailable", fallback: true },
+      { status: 503 },
+    );
+  }
+  const ent = await getEntitlement({ deviceId });
+  const identity = typeof deviceId === "string" && deviceId.length >= 8 ? deviceId : ip;
+  const allowance = DAILY_ALLOWANCES.tts();
+  const budget = await deviceBudget("tts", identity, ent.entitled, allowance.free, allowance.premium);
+  if (!budget.allowed) {
+    return NextResponse.json(
+      { error: "Daily natural-voice allowance used", fallback: true, upgrade: !ent.entitled },
+      { status: 402 },
+    );
   }
 
   // eleven_flash_v2_5 garbles these languages (no support) — tell the client

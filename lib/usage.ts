@@ -3,24 +3,31 @@
 // Tracks usage per user (authenticated) or session (anonymous)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { supabase, isSupabaseConfigured } from "./supabase";
-import type { SubscriptionTier } from "./stripe";
+import { supabase as supabaseAnon, isSupabaseConfigured } from "./supabase";
+import { supabaseAdmin } from "./supabase-admin";
+
+// feature_usage is service-role-only under RLS; this lib only ever runs
+// server-side, so prefer the admin client (anon kept as a dev fallback).
+const supabase = (supabaseAdmin() ?? supabaseAnon) as typeof supabaseAnon;
 
 // ─── Feature Types ────────────────────────────────────────────────────────────
 export type Feature = "wingman" | "video_call" | "proximity" | "translate";
 
 export interface UsageLimits {
-  wingman: number; // 10 for free, unlimited for pro
-  video_call: number; // 0 for free, unlimited for pro
-  proximity: number; // 0 for free, unlimited for pro
+  wingman: number; // sessions/month
+  video_call: number; // MINUTES/month on the billed (Daily) video rail
+  proximity: number; // discovery is a growth feature — free for everyone
   translate: number; // unlimited for all
 }
 
 // ─── Tier Limits ──────────────────────────────────────────────────────────────
+// Launch model (MONETIZATION_PLAN.md): audio calls + captions are unlimited
+// and free for everyone (P2P, near-zero cost); the billed video rail gets a
+// 10-minute monthly taste; premium removes the caps.
 export const FREE_LIMITS: UsageLimits = {
   wingman: 10,
-  video_call: 0, // Not available on free tier
-  proximity: 0, // Not available on free tier
+  video_call: 10, // minutes/month free taste of billed video
+  proximity: Infinity, // free — every discovery is a growth event
   translate: Infinity, // Always unlimited
 };
 
@@ -82,37 +89,14 @@ export async function getUserPlan(
     return "free";
   }
 
-  // Supabase not configured = assume free
-  if (!isSupabaseConfigured()) {
-    return "free";
-  }
-
-  try {
-    const { data, error } = await supabase
-      .from("subscriptions")
-      .select("tier, status")
-      .eq("user_id", userId)
-      .eq("status", "active")
-      .maybeSingle();
-
-    if (error) {
-      console.error("[Usage] Error fetching subscription:", error);
-      return "free";
-    }
-
-    if (!data) {
-      return "free";
-    }
-
-    // Map subscription tier to plan
-    const tier = data.tier as SubscriptionTier;
-    if (tier === "pro") return "pro";
-
-    return "free";
-  } catch (err) {
-    console.error("[Usage] Exception fetching subscription:", err);
-    return "free";
-  }
+  // Source of truth is profiles (written by the Stripe webhook) — the legacy
+  // `subscriptions` table this used to query was never created in this
+  // project, so every lookup errored and silently returned "free".
+  // A live signup trial counts as pro-level entitlement.
+  const { getEntitlement } = await import("./entitlement");
+  const ent = await getEntitlement({ userId });
+  if (ent.entitled) return ent.plan === "enterprise" ? "enterprise" : "pro";
+  return "free";
 }
 
 // ─── Get Limits for Plan ──────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 "use client";
 
+import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { useState, useRef, useCallback } from "react";
 
 const FEATURE_OFFLINE_PHRASES = true;
@@ -192,7 +193,7 @@ export default function OfflinePhrases({
         const res = await fetch("/api/language-os/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, voiceId }),
+          body: JSON.stringify({ deviceId: getDeviceId(), text, voiceId }),
         });
 
         if (!res.ok) throw new Error("TTS API failed");

@@ -1,5 +1,6 @@
 "use client";
 
+import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { getFlag, getSpeechCode, LANGUAGES } from "../lib/languages";
@@ -169,7 +170,7 @@ export default function FaceToFacePage() {
         const res = await fetch("/api/language-os/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, voiceId: VOICE_IDS[mode], lang }),
+          body: JSON.stringify({ deviceId: getDeviceId(), text, voiceId: VOICE_IDS[mode], lang }),
         });
         const data = await res.json();
         if (data.audioBase64) {

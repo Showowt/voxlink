@@ -1,3 +1,4 @@
+import { serviceBudgetOk } from "@/lib/budget";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { checkRateLimit, rateLimitHeaders, trackEvent } from "@/lib/rate-limit";
@@ -727,7 +728,11 @@ export async function POST(req: NextRequest) {
     // 5a. Context-aware LLM is AUTHORITATIVE when context/glossary/register is
     // supplied — this is what stops translations from straying across turns.
     // Providers keep running in parallel so a Claude miss costs no extra time.
-    if (hasContext) {
+    // Global Claude kill-switch: when the daily spend cap is hit, skip the
+    // Claude tiers — the free providers below still serve the request.
+    const claudeOk = await serviceBudgetOk("claude");
+
+    if (hasContext && claudeOk) {
       translation = await translateClaudeContext(cleanText, from, to, {
         context,
         glossary,
@@ -752,7 +757,7 @@ export async function POST(req: NextRequest) {
 
     // 5c. Plain Claude as a last resort (skip if we already tried the
     // context-aware Claude, which uses the same model/key).
-    if (!translation && !hasContext) {
+    if (!translation && !hasContext && claudeOk) {
       translation = await translateClaude(cleanText, from, to);
       if (translation) source = "claude";
     }

@@ -24,6 +24,7 @@
 
 "use client";
 
+import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { useState, useEffect, useRef, useCallback } from "react";
 
 // Master switch. Leave OFF — see the header. Flip to true only alongside a
@@ -166,6 +167,7 @@ export function useRemoteTranscription({
           const form = new FormData();
           form.append("audio", blob, "remote.webm");
           form.append("language", partnerLangRef.current);
+          form.append("deviceId", getDeviceId());
 
           const res = await fetch("/api/transcribe", { method: "POST", body: form });
           if (!res.ok) return;

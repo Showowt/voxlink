@@ -23,6 +23,7 @@
 
 "use client";
 
+import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { useState, useEffect, useRef, useCallback } from "react";
 import type {
   SpeechRecognitionInstance,
@@ -874,6 +875,7 @@ export function useTranscription({
         const form = new FormData();
         form.append("audio", blob, "chunk.webm");
         form.append("language", langRef.current.my);
+        form.append("deviceId", getDeviceId());
 
         const res = await fetch("/api/transcribe", { method: "POST", body: form });
         if (!res.ok) {

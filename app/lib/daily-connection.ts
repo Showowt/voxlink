@@ -64,10 +64,16 @@ export class DailyConnection {
       const roomRes = await fetch("/api/daily/room", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ roomCode: this.roomId }),
+        body: JSON.stringify({ roomCode: this.roomId, deviceId: this.deviceId }),
       });
 
       if (!roomRes.ok) {
+        // 402 = free monthly video minutes exhausted (audio stays unlimited) —
+        // surface a distinct message so the UI can offer the audio call path.
+        const errBody = await roomRes.json().catch(() => ({}) as { error?: string; videoLimit?: boolean });
+        if (roomRes.status === 402 && errBody.videoLimit) {
+          throw new Error(errBody.error || "Free video minutes used — audio calls are unlimited");
+        }
         throw new Error("Failed to create video room");
       }
 

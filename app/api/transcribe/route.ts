@@ -21,6 +21,8 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { getEntitlement } from "@/lib/entitlement";
+import { deviceBudget, serviceBudgetOk, DAILY_ALLOWANCES } from "@/lib/budget";
 import {
   looksLikeArtifact,
   isAmbiguousFiller,
@@ -122,6 +124,7 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const audioFile = formData.get("audio") as Blob | null;
     const language = (formData.get("language") as string) ?? "en";
+    const deviceId = (formData.get("deviceId") as string) || "";
 
     if (!audioFile) {
       return NextResponse.json({ error: "audio file required" }, { status: 400 });
@@ -130,6 +133,34 @@ export async function POST(req: NextRequest) {
     // Too small = almost certainly silence/click. Don't waste a Whisper call.
     if (audioFile.size < 1600) {
       return NextResponse.json({ text: "", language, dropped: true, reason: "too_small" });
+    }
+
+    // ── Spend gates (MONETIZATION_PLAN Phase 0) ─────────────────────────────
+    // Whisper is the paid STT fallback (~30s clips). Per-identity daily
+    // allowance + global kill-switch; over budget returns the same shape as
+    // other soft failures so the client's capture loop stops gracefully
+    // instead of erroring.
+    if (!(await serviceBudgetOk("whisper"))) {
+      return NextResponse.json(
+        { error: "Transcription temporarily unavailable", fallback: true },
+        { status: 503 },
+      );
+    }
+    const ent = await getEntitlement({ deviceId: deviceId || undefined });
+    const identity = deviceId.length >= 8 ? deviceId : ip;
+    const allowance = DAILY_ALLOWANCES.transcribe();
+    const budget = await deviceBudget(
+      "transcribe",
+      identity,
+      ent.entitled,
+      allowance.free,
+      allowance.premium,
+    );
+    if (!budget.allowed) {
+      return NextResponse.json(
+        { error: "Daily transcription allowance used", fallback: true, upgrade: !ent.entitled },
+        { status: 402 },
+      );
     }
 
     if (audioFile.size > 25 * 1024 * 1024) {

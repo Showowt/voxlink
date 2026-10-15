@@ -675,6 +675,7 @@ function VideoCallContent() {
   const partnerNameRef = useRef<string>("");
   const partnerLangRef = useRef<string>("");
   const contactSavedRef = useRef(false);
+  const videoMinutesReportedRef = useRef(false);
   const hadPartnerRef = useRef(false); // ever connected to a partner this call
   const callStartRef = useRef<number>(0); // first partner-connect timestamp
   const transcriptRef = useRef<TranscriptEntry[]>([]); // live mirror for teardown saves
@@ -728,6 +729,16 @@ function VideoCallContent() {
       durationSeconds,
       transcript: turns,
     });
+    // Report billed video minutes once per call (the server increments, so a
+    // repeat teardown event must not double-count). Hard cap is enforced by
+    // the room token's expiry regardless of this report.
+    if (!videoMinutesReportedRef.current && durationSeconds > 0) {
+      videoMinutesReportedRef.current = true;
+      void reliablePost("/api/usage/video", {
+        deviceId: getDeviceId(),
+        minutes: durationSeconds / 60,
+      });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userLang, expectedPartnerLang, roomCode]);
 

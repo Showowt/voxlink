@@ -1,25 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { getEntitlement } from "@/lib/entitlement";
+import { serviceBudgetOk } from "@/lib/budget";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-// Rate limit: 3 clones per minute per IP
-const limiter = new Map<string, { count: number; reset: number }>();
-function checkLimit(ip: string): boolean {
-  const now = Date.now();
-  const e = limiter.get(ip);
-  if (!e || now > e.reset) {
-    limiter.set(ip, { count: 1, reset: now + 60000 });
-    return true;
-  }
-  if (e.count >= 3) return false;
-  e.count++;
-  return true;
-}
-
 export async function POST(req: NextRequest) {
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
-  if (!checkLimit(ip)) {
+  // Redis-backed — the old per-instance Map reset on every cold start, which
+  // made the most expensive route in the app (~$0.50-1.00/clone) trivially
+  // spammable.
+  const rl = await checkRateLimit(`voice-clone:${ip}`, 3, 60000);
+  if (!rl.allowed) {
     return NextResponse.json({ error: "Rate limited" }, { status: 429 });
   }
 
@@ -31,14 +24,38 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: { audioBase64: string; mimeType?: string; sessionKey?: string };
+  let body: {
+    audioBase64: string;
+    mimeType?: string;
+    sessionKey?: string;
+    deviceId?: string;
+    userId?: string;
+  };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
-  const { audioBase64, mimeType, sessionKey } = body;
+  const { audioBase64, mimeType, sessionKey, deviceId, userId } = body;
+
+  // ── Spend gates (MONETIZATION_PLAN Phase 0) ────────────────────────────────
+  // Voice Mimic is Premium-only: a clone costs real money per call. Free/anon
+  // identities get `fallback: true`, which the client already handles by
+  // selecting a stock voice.
+  if (!(await serviceBudgetOk("elevenlabs"))) {
+    return NextResponse.json(
+      { error: "Voice Mimic temporarily unavailable", fallback: true },
+      { status: 503 },
+    );
+  }
+  const ent = await getEntitlement({ userId, deviceId });
+  if (!ent.entitled) {
+    return NextResponse.json(
+      { error: "Voice Mimic is a Premium feature", fallback: true, upgrade: true },
+      { status: 402 },
+    );
+  }
 
   if (typeof audioBase64 !== "string" || audioBase64.length < 1000) {
     return NextResponse.json(

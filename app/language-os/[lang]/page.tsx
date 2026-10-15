@@ -198,7 +198,7 @@ function LanguageOSApp({ config, langCode }: { config: NonNullable<ReturnType<ty
       const res = await fetch("/api/language-os/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, voiceId, lang: config.targetLanguage }),
+        body: JSON.stringify({ deviceId: getDeviceId(), text, voiceId, lang: config.targetLanguage }),
       });
 
       const data = await res.json();
