@@ -22,6 +22,7 @@ import ReconnectingOverlay from "../../components/ReconnectingOverlay";
 import { useBrowserSupport } from "../../lib/browser-support";
 import { shareJoinLink } from "../../lib/share-link";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
+import { reliablePost } from "@/app/lib/reliable-post";
 import { addTranslation } from "@/app/lib/translation-history";
 import { checkMicPermission } from "@/app/lib/mic-permission";
 import { ensureAIConsent } from "@/app/lib/ai-consent";
@@ -169,21 +170,14 @@ function TalkContent() {
     const contactDeviceId = partnerDeviceIdRef.current;
     if (!contactDeviceId || contactDeviceId === getDeviceId()) return;
     contactSavedRef.current = true;
-    try {
-      fetch("/api/contacts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        keepalive: true,
-        body: JSON.stringify({
-          ownerDeviceId: getDeviceId(),
-          contactDeviceId,
-          displayName: partnerNameRef.current || "Unknown",
-          language: partnerLangRef.current || defaultTargetLang || "en",
-        }),
-      }).catch(() => {});
-    } catch {
-      /* ignore */
-    }
+    // Queued-and-retried on failure (outbox), so a network blip or Supabase
+    // hiccup no longer silently loses the contact.
+    void reliablePost("/api/contacts", {
+      ownerDeviceId: getDeviceId(),
+      contactDeviceId,
+      displayName: partnerNameRef.current || "Unknown",
+      language: partnerLangRef.current || defaultTargetLang || "en",
+    });
   }, [defaultTargetLang]);
 
   // Log this call to durable cross-device history. Upsert-safe to fire more
@@ -201,25 +195,16 @@ function TalkContent() {
     const durationSeconds = callStartRef.current
       ? Math.round((Date.now() - callStartRef.current) / 1000)
       : 0;
-    try {
-      fetch("/api/history", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        keepalive: true,
-        body: JSON.stringify({
-          deviceId: getDeviceId(),
-          partnerDeviceId: partnerDeviceIdRef.current || undefined,
-          partnerName: partnerNameRef.current || undefined,
-          languagePair: `${userLang}-${partnerLangRef.current || defaultTargetLang}`,
-          mode: "audio",
-          roomCode: roomId,
-          durationSeconds,
-          transcript: turns,
-        }),
-      }).catch(() => {});
-    } catch {
-      /* ignore */
-    }
+    void reliablePost("/api/history", {
+      deviceId: getDeviceId(),
+      partnerDeviceId: partnerDeviceIdRef.current || undefined,
+      partnerName: partnerNameRef.current || undefined,
+      languagePair: `${userLang}-${partnerLangRef.current || defaultTargetLang}`,
+      mode: "audio",
+      roomCode: roomId,
+      durationSeconds,
+      transcript: turns,
+    });
   }, [userLang, defaultTargetLang, roomId]);
 
   // Seed the partner's identity from the URL (set by dial/contacts/add/accept)
@@ -565,16 +550,20 @@ function TalkContent() {
             setPartnerLiveTranslation("");
           }
 
-          // Auto-clear after 3s (faster cleanup)
+          // Auto-clear scaled to reading time (was a fixed 3s, which erased
+          // longer sentences before a reader could finish them — "the words
+          // go off the screen too fast"). ~450ms/word, min 6s, cap 15s.
           if (liveTextTimeoutRef.current) {
             clearTimeout(liveTextTimeoutRef.current);
           }
+          const liveWordCount = incomingText.split(/\s+/).filter(Boolean).length;
+          const liveDisplayMs = Math.min(Math.max(6000, liveWordCount * 450), 15000);
           liveTextTimeoutRef.current = setTimeout(() => {
             if (mountedRef.current) {
               setPartnerLiveText("");
               setPartnerLiveTranslation("");
             }
-          }, 3000);
+          }, liveDisplayMs);
         }
 
         // ═══════════════════════════════════════════════════════════════════
@@ -912,7 +901,7 @@ function TalkContent() {
             setMyLiveText("");
             setMyLiveTranslation("");
           }
-        }, 2000);
+        }, 4000);
       }
     };
 

@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
         typeof partnerDeviceId === "string" && partnerDeviceId ? partnerDeviceId : "unknown",
       language_pair:
         typeof languagePair === "string" && languagePair ? languagePair.slice(0, 20) : "en",
-      mode: mode === "audio" ? "audio" : "video",
+      mode: mode === "audio" || mode === "group" ? mode : "video",
       status: "ended",
       partner_name: meaningfulName(partnerName),
       duration_seconds:

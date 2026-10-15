@@ -19,6 +19,20 @@ export default function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
 
+  // Identity + lost-write recovery, as early as possible: reconcile the device
+  // id across its three mirrors (localStorage / cookie / IndexedDB) so a
+  // purged localStorage doesn't strand the user's contacts and history under
+  // an orphaned id, then retry any queued contact/history writes that failed
+  // on a previous session.
+  useEffect(() => {
+    import("../lib/language-os/device-id")
+      .then(({ ensureStableDeviceId }) => ensureStableDeviceId())
+      .catch(() => {});
+    import("../lib/reliable-post")
+      .then(({ installOutboxFlush }) => installOutboxFlush())
+      .catch(() => {});
+  }, []);
+
   // Native shell only: register the VoIP token + handle CallKit answers so the
   // device rings when closed. No-ops on the web.
   useEffect(() => {

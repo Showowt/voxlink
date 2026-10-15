@@ -41,6 +41,7 @@ import { useVoiceDubbing } from "@/hooks/useVoiceDubbing";
 import { useRemoteTranscription } from "@/hooks/useRemoteTranscription";
 import { setTtsSpeaking, subscribeTtsSpeaking } from "@/lib/tts-gate";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
+import { reliablePost } from "@/app/lib/reliable-post";
 import { addTranslation } from "@/app/lib/translation-history";
 import { checkMicPermission } from "@/app/lib/mic-permission";
 import MicReminder from "@/app/components/MicReminder";
@@ -688,24 +689,17 @@ function VideoCallContent() {
     const contactDeviceId = partnerDeviceIdRef.current;
     if (!contactDeviceId || contactDeviceId === getDeviceId()) return;
     contactSavedRef.current = true;
-    try {
-      fetch("/api/contacts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        keepalive: true,
-        body: JSON.stringify({
-          ownerDeviceId: getDeviceId(),
-          contactDeviceId,
-          displayName: partnerNameRef.current || "Unknown",
-          // Prefer the handshake language, then the URL-seeded expectation —
-          // a hard "en" here permanently poisoned contacts saved before the
-          // handshake landed.
-          language: partnerLangRef.current || expectedPartnerLang || "en",
-        }),
-      }).catch(() => {});
-    } catch {
-      /* ignore */
-    }
+    // Queued-and-retried on failure (outbox), so a network blip or Supabase
+    // hiccup no longer silently loses the contact.
+    void reliablePost("/api/contacts", {
+      ownerDeviceId: getDeviceId(),
+      contactDeviceId,
+      displayName: partnerNameRef.current || "Unknown",
+      // Prefer the handshake language, then the URL-seeded expectation —
+      // a hard "en" here permanently poisoned contacts saved before the
+      // handshake landed.
+      language: partnerLangRef.current || expectedPartnerLang || "en",
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expectedPartnerLang]);
 
@@ -724,25 +718,16 @@ function VideoCallContent() {
     const durationSeconds = callStartRef.current
       ? Math.round((Date.now() - callStartRef.current) / 1000)
       : 0;
-    try {
-      fetch("/api/history", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        keepalive: true,
-        body: JSON.stringify({
-          deviceId: getDeviceId(),
-          partnerDeviceId: partnerDeviceIdRef.current || undefined,
-          partnerName: partnerNameRef.current || undefined,
-          languagePair: `${userLang}-${partnerLangRef.current || expectedPartnerLang}`,
-          mode: "video",
-          roomCode,
-          durationSeconds,
-          transcript: turns,
-        }),
-      }).catch(() => {});
-    } catch {
-      /* ignore */
-    }
+    void reliablePost("/api/history", {
+      deviceId: getDeviceId(),
+      partnerDeviceId: partnerDeviceIdRef.current || undefined,
+      partnerName: partnerNameRef.current || undefined,
+      languagePair: `${userLang}-${partnerLangRef.current || expectedPartnerLang}`,
+      mode: "video",
+      roomCode,
+      durationSeconds,
+      transcript: turns,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userLang, expectedPartnerLang, roomCode]);
 
@@ -820,9 +805,32 @@ function VideoCallContent() {
   const [theirLiveTranslation, setTheirLiveTranslation] = useState("");
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+
+  // Recent-lines feed: the last finalized partner turns stay readable in a
+  // dimmer strip above the live caption instead of vanishing the instant a
+  // fast talker's next sentence replaces them. Ages out after 45s of silence;
+  // the 10s tick below re-renders so expiry actually happens during a lull.
+  const RECENT_CAPTION_MS = 45000;
+  const [captionNow, setCaptionNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setCaptionNow(Date.now()), 10000);
+    return () => clearInterval(t);
+  }, []);
   const [fontSize, setFontSize] = useState<"small" | "medium" | "large">(
     "medium",
   );
+
+  // Last two finalized partner turns still within the reading window and not
+  // already on screen as the live caption.
+  const recentPartnerLines = transcript
+    .filter(
+      (t) =>
+        t.speaker === "partner" &&
+        captionNow - t.timestamp.getTime() < RECENT_CAPTION_MS &&
+        t.translated !== theirLiveTranslation &&
+        t.original !== theirLiveText,
+    )
+    .slice(-2);
 
   // UI state
   const [iceState, setIceState] = useState<IceConnectionState | null>(null);
@@ -906,7 +914,7 @@ function VideoCallContent() {
       setMyLiveText(transcription.localFinal);
       // Clear after 5s (was 2s — too fast to read)
       const wordCount = transcription.localFinal.split(/\s+/).length;
-      const displayTime = Math.min(Math.max(5000, wordCount * 400), 10000);
+      const displayTime = Math.min(Math.max(6000, wordCount * 450), 15000);
       const timeout = setTimeout(() => {
         setMyLiveText("");
         setMyLiveTranslation("");
@@ -1841,9 +1849,11 @@ function VideoCallContent() {
           }
         }
 
-        // Auto-clear: longer for longer text (min 5s, ~100ms per word, max 12s)
+        // Auto-clear scaled to reading time: ~450ms/word, min 7s, cap 20s.
+        // (Recent finals also persist in the recent-lines feed below the
+        // live caption, so even an early clear can't strand the reader.)
         const wordCount = (text || "").split(/\s+/).length;
-        const displayTime = Math.min(Math.max(5000, wordCount * 400), 12000);
+        const displayTime = Math.min(Math.max(7000, wordCount * 450), 20000);
         theirCaptionTimeoutRef.current = setTimeout(() => {
           setTheirLiveText("");
           setTheirLiveTranslation("");
@@ -1866,11 +1876,11 @@ function VideoCallContent() {
         setTheirLiveTranslation("");
         setTheirLiveText(text);
 
-        // Keep interim visible for 5s (partner is still speaking)
+        // Keep interim visible for 8s (partner is still speaking)
         theirCaptionTimeoutRef.current = setTimeout(() => {
           setTheirLiveText("");
           setTheirLiveTranslation("");
-        }, 5000);
+        }, 8000);
         return;
       }
 
@@ -1929,11 +1939,12 @@ function VideoCallContent() {
         }
       }
 
-      // Auto-clear after 5 seconds of no updates
+      // Auto-clear scaled to reading time (matches the translation-message path)
+      const legacyWordCount = (captionData.text || "").split(/\s+/).length;
       theirCaptionTimeoutRef.current = setTimeout(() => {
         setTheirLiveText("");
         setTheirLiveTranslation("");
-      }, 5000);
+      }, Math.min(Math.max(7000, legacyWordCount * 450), 20000));
 
       // If this is a final caption, add to transcript and feed to Cyrano
       if (captionData.isFinal && captionData.text) {
@@ -2553,6 +2564,29 @@ function VideoCallContent() {
 
         {/* LIVE CAPTIONS - Compact subtitle style, max 3 lines */}
         <div className="absolute bottom-20 md:bottom-24 inset-x-0 px-2 md:px-4 space-y-1.5 pointer-events-none z-20 max-h-[40vh] overflow-y-auto">
+          {/* Recent partner lines — remain readable after the live caption
+              moves on, so a fast talker can't erase text mid-read. Full
+              scrollback lives in the History panel. */}
+          {recentPartnerLines.map((t) => (
+            <div key={t.id} className="flex justify-start">
+              <div className="max-w-[90%] md:max-w-[70%]">
+                <div className="bg-black/60 backdrop-blur-md rounded-lg px-3 py-1.5">
+                  <p
+                    className={`text-white/60 leading-snug ${
+                      fontSize === "small"
+                        ? "text-xs"
+                        : fontSize === "medium"
+                          ? "text-sm"
+                          : "text-base"
+                    }`}
+                  >
+                    {t.translated || t.original}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+
           {/* Partner's speech */}
           {theirLiveText && (
             <div className={`flex justify-start caption-slide-in ${learning.enabled ? "pointer-events-auto" : ""}`}>

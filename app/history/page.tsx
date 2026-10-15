@@ -223,17 +223,33 @@ function CallsView() {
 
   useEffect(() => {
     let alive = true;
-    fetch(`/api/history?deviceId=${encodeURIComponent(getDeviceId())}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (alive) setCalls(Array.isArray(d.calls) ? d.calls : []);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
+    const load = () => {
+      // Re-read the id on every load: boot-time identity recovery (AppShell)
+      // may restore the original device id after mount, and refresh on
+      // focus/visibility so calls finished moments ago show up (in the native
+      // shell pages stay mounted, so a mount-only fetch goes stale).
+      fetch(`/api/history?deviceId=${encodeURIComponent(getDeviceId())}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => {
+          if (alive) setCalls(Array.isArray(d.calls) ? d.calls : []);
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (alive) setLoading(false);
+        });
+    };
+    load();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    window.addEventListener("focus", load);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("entrevoz:device-id-restored", load);
     return () => {
       alive = false;
+      window.removeEventListener("focus", load);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("entrevoz:device-id-restored", load);
     };
   }, []);
 
@@ -292,7 +308,7 @@ function CallsView() {
             >
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="text-lg">{c.mode === "audio" ? "🎙️" : "🎥"}</span>
+                  <span className="text-lg">{c.mode === "audio" ? "🎙️" : c.mode === "group" ? "👥" : "🎥"}</span>
                   <div className="min-w-0">
                     <p className="text-white font-medium text-sm truncate">{name}</p>
                     <p className="text-white/40 text-xs truncate">

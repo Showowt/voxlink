@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
 import { BackButton } from "@/app/components/ui/BackButton";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
+import { reliablePost } from "@/app/lib/reliable-post";
 import {
   deriveDialCode,
   formatDialCode,
@@ -128,17 +129,14 @@ export default function DialPage() {
     const resolved = await resolveDialCode(code);
     const partnerLang = resolved?.language || "";
     if (resolved) {
-      fetch("/api/contacts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        keepalive: true,
-        body: JSON.stringify({
-          ownerDeviceId: getDeviceId(),
-          contactDeviceId: resolved.deviceId,
-          displayName: resolved.displayName || `Contact ${formatDialCode(code)}`,
-          language: resolved.language || "en",
-        }),
-      }).catch(() => {});
+      // Queued-and-retried on failure (outbox) so the contact isn't lost to a
+      // network blip while the call setup races ahead.
+      void reliablePost("/api/contacts", {
+        ownerDeviceId: getDeviceId(),
+        contactDeviceId: resolved.deviceId,
+        displayName: resolved.displayName || `Contact ${formatDialCode(code)}`,
+        language: resolved.language || "en",
+      });
     }
 
     // Ring the code's owner, then enter the room as host.

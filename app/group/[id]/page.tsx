@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useGroupCall } from '@/hooks/useGroupCall';
 import { getDeviceId } from '@/app/lib/language-os/device-id';
+import { reliablePost } from '@/app/lib/reliable-post';
 import type { Participant, SubtitleEntry, SttEngine, SttState } from '@/app/lib/group-call/types';
 import LearningMode, { useLearningMode, TappableCaption, LearningInsightCard } from '@/app/components/LearningMode';
 import LanguagePick from '@/app/components/LanguagePick';
@@ -696,10 +697,76 @@ export default function GroupCallPage() {
     handleJoinRef.current = () => { void handleJoin(); };
   });
 
+  // ── Durable call history ──────────────────────────────────────────────────
+  // 1:1 video/talk calls log to /history; group calls never did, so they were
+  // simply missing from the user's call log. Mirror the live state into refs
+  // (teardown handlers run outside React's render cycle) and save once anyone
+  // else was ever in the room. Upsert-safe to fire more than once.
+  const groupStartRef = useRef<number | null>(null);
+  const hadOthersRef = useRef(false);
+  const othersNamesRef = useRef<string[]>([]);
+  const subtitlesRef = useRef<SubtitleEntry[]>([]);
+
+  useEffect(() => {
+    if (gc.phase === 'active' && !groupStartRef.current) groupStartRef.current = Date.now();
+  }, [gc.phase]);
+
+  useEffect(() => {
+    const others = gc.participants.filter(
+      (p): p is Participant => !!p && p.slotIndex !== gc.mySlotIndex,
+    );
+    if (others.length) {
+      hadOthersRef.current = true;
+      othersNamesRef.current = others.map((p) => p.displayName).filter(Boolean);
+    }
+  }, [gc.participants, gc.mySlotIndex]);
+
+  useEffect(() => {
+    subtitlesRef.current = gc.subtitles;
+  }, [gc.subtitles]);
+
+  const saveGroupHistory = useCallback(() => {
+    if (!hadOthersRef.current || !groupStartRef.current) return;
+    const turns = subtitlesRef.current
+      .filter((s) => s.isFinal)
+      .slice(-60)
+      .map((s) => ({
+        speaker: s.isMe ? 'me' : 'partner',
+        name: s.speakerName,
+        original: (s.original || '').slice(0, 300),
+        translated: (s.translated || s.liveTranslated || '').slice(0, 300),
+        lang: s.speakerLanguage,
+      }));
+    void reliablePost('/api/history', {
+      deviceId: getDeviceId(),
+      partnerName: othersNamesRef.current.slice(0, 3).join(', ') || undefined,
+      languagePair: `${gc.myLanguage || selectedLang}-group`,
+      mode: 'group',
+      roomCode,
+      durationSeconds: Math.round((Date.now() - groupStartRef.current) / 1000),
+      transcript: turns,
+    });
+  }, [roomCode, gc.myLanguage, selectedLang]);
+
+  // Backstop: backgrounding or closing without tapping Leave still logs the call.
+  useEffect(() => {
+    const flush = () => saveGroupHistory();
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') flush();
+    };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', onHide);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', onHide);
+    };
+  }, [saveGroupHistory]);
+
   const handleLeave = useCallback(() => {
+    saveGroupHistory();
     gc.leaveRoom();
     router.push('/');
-  }, [gc.leaveRoom, router]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [saveGroupHistory, gc.leaveRoom, router]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Invite links carry ONLY the room — never ?lang= (guests pick their own)
   const handleShare = useCallback(async () => {

@@ -62,10 +62,13 @@ export default function ContactsPage() {
   const [pending, setPending] = useState<PendingInvite[]>([]);
 
   useEffect(() => {
-    const id = getDeviceId();
-    setDeviceId(id);
     const upgraded = new Set<string>();
     const load = () => {
+      // Re-read on every load: the boot-time identity recovery (AppShell) may
+      // restore the original device id a beat after this page mounts, and a
+      // captured stale id would query an orphan identity (= "no contacts").
+      const id = getDeviceId();
+      setDeviceId(id);
       fetch(`/api/contacts?deviceId=${encodeURIComponent(id)}`, { cache: 'no-store' })
         .then(r => r.json())
         .then(async d => {
@@ -119,9 +122,11 @@ export default function ContactsPage() {
     };
     window.addEventListener('focus', load);
     document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('entrevoz:device-id-restored', load);
     return () => {
       window.removeEventListener('focus', load);
       document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('entrevoz:device-id-restored', load);
     };
   }, []);
 
