@@ -1170,10 +1170,10 @@ function HomeContent() {
     return supported ? browserLang : "en";
   });
   const [joinCode, setJoinCode] = useState("");
-  const [activeCategory, setActiveCategory] = useState<"translate" | "connect" | "tools">("translate");
+  const [activeCategory, setActiveCategory] = useState<"translate" | "connect" | "tools">("connect");
   const [activeTab, setActiveTab] = useState<
     "video" | "talk" | "voxnote" | "voxtype" | "proximity" | "wingman" | "practice" | "group" | "contacts"
-  >("voxtype");
+  >("video"); // calls first — must match the default category ("connect")
   const [mode, setMode] = useState<"start" | "join">("start");
   const [isJoining, setIsJoining] = useState(false);
 
@@ -1396,7 +1396,7 @@ function HomeContent() {
                   <label className="block text-sm text-white/60 mb-2">
                     You Speak
                   </label>
-                  <LanguageGrid value={language} onChange={setLanguage} />
+                  <CollapsedLanguagePicker value={language} onChange={setLanguage} />
                 </div>
 
                 <GlowButton
@@ -1424,7 +1424,7 @@ function HomeContent() {
   // Category → feature mapping
   const categories = [
     { id: "translate" as const, label: "Translate" },
-    { id: "connect" as const, label: "Connect" },
+    { id: "connect" as const, label: "Call" },
     { id: "tools" as const, label: "Tools" },
   ];
 
@@ -1442,7 +1442,7 @@ function HomeContent() {
     tools: [
       { id: "wingman" as const, label: "Wingman", desc: "AI earpiece", icon: "🎧" },
       { id: "proximity" as const, label: "Nearby", desc: "Find users", icon: "📡" },
-      { id: "practice" as const, label: "Practice", desc: "Language OS", icon: "🧠" },
+      { id: "practice" as const, label: "Learn", desc: "Lessons & review", icon: "🧠" },
     ],
   };
 
@@ -1875,83 +1875,6 @@ function HomeContent() {
               </div>
             ) : (
               <>
-                {/* True Face-to-Face Mode Button */}
-                {(activeTab === "talk" || activeTab === "video") && (
-                  <div className="mb-4">
-                    <GlowButton
-                      onClick={() => router.push("/face-to-face")}
-                      variant="primary"
-                      size="lg"
-                      fullWidth
-                      icon={<span>🗣️</span>}
-                      aria-label="Start true face-to-face mode with one device"
-                    >
-                      True Face-to-Face (One Device)
-                    </GlowButton>
-                    <p className="text-xs text-white/70 text-center mt-2">
-                      Place phone between two people - each speaks their
-                      language
-                    </p>
-                  </div>
-                )}
-
-                {/* WhatsApp CTA - only on Call tab */}
-                {activeTab === "video" && (
-                  <div className="mb-4 space-y-3">
-                    <button
-                      onClick={startWhatsAppCall}
-                      className="w-full flex items-center justify-center gap-3 py-4 rounded-xl font-bold text-white text-lg transition-all hover:brightness-110 active:scale-[0.98]"
-                      style={{ backgroundColor: "#25D366" }}
-                    >
-                      <span className="flex items-center justify-center w-8 h-8 rounded-full text-white font-extrabold text-sm" style={{ backgroundColor: "#128C7E" }}>W</span>
-                      Call via WhatsApp
-                    </button>
-                    <div className="flex gap-3">
-                      <button onClick={shareCallLink} className="flex-1 py-3 rounded-xl border border-white/10 bg-white/5 text-voxxo-400 font-semibold text-sm hover:bg-white/10 transition-all">
-                        Share Link
-                      </button>
-                      <button onClick={() => { const link = `${origin}/call/${roomCode}?hostLang=${language}`; navigator.clipboard.writeText(link); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 3000); }} className="flex-1 py-3 rounded-xl border border-white/10 bg-white/5 text-voxxo-400 font-semibold text-sm hover:bg-white/10 transition-all">
-                        {linkCopied ? "Copied!" : "Copy Link"}
-                      </button>
-                    </div>
-                    {/* Room Code Display */}
-                    <div className="flex items-center justify-center gap-2">
-                      <span className="text-white/40 text-xs">Room:</span>
-                      <span className="font-mono text-voxxo-400 text-sm font-semibold tracking-widest">{roomCode}</span>
-                      <button
-                        onClick={() => setRoomCode(generateCode())}
-                        className="text-white/40 hover:text-white/70 transition-colors p-1 rounded-md hover:bg-white/5"
-                        aria-label="Generate new room code"
-                        title="New code"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                      </button>
-                    </div>
-                    <GlassCard variant="subtle" padding="sm">
-                      <p className="text-voxxo-400 font-medium text-sm mb-1">How it works</p>
-                      <p className="text-white/50 text-xs leading-relaxed">1. Share the link via WhatsApp or any app &bull; 2. They tap it &mdash; opens in browser &bull; 3. Live translated subtitles instantly. No download needed.</p>
-                    </GlassCard>
-                  </div>
-                )}
-
-                {/* Description - Talk tab only */}
-                {activeTab === "talk" && (
-                <GlassCard
-                  variant="subtle"
-                  padding="sm"
-                  className="mb-5 text-center"
-                >
-                    <p className="text-white/70 text-sm">
-                      <span className="text-voxxo-400 font-medium">
-                        Remote Talk:
-                      </span>{" "}
-                      Each person uses their own phone
-                    </p>
-                </GlassCard>
-                )}
-
                 {/* Name - Premium Glass Input */}
                 <div className="mb-4">
                   <label className="block text-sm text-white/60 mb-2">
@@ -1978,7 +1901,7 @@ function HomeContent() {
                   <label className="block text-sm text-white/60 mb-2">
                     You Speak
                   </label>
-                  <LanguageGrid value={language} onChange={setLanguage} />
+                  <CollapsedLanguagePicker value={language} onChange={setLanguage} />
                 </div>
 
                 {/* Start/Join Toggle - Premium Pills */}
@@ -2053,6 +1976,62 @@ function HomeContent() {
                     </GlowButton>
                   </div>
                 )}
+
+                {/* Invite by link — secondary path. The primary action stays
+                    above the fold; link-sharing supports it, not the reverse. */}
+                {activeTab === "video" && (
+                  <div className="mt-6 pt-5 border-t border-white/[0.07] space-y-3">
+                    <p className="text-white/40 text-[11px] text-center uppercase tracking-[0.2em]">
+                      Or invite by link
+                    </p>
+                    <button
+                      onClick={startWhatsAppCall}
+                      className="w-full flex items-center justify-center gap-3 py-3.5 rounded-xl font-bold text-white text-base transition-all hover:brightness-110 active:scale-[0.98]"
+                      style={{ backgroundColor: "#25D366" }}
+                    >
+                      <span className="flex items-center justify-center w-7 h-7 rounded-full text-white font-extrabold text-xs" style={{ backgroundColor: "#128C7E" }}>W</span>
+                      Call via WhatsApp
+                    </button>
+                    <div className="flex gap-3">
+                      <button onClick={shareCallLink} className="flex-1 py-3 rounded-xl border border-white/10 bg-white/5 text-voxxo-400 font-semibold text-sm hover:bg-white/10 transition-all">
+                        Share Link
+                      </button>
+                      <button onClick={() => { const link = `${origin}/call/${roomCode}?hostLang=${language}`; navigator.clipboard.writeText(link); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 3000); }} className="flex-1 py-3 rounded-xl border border-white/10 bg-white/5 text-voxxo-400 font-semibold text-sm hover:bg-white/10 transition-all">
+                        {linkCopied ? "Copied!" : "Copy Link"}
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-center gap-2">
+                      <span className="text-white/40 text-xs">Room:</span>
+                      <span className="font-mono text-voxxo-400 text-sm font-semibold tracking-widest">{roomCode}</span>
+                      <button
+                        onClick={() => setRoomCode(generateCode())}
+                        className="text-white/40 hover:text-white/70 transition-colors p-1 rounded-md hover:bg-white/5"
+                        aria-label="Generate new room code"
+                        title="New code"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Face-to-Face — same-phone mode, clearly a different door */}
+                {(activeTab === "talk" || activeTab === "video") && (
+                  <button
+                    onClick={() => router.push("/face-to-face")}
+                    className="mt-4 w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border border-amber-400/20 bg-amber-400/[0.06] hover:bg-amber-400/[0.12] transition-all text-left active:scale-[0.99]"
+                    aria-label="Face-to-Face mode — one phone between two people"
+                  >
+                    <span className="text-2xl" aria-hidden="true">🗣️</span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-white font-semibold text-sm">Face-to-Face</span>
+                      <span className="block text-white/50 text-xs">One phone between two people — no link needed</span>
+                    </span>
+                    <span className="text-white/30 text-lg" aria-hidden="true">›</span>
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -2061,33 +2040,11 @@ function HomeContent() {
         {/* Footer - Premium Minimal */}
         <div className="text-center mt-4 sm:mt-6 space-y-2 pb-2 safe-area-bottom">
           <p className="text-white/70 text-[10px] sm:text-xs">
-            Chrome recommended •{" "}
             <a
               href="/history"
               className="text-voxxo-500 hover:text-voxxo-400 transition"
             >
               History
-            </a>
-            {" "}•{" "}
-            <a
-              href="/test"
-              className="text-voxxo-500 hover:text-voxxo-400 transition"
-            >
-              Test
-            </a>
-            {" "}·{" "}
-            <a
-              href="/status"
-              className="text-voxxo-500 hover:text-voxxo-400 transition"
-            >
-              Status
-            </a>
-            {" "}•{" "}
-            <a
-              href="/analytics"
-              className="text-voxxo-500 hover:text-voxxo-400 transition"
-            >
-              Analytics
             </a>
             {" "}•{" "}
             <a
@@ -2132,5 +2089,52 @@ export default function Home() {
     >
       <HomeContent />
     </Suspense>
+  );
+}
+
+// Compact language selector: one row showing the current choice; the full
+// 31-language grid only expands on demand. The old always-open wall sat
+// between the user and the Start button on every call setup.
+function CollapsedLanguagePicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = LANGUAGES.find((l) => l.code === value);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-label={`Language: ${current?.name || value}. Tap to change`}
+        className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-all min-h-[48px]"
+      >
+        <span className="flex items-center gap-2.5 text-white text-base">
+          <span className="text-xl" aria-hidden="true">{current?.flag}</span>
+          {current?.name || value.toUpperCase()}
+        </span>
+        <span className="flex items-center gap-1.5 text-voxxo-400 text-sm font-medium">
+          Change
+          <svg className={`w-4 h-4 transition-transform ${open ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </span>
+      </button>
+      {open && (
+        <div className="mt-3">
+          <LanguageGrid
+            value={value}
+            onChange={(v) => {
+              onChange(v);
+              setOpen(false);
+            }}
+          />
+        </div>
+      )}
+    </div>
   );
 }

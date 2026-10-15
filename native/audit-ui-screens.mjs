@@ -28,6 +28,7 @@ await page.evaluateOnNewDocument(() => {
     localStorage.setItem("entrevoz_name_prompted", "1");
     localStorage.setItem("entrevoz_name", "Phil");
     localStorage.setItem("los_device_id", "ui-audit-device-000001");
+    localStorage.setItem("entrevoz_ai_consent", "granted:2026-10-15T00:00:00.000Z");
   } catch {}
 });
 

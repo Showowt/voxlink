@@ -448,6 +448,15 @@ export default function HistoryPage() {
           >
             💬 Phrasebook
           </button>
+          {/* Recordings live on their own page but belong to this tab —
+              without this entry they were invisible (BottomNav matches the
+              route but nothing ever linked to it). */}
+          <a
+            href="/recordings"
+            className="flex-1 py-2.5 min-h-[44px] rounded-lg text-sm font-medium transition-all text-white/40 hover:text-white/60 text-center leading-[1.9]"
+          >
+            🎬 Recordings
+          </a>
         </div>
 
         {section === "calls" ? (

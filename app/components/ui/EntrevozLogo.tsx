@@ -98,15 +98,9 @@ const EntrevozLogo: FC<EntrevozLogoProps> = ({
 
       {showBrand && (
         <div className="mt-3 text-center">
-          {/* MachineMind Tag */}
-          <div className="flex items-center justify-center gap-1 mb-1">
-            <span
-              className={`${config.subtitle} font-medium text-[#00DBA8] tracking-[0.15em] uppercase`}
-            >
-              MachineMind
-            </span>
-          </div>
-
+          {/* Agency credit lives in the footer ("Powered by MachineMind") —
+              an eyebrow ABOVE the product name made the brand hierarchy read
+              backwards on every screen. */}
           {/* Entrevoz Title - Gradient text */}
           <h1
             className={`${config.title} font-bold font-syne tracking-tight bg-gradient-to-r from-[#00DBA8] to-[#FF3B7A] bg-clip-text text-transparent`}
