@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to create room' }, { status: 500 });
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://entrevoz.co';
+  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://entrevoz.co').trim();
   return NextResponse.json({
     roomCode,
     callType,

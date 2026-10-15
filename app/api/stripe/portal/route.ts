@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://www.entrevoz.co";
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://www.entrevoz.co").trim();
     const session = await stripeClient.billingPortal.sessions.create({
       customer: profile.stripe_customer_id,
       return_url: `${appUrl}/dashboard`,

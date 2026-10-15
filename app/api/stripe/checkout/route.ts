@@ -94,8 +94,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
     }
 
+    // trim(): the env var once shipped with a literal trailing "\n", which made
+    // Stripe reject success_url as "Not a valid URL" and 500 every checkout.
     const appUrl =
-      process.env.NEXT_PUBLIC_APP_URL || "https://www.entrevoz.co";
+      (process.env.NEXT_PUBLIC_APP_URL || "https://www.entrevoz.co").trim();
 
     const session = await stripeClient.checkout.sessions.create({
       customer: customerId,
