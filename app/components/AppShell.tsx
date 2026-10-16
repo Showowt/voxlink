@@ -25,6 +25,24 @@ export default function AppShell({ children }: AppShellProps) {
   // an orphaned id, then retry any queued contact/history writes that failed
   // on a previous session.
   useEffect(() => {
+    // Build-stamp beacon: report which deploy each REAL device is running, so
+    // "is this phone on the current code?" is answered from data, not guessed.
+    try {
+      if (!sessionStorage.getItem("ev_build_beaconed")) {
+        sessionStorage.setItem("ev_build_beaconed", "1");
+        import("../lib/diag").then(({ diag }) =>
+          diag("app-load", {
+            build: process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA || "dev",
+            sw:
+              typeof navigator !== "undefined" &&
+              "serviceWorker" in navigator &&
+              !!navigator.serviceWorker.controller,
+          }),
+        );
+      }
+    } catch {
+      /* ignore */
+    }
     import("../lib/language-os/device-id")
       .then(({ ensureStableDeviceId }) => ensureStableDeviceId())
       .catch(() => {});

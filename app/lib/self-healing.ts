@@ -100,30 +100,26 @@ class SelfHealingSystem {
   // ─────────────────────────────────────────────────────────────────────────────
 
   private async registerServiceWorker() {
+    // Service worker INTENTIONALLY no longer registered. A stale-serving SW
+    // kept installed phones on old JS so fixes never landed — catastrophic for
+    // a continuously-shipped real-time calling app. We now actively unregister
+    // any leftover SW and clear its caches on load. (sw.js is a self-destruct
+    // stub that handles phones whose stale bundle still re-registers the old
+    // SW, since browsers fetch sw.js fresh independent of the app bundle.)
     if ("serviceWorker" in navigator) {
       try {
-        const registration = await navigator.serviceWorker.register("/sw.js", {
-          scope: "/",
-        });
-
-        console.log("🔧 Service Worker registered:", registration.scope);
-
-        // Handle updates
-        registration.addEventListener("updatefound", () => {
-          const newWorker = registration.installing;
-          if (newWorker) {
-            newWorker.addEventListener("statechange", () => {
-              if (
-                newWorker.state === "installed" &&
-                navigator.serviceWorker.controller
-              ) {
-                console.log("🔄 New content available - refresh to update");
-              }
-            });
-          }
-        });
-      } catch (error) {
-        console.warn("Service Worker registration failed:", error);
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister().catch(() => false)));
+      } catch {
+        /* ignore */
+      }
+      try {
+        if (typeof caches !== "undefined") {
+          const names = await caches.keys();
+          await Promise.all(names.map((n) => caches.delete(n)));
+        }
+      } catch {
+        /* ignore */
       }
     }
   }

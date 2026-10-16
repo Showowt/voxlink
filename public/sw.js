@@ -1,151 +1,30 @@
-// VoxLink Service Worker v1.0
-// Provides offline caching for PWA functionality
+// SELF-DESTRUCT SERVICE WORKER.
+//
+// The previous SW cached JS chunks with stale-while-revalidate. On a real-time
+// CALLING app that ships critical fixes continuously, that was pure harm:
+// installed phones kept running whatever JavaScript they first cached (dead
+// ring listeners, no telemetry), and every fix silently never reached them —
+// the single reason one device could stay broken while the other updated fine.
+//
+// This version takes over from any previously-installed SW (browsers fetch
+// sw.js fresh on every update check, independent of the stale app bundle),
+// deletes ALL caches, unregisters itself, and reloads controlled tabs so the
+// next load comes straight from the network with no SW at all.
 
-const CACHE_NAME = 'voxlink-v1'
-const RUNTIME_CACHE = 'voxlink-runtime-v1'
+self.addEventListener('install', () => self.skipWaiting())
 
-// Core assets to cache on install
-const PRECACHE_ASSETS = [
-  '/',
-  '/manifest.json',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
-  '/icons/apple-icon-180.png'
-]
-
-// Install event - cache core assets
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('[SW] Caching core assets')
-        return cache.addAll(PRECACHE_ASSETS)
-      })
-      .then(() => self.skipWaiting())
-  )
-})
-
-// Activate event - clean old caches
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys()
-      .then((cacheNames) => {
-        return Promise.all(
-          cacheNames
-            .filter((name) => name !== CACHE_NAME && name !== RUNTIME_CACHE)
-            .map((name) => {
-              console.log('[SW] Deleting old cache:', name)
-              return caches.delete(name)
-            })
-        )
-      })
-      .then(() => self.clients.claim())
-  )
+  event.waitUntil((async () => {
+    try {
+      const names = await caches.keys()
+      await Promise.all(names.map((n) => caches.delete(n)))
+    } catch {}
+    try { await self.registration.unregister() } catch {}
+    try {
+      const clients = await self.clients.matchAll({ type: 'window' })
+      clients.forEach((c) => { try { c.navigate(c.url) } catch {} })
+    } catch {}
+  })())
 })
 
-// Fetch event - network first, fallback to cache
-self.addEventListener('fetch', (event) => {
-  const { request } = event
-
-  // CRITICAL: Skip ALL non-GET requests (POST, PUT, DELETE, etc.) - pass through to network
-  if (request.method !== 'GET') {
-    return
-  }
-
-  // Skip API calls and external services - always go to network
-  if (request.url.includes('/api/') ||
-      request.url.includes('peerjs.com') ||
-      request.url.includes('mymemory') ||
-      request.url.includes('huggingface') ||
-      request.url.includes('libretranslate') ||
-      request.url.includes('lingva')) {
-    return
-  }
-
-  // For navigation requests (HTML pages) - network first
-  if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          // Cache successful responses
-          if (response.ok) {
-            const responseClone = response.clone()
-            caches.open(RUNTIME_CACHE).then((cache) => {
-              cache.put(request, responseClone)
-            })
-          }
-          return response
-        })
-        .catch(() => {
-          // Fall back to cache
-          return caches.match(request).then((cached) => {
-            return cached || caches.match('/')
-          })
-        })
-    )
-    return
-  }
-
-  // For other assets - stale-while-revalidate
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      const fetchPromise = fetch(request)
-        .then((response) => {
-          // Cache successful responses
-          if (response.ok) {
-            const responseClone = response.clone()
-            caches.open(RUNTIME_CACHE).then((cache) => {
-              cache.put(request, responseClone)
-            })
-          }
-          return response
-        })
-        .catch(() => cached)
-
-      return cached || fetchPromise
-    })
-  )
-})
-
-// Handle push notifications (for future use)
-self.addEventListener('push', (event) => {
-  if (!event.data) return
-
-  const data = event.data.json()
-  const options = {
-    body: data.body || 'New message',
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-72.png',
-    vibrate: [100, 50, 100],
-    data: {
-      url: data.url || '/'
-    }
-  }
-
-  event.waitUntil(
-    self.registration.showNotification(data.title || 'VoxLink', options)
-  )
-})
-
-// Handle notification clicks
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close()
-
-  const url = event.notification.data?.url || '/'
-
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true })
-      .then((windowClients) => {
-        // Focus existing window if available
-        for (const client of windowClients) {
-          if (client.url === url && 'focus' in client) {
-            return client.focus()
-          }
-        }
-        // Otherwise open new window
-        return clients.openWindow(url)
-      })
-  )
-})
-
-console.log('[SW] VoxLink Service Worker loaded')
+// No fetch handler — never intercept, never serve from cache.
