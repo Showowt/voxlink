@@ -8,6 +8,7 @@ import { startRingtone } from "@/app/lib/ringtone";
 import { blockDevice } from "@/app/lib/call-block";
 import { generateRoomCode } from "@/app/lib/room-code";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
+import { deriveDialCode } from "@/app/lib/dial-code";
 import LanguagePick from "@/app/components/LanguagePick";
 
 // Routes where the user is already in a live session — don't interrupt them
@@ -235,6 +236,21 @@ export default function IncomingCallOverlay() {
   const accept = () => {
     const { room, type, fromLang, fromDevice, fromName } = invite;
     diag("invite-accepted", { room, from: fromDevice, type });
+    // Mark claimed on both my listening addresses so the stored invite stops
+    // (pull path) — prevents a re-ring after I've already answered.
+    try {
+      const id = getDeviceId();
+      [id, deriveDialCode(id)].forEach((addr) => {
+        void fetch("/api/ring/update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          keepalive: true,
+          body: JSON.stringify({ room, toAddress: addr, status: "claimed" }),
+        }).catch(() => {});
+      });
+    } catch {
+      /* ignore */
+    }
     dismiss();
     // Seed the lobby with THIS device's own language as the default (not a
     // caller-imposed preset — the lobby still lets the callee change it), and

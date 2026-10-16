@@ -223,6 +223,58 @@ export function useIncomingCall() {
     lastBuildAt = Date.now();
     teardownCurrent = build();
 
+    // ── STORE-AND-FORWARD PULL (the reliability backbone) ────────────────────
+    // Broadcast only reaches a LIVE socket. This pulls persisted invites over
+    // plain HTTP — which works when every websocket is dead (frozen/cold iOS).
+    // Runs on every foreground + a 4s poll while open and not in a call, so a
+    // phone that was asleep when the caller dialed rings the instant it wakes.
+    const myAddresses = () => {
+      try {
+        const id = getDeviceId();
+        return Array.from(new Set([id, deriveDialCode(id)])).filter(Boolean);
+      } catch {
+        return [];
+      }
+    };
+    let pulling = false;
+    const pullPending = async () => {
+      if (cancelled || pulling) return;
+      // Don't pull while already in a live call (overlay is suppressed anyway).
+      try {
+        const { getInCall } = await import("@/app/lib/call-state");
+        if (getInCall()) return;
+      } catch {
+        /* ignore */
+      }
+      const addrs = myAddresses();
+      if (!addrs.length) return;
+      pulling = true;
+      try {
+        const res = await fetch(
+          `/api/ring/pending?addresses=${encodeURIComponent(addrs.join(","))}`,
+          { cache: "no-store" },
+        );
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          ringing?: CallInvite[];
+          canceled?: string[];
+        };
+        (data.canceled || []).forEach((room) => {
+          handledRooms.add(room); // a later broadcast must not re-ring it
+          cancelInvite(room);
+        });
+        (data.ringing || []).forEach((inv) => receiveInvite(inv));
+      } catch {
+        /* offline — next tick retries */
+      } finally {
+        pulling = false;
+      }
+    };
+    void pullPending();
+    const pullTimer = setInterval(() => {
+      if (document.visibilityState === "visible") void pullPending();
+    }, 4000);
+
     // ── Resume/recovery triggers ─────────────────────────────────────────────
     let hiddenAt = 0;
     const onVisibility = () => {
@@ -230,6 +282,7 @@ export function useIncomingCall() {
         hiddenAt = Date.now();
         return;
       }
+      void pullPending(); // HTTP pull works even before the socket revives
       // Returning to foreground: a zombie socket still claims 'joined', so if
       // we were hidden long enough for iOS to have frozen us, rebuild
       // UNCONDITIONALLY — one cheap round trip buys a working ring channel.
@@ -240,6 +293,7 @@ export function useIncomingCall() {
       hiddenAt = 0;
     };
     const onPageShow = (e: PageTransitionEvent) => {
+      void pullPending();
       if (e.persisted) {
         retryCount = 0;
         rebuild("bfcache-restore");
@@ -247,10 +301,12 @@ export function useIncomingCall() {
     };
     const onOnline = () => {
       retryCount = 0;
+      void pullPending();
       rebuild("online");
     };
     const onIdRestored = () => {
       retryCount = 0;
+      void pullPending();
       rebuild("device-id-restored");
     };
     document.addEventListener("visibilitychange", onVisibility);
@@ -260,6 +316,7 @@ export function useIncomingCall() {
 
     return () => {
       cancelled = true;
+      clearInterval(pullTimer);
       if (retryTimer) clearTimeout(retryTimer);
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pageshow", onPageShow);

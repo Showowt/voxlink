@@ -60,6 +60,28 @@ export async function sendCallInvite(
   invite: Omit<CallInvite, "t">,
   opts?: { skipPush?: boolean },
 ): Promise<boolean> {
+  // STORE-AND-FORWARD: persist the invite so the callee can PULL it over HTTP
+  // even when its socket is dead (the reliability backbone). Fire-and-forget;
+  // the re-ring loop re-posts to keep it fresh / revive a spurious cancel.
+  try {
+    void fetch("/api/ring/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      keepalive: true,
+      body: JSON.stringify({
+        room: invite.room,
+        toAddress: targetDeviceId,
+        fromDevice: invite.fromDevice,
+        fromName: invite.fromName,
+        fromLang: invite.fromLang,
+        type: invite.type,
+        targetLang: invite.targetLang,
+      }),
+    }).catch(() => {});
+  } catch {
+    /* ignore */
+  }
+
   // Also fire a VoIP push (best-effort) so a CLOSED device rings via native
   // CallKit — runs in parallel with the in-app Realtime/PeerJS invite.
   // Re-ring loops pass skipPush so the push fires once, not every 2.5s.
@@ -212,6 +234,18 @@ export async function sendCallSignal(
   event: "call-declined" | "call-canceled",
   room: string,
 ): Promise<void> {
+  // Persist the dismissal so a callee who missed the realtime signal still
+  // clears the ring on its next HTTP pull.
+  try {
+    void fetch("/api/ring/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      keepalive: true,
+      body: JSON.stringify({ room, toAddress: targetDeviceId, status: "canceled" }),
+    }).catch(() => {});
+  } catch {
+    /* ignore */
+  }
   const viaRealtime = await sendCallSignalRealtime(targetDeviceId, event, room);
   if (!viaRealtime) {
     const { sendCallSignalPeer } = await import("./ring-peer");
