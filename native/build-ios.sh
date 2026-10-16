@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Headless build + sign + upload of the Entrevoz iOS app (VoIP ring-when-closed).
+# Requires: Xcode installed + an App Store Connect API key (.p8).
+# Usage:
+#   ASC_KEY_PATH=/path/AuthKey_XXXX.p8 ASC_KEY_ID=XXXX bash native/build-ios.sh
+# ASC_ISSUER_ID defaults to the team's known issuer id.
+set -euo pipefail
+cd "$(dirname "$0")/../ios/App"
+
+ASC_ISSUER_ID="${ASC_ISSUER_ID:-18ea1a6b-9f32-4076-b95b-56b7f0955a4c}"
+: "${ASC_KEY_PATH:?set ASC_KEY_PATH to the downloaded AuthKey_*.p8}"
+: "${ASC_KEY_ID:?set ASC_KEY_ID (the API key id)}"
+
+echo "▸ Xcode: $(xcodebuild -version | head -1)"
+echo "▸ cleaning + archiving (automatic signing via API key)…"
+rm -rf build
+xcodebuild clean archive \
+  -project App.xcodeproj \
+  -scheme App \
+  -configuration Release \
+  -destination 'generic/platform=iOS' \
+  -archivePath build/App.xcarchive \
+  -allowProvisioningUpdates \
+  -authenticationKeyPath "$ASC_KEY_PATH" \
+  -authenticationKeyID "$ASC_KEY_ID" \
+  -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+  COMPILER_INDEX_STORE_ENABLE=NO
+
+echo "▸ exporting + uploading to App Store Connect…"
+xcodebuild -exportArchive \
+  -archivePath build/App.xcarchive \
+  -exportPath build/export \
+  -exportOptionsPlist exportOptions.plist \
+  -allowProvisioningUpdates \
+  -authenticationKeyPath "$ASC_KEY_PATH" \
+  -authenticationKeyID "$ASC_KEY_ID" \
+  -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+
+echo "✅ Uploaded. It appears in App Store Connect → TestFlight in ~5-15 min (processing)."
