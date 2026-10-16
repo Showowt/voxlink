@@ -164,7 +164,7 @@ export default function IncomingCallOverlay() {
     setJoined(null);
     setCalling(false);
     router.push(
-      `/call/${room}?lang=${myLang}&hostLang=${target.lang}&host=true&name=${encodeURIComponent(myName)}&pd=${encodeURIComponent(target.deviceId)}&pn=${encodeURIComponent(target.name)}`,
+      `/call/${room}?lang=${myLang}&hostLang=${target.lang}&host=true&ring=1&name=${encodeURIComponent(myName)}&pd=${encodeURIComponent(target.deviceId)}&pn=${encodeURIComponent(target.name)}`,
     );
   };
 

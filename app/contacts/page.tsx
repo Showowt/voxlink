@@ -204,8 +204,8 @@ export default function ContactsPage() {
         : `&pd=${encodeURIComponent(c.contact_device_id)}&pn=${encodeURIComponent(c.display_name)}`);
     router.push(
       type === 'video'
-        ? `/call/${code}?lang=${myLang}&hostLang=${c.language}&host=true${seed}`
-        : `/talk/${code}?lang=${myLang}&partnerLang=${c.language}&host=true${seed}`,
+        ? `/call/${code}?lang=${myLang}&hostLang=${c.language}&host=true&ring=1${seed}`
+        : `/talk/${code}?lang=${myLang}&partnerLang=${c.language}&host=true&ring=1${seed}`,
     );
   };
 

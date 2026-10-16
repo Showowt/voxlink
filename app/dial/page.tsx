@@ -162,8 +162,8 @@ export default function DialPage() {
       : "";
     router.push(
       type === "video"
-        ? `/call/${room}?lang=${lang}&host=true${langParam}${nameParam}${partnerParam}`
-        : `/talk/${room}?lang=${lang}&host=true${langParam}${nameParam}${partnerParam}`,
+        ? `/call/${room}?lang=${lang}&host=true&ring=1${langParam}${nameParam}${partnerParam}`
+        : `/talk/${room}?lang=${lang}&host=true&ring=1${langParam}${nameParam}${partnerParam}`,
     );
   };
 

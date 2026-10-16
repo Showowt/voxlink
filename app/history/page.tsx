@@ -246,8 +246,8 @@ function CallsView() {
     const seed = `&name=${encodeURIComponent(myName)}&pd=${encodeURIComponent(c.participant_2)}${pn}`;
     router.push(
       type === "video"
-        ? `/call/${code}?lang=${myLang}&hostLang=${theirLang}&host=true${seed}`
-        : `/talk/${code}?lang=${myLang}&partnerLang=${theirLang}&host=true${seed}`,
+        ? `/call/${code}?lang=${myLang}&hostLang=${theirLang}&host=true&ring=1${seed}`
+        : `/talk/${code}?lang=${myLang}&partnerLang=${theirLang}&host=true&ring=1${seed}`,
     );
   };
   const [loading, setLoading] = useState(true);

@@ -23,6 +23,7 @@ import { useBrowserSupport } from "../../lib/browser-support";
 import { shareJoinLink } from "../../lib/share-link";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { reliablePost } from "@/app/lib/reliable-post";
+import { startRingback, stopRingback } from "@/app/lib/ringback";
 import { addTranslation } from "@/app/lib/translation-history";
 import { checkMicPermission } from "@/app/lib/mic-permission";
 import { ensureAIConsent } from "@/app/lib/ai-consent";
@@ -108,6 +109,10 @@ function TalkContent() {
   const defaultTargetLang =
     seededPartnerLang || (userLang === "en" ? "es" : "en");
 
+  // Audible ringback on dial-out (ring=1) until the partner connects — the
+  // caller needs to HEAR that the other side is ringing.
+  const autoRing = searchParams.get("ring") === "1";
+
   // Error state
   const [error, setError] = useState<string | null>(null);
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
@@ -117,6 +122,15 @@ function TalkContent() {
   const [connectionStatus, setConnectionStatus] =
     useState<string>("Connecting...");
   const [isConnected, setIsConnected] = useState(false);
+  useEffect(() => {
+    if (!autoRing || !isHost || isConnected) {
+      stopRingback();
+      return;
+    }
+    startRingback();
+    return () => stopRingback();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRing, isHost, isConnected]);
   const [isRoomFull, setIsRoomFull] = useState(false);
   const [partnerName, setPartnerName] = useState("");
   const [partnerLang, setPartnerLang] = useState<string | null>(null);

@@ -42,6 +42,7 @@ import { useRemoteTranscription } from "@/hooks/useRemoteTranscription";
 import { setTtsSpeaking, subscribeTtsSpeaking } from "@/lib/tts-gate";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { reliablePost } from "@/app/lib/reliable-post";
+import { startRingback, stopRingback } from "@/app/lib/ringback";
 import { addTranslation } from "@/app/lib/translation-history";
 import { checkMicPermission } from "@/app/lib/mic-permission";
 import MicReminder from "@/app/components/MicReminder";
@@ -1389,6 +1390,43 @@ function VideoCallContent() {
     [],
   );
 
+  // ── Dial-out behavior (ring=1): behave like a real phone call ─────────────
+  // The caller already chose to call from Dial/Contacts/History. Making them
+  // tap "Join with Video" AGAIN in a lobby meant the callee answered into an
+  // empty room ("it never connects") with zero ringing feedback on either
+  // side of the glass.
+  const autoRing = searchParams.get("ring") === "1";
+  const autoJoinTriedRef = useRef(false);
+  useEffect(() => {
+    if (!autoRing || !inLobby || autoJoinTriedRef.current) return;
+    autoJoinTriedRef.current = true;
+    (async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        handleLobbyJoin({
+          stream,
+          userLang,
+          partnerLang: expectedPartnerLang,
+          videoEnabled: true,
+          cyranoEnabled: false,
+        });
+      } catch {
+        /* permission not granted yet — fall back to the lobby UI */
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRing, inLobby]);
+
+  // Audible ringback while the callee's phone rings (stops on join/timeout).
+  useEffect(() => {
+    if (!autoRing || !isHost || hasPartner || inLobby || noAnswer) {
+      stopRingback();
+      return;
+    }
+    startRingback();
+    return () => stopRingback();
+  }, [autoRing, isHost, hasPartner, inLobby, noAnswer]);
+
   // Activate Cyrano after leaving lobby if it was enabled
   useEffect(() => {
     if (!inLobby && cyranoEnabledOnJoinRef.current) {
@@ -2380,7 +2418,11 @@ function VideoCallContent() {
                     aria-live="polite"
                     aria-atomic="true"
                   >
-                    {noAnswer && isHost ? "No answer yet" : statusMessage}
+                    {noAnswer && isHost
+                      ? "No answer — try again later"
+                      : autoRing && isHost && !hasPartner
+                        ? `Ringing ${partnerName || searchParams.get("pn") || "their phone"}…`
+                        : statusMessage}
                   </p>
                   {noAnswer && isHost && (
                     <p className="text-amber-300/80 text-sm mb-2 max-w-[280px] mx-auto">
