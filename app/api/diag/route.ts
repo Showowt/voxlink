@@ -15,6 +15,7 @@ const ALLOWED_STEPS = new Set([
   "call-error",
   "ring-rebuilt",
   "app-load",
+  "foreground",
 ]);
 
 // POST /api/diag — call-chain telemetry from real devices (see app/lib/diag.ts).

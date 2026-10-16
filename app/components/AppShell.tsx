@@ -28,17 +28,35 @@ export default function AppShell({ children }: AppShellProps) {
     // Build-stamp beacon: report which deploy each REAL device is running, so
     // "is this phone on the current code?" is answered from data, not guessed.
     try {
-      if (!sessionStorage.getItem("ev_build_beaconed")) {
-        sessionStorage.setItem("ev_build_beaconed", "1");
+      const build = process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA || "dev";
+      if (sessionStorage.getItem("ev_build_beaconed") !== build) {
+        sessionStorage.setItem("ev_build_beaconed", build);
         import("../lib/diag").then(({ diag }) =>
           diag("app-load", {
-            build: process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA || "dev",
+            build,
             sw:
               typeof navigator !== "undefined" &&
               "serviceWorker" in navigator &&
               !!navigator.serviceWorker.controller,
           }),
         );
+      }
+      // Foreground heartbeat: so I can SEE when a real device's app is actually
+      // open/active (distinguishes "app not open" from "ring not arriving").
+      // Throttled to once/30s.
+      let lastFg = 0;
+      const beaconFg = () => {
+        if (document.visibilityState !== "visible") return;
+        if (Date.now() - lastFg < 30000) return;
+        lastFg = Date.now();
+        import("../lib/diag").then(({ diag }) => diag("foreground", { build })).catch(() => {});
+      };
+      beaconFg();
+      document.addEventListener("visibilitychange", beaconFg);
+      if (typeof navigator !== "undefined" && navigator.userAgent.includes("EntrevozApp")) {
+        import("@capacitor/app")
+          .then(({ App }) => App.addListener("appStateChange", ({ isActive }) => { if (isActive) beaconFg(); }))
+          .catch(() => {});
       }
     } catch {
       /* ignore */
