@@ -1467,7 +1467,10 @@ function VideoCallContent() {
   const ringTarget = searchParams.get("rt") || searchParams.get("pd") || "";
   useEffect(() => {
     if (!autoRing || !isHost || !ringTarget) return;
-    if (hasPartner || inLobby || noAnswer || partnerDeclined || status === "error") return;
+    // NOTE: inLobby does NOT stop the loop — on iOS the auto-join getUserMedia
+    // can fail without a fresh tap, leaving the caller in the lobby while the
+    // callee should keep ringing.
+    if (hasPartner || noAnswer || partnerDeclined || status === "error") return;
     const iv = setInterval(() => {
       void sendCallInvite(
         ringTarget,
@@ -1492,13 +1495,16 @@ function VideoCallContent() {
   // Audible ringback while the callee's phone rings (stops on join/timeout/
   // decline/error).
   useEffect(() => {
-    if (!autoRing || !isHost || hasPartner || inLobby || noAnswer || partnerDeclined || status === "error") {
+    // inLobby intentionally does NOT silence ringback on dial-out — if iOS
+    // blocked the auto-join, the callee is still being rung and the caller
+    // needs to hear it.
+    if (!autoRing || !isHost || hasPartner || noAnswer || partnerDeclined || status === "error") {
       stopRingback();
       return;
     }
     startRingback();
     return () => stopRingback();
-  }, [autoRing, isHost, hasPartner, inLobby, noAnswer, partnerDeclined, status]);
+  }, [autoRing, isHost, hasPartner, noAnswer, partnerDeclined, status]);
 
   // Activate Cyrano after leaving lobby if it was enabled
   useEffect(() => {
@@ -2371,8 +2377,20 @@ function VideoCallContent() {
   }
 
   if (inLobby) {
+    const ringee = partnerName || searchParams.get("pn") || "";
     return (
-      <PreCallLobby
+      <>
+        {autoRing && isHost && !partnerDeclined && (
+          <div className="fixed top-0 inset-x-0 z-[60] safe-top">
+            <div className="mx-3 mt-2 rounded-xl bg-[#00E5A0] text-black px-4 py-3 flex items-center gap-2 shadow-xl animate-pulse">
+              <span aria-hidden="true">📞</span>
+              <p className="text-sm font-bold flex-1">
+                {`Ringing${ringee ? ` ${ringee}` : ""}… tap “Join with Video” below to start the call`}
+              </p>
+            </div>
+          </div>
+        )}
+        <PreCallLobby
         roomCode={roomCode}
         userName={userName}
         userLang={userLang}
@@ -2381,6 +2399,7 @@ function VideoCallContent() {
         onJoin={handleLobbyJoin}
         onBack={handleLobbyBack}
       />
+      </>
     );
   }
 
