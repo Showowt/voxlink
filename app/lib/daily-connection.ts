@@ -64,7 +64,7 @@ export class DailyConnection {
       const roomRes = await fetch("/api/daily/room", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ roomCode: this.roomId, deviceId: this.deviceId }),
+        body: JSON.stringify({ roomCode: this.roomId, deviceId: this.deviceId, isHost: this.isHost }),
       });
 
       if (!roomRes.ok) {

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createBrowserClient } from "@/lib/supabase-browser";
-import { getDeviceId } from "@/app/lib/language-os/device-id";
+import { getDeviceId, getKnownDeviceIds } from "@/app/lib/language-os/device-id";
 import { ringChannelName, type CallInvite } from "@/app/lib/ring-signal";
 import { startRingPeerListener } from "@/app/lib/ring-peer";
 import { deriveDialCode } from "@/app/lib/dial-code";
@@ -122,18 +122,14 @@ export function useIncomingCall() {
     };
 
     const build = () => {
-      const deviceId = (() => {
-        try {
-          return getDeviceId();
-        } catch {
-          return "";
-        }
-      })();
-      if (!deviceId) return () => {};
-
+      // Listen on EVERY id this device has ever used (+ their dial codes),
+      // not just the current one — identity drift otherwise strands rings sent
+      // to an old address that contacts/history still dial.
+      const ids = getKnownDeviceIds();
+      if (!ids.length) return () => {};
       const addresses = Array.from(
-        new Set([deviceId, deriveDialCode(deviceId)]),
-      ).filter(Boolean);
+        new Set(ids.flatMap((id) => [id, deriveDialCode(id)])),
+      ).filter(Boolean).slice(0, 12);
 
       const cleanups: Array<() => void> = [];
       let buildTornDown = false; // late async peer cleanups must still run
@@ -230,8 +226,9 @@ export function useIncomingCall() {
     // phone that was asleep when the caller dialed rings the instant it wakes.
     const myAddresses = () => {
       try {
-        const id = getDeviceId();
-        return Array.from(new Set([id, deriveDialCode(id)])).filter(Boolean);
+        return Array.from(
+          new Set(getKnownDeviceIds().flatMap((id) => [id, deriveDialCode(id)])),
+        ).filter(Boolean).slice(0, 12);
       } catch {
         return [];
       }
@@ -314,6 +311,28 @@ export function useIncomingCall() {
     window.addEventListener("online", onOnline);
     window.addEventListener("entrevoz:device-id-restored", onIdRestored);
 
+    // iOS WKWebView: web visibilitychange is unreliable on lock/unlock and
+    // app-switch. The Capacitor App plugin's native appStateChange fires
+    // reliably when the app foregrounds — pull + rebuild then.
+    let appListener: { remove: () => void } | null = null;
+    if (typeof navigator !== "undefined" && navigator.userAgent.includes("EntrevozApp")) {
+      import("@capacitor/app")
+        .then(({ App }) =>
+          App.addListener("appStateChange", ({ isActive }) => {
+            if (isActive && !cancelled) {
+              void pullPending();
+              retryCount = 0;
+              rebuild("native-resume");
+            }
+          }),
+        )
+        .then((l) => {
+          if (cancelled) l.remove();
+          else appListener = l;
+        })
+        .catch(() => {});
+    }
+
     return () => {
       cancelled = true;
       clearInterval(pullTimer);
@@ -322,6 +341,7 @@ export function useIncomingCall() {
       window.removeEventListener("pageshow", onPageShow);
       window.removeEventListener("online", onOnline);
       window.removeEventListener("entrevoz:device-id-restored", onIdRestored);
+      appListener?.remove();
       teardownCurrent?.();
     };
   }, []);

@@ -123,11 +123,11 @@ export default function InvitePage() {
       fromLang: myLang,
       targetLang: claim.inviter.lang,
     });
-    const seed = `&name=${encodeURIComponent(myName.trim() || "Someone")}&pd=${encodeURIComponent(claim.inviter.deviceId)}&pn=${encodeURIComponent(claim.inviter.name)}`;
+    const seed = `&name=${encodeURIComponent(myName.trim() || "Someone")}&pd=${encodeURIComponent(claim.inviter.deviceId)}&rt=${encodeURIComponent(claim.inviter.deviceId)}&pn=${encodeURIComponent(claim.inviter.name)}`;
     router.push(
       type === "video"
-        ? `/call/${room}?lang=${myLang}&hostLang=${claim.inviter.lang}&host=true${seed}`
-        : `/talk/${room}?lang=${myLang}&partnerLang=${claim.inviter.lang}&host=true${seed}`,
+        ? `/call/${room}?lang=${myLang}&hostLang=${claim.inviter.lang}&host=true&ring=1${seed}`
+        : `/talk/${room}?lang=${myLang}&partnerLang=${claim.inviter.lang}&host=true&ring=1${seed}`,
     );
   };
 

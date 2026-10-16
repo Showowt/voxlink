@@ -249,7 +249,7 @@ class SelfHealingSystem {
   private recoverConnection(): boolean {
     // Dispatch event for components to reconnect
     if (this.isClient) {
-      window.dispatchEvent(new CustomEvent("voxlink-reconnect"));
+      window.dispatchEvent(new CustomEvent("entrevoz-reconnect"));
       console.log("🟢 Connection recovery triggered");
     }
     return true;
@@ -275,7 +275,7 @@ class SelfHealingSystem {
 
     // Dispatch recovery event
     if (this.isClient) {
-      window.dispatchEvent(new CustomEvent("voxlink-hard-recovery"));
+      window.dispatchEvent(new CustomEvent("entrevoz-hard-recovery"));
     }
 
     return true;
@@ -352,7 +352,7 @@ class SelfHealingSystem {
   private onNetworkChange(online: boolean) {
     if (online) {
       console.log("🟢 Network restored");
-      window.dispatchEvent(new CustomEvent("voxlink-network-restored"));
+      window.dispatchEvent(new CustomEvent("entrevoz-network-restored"));
     } else {
       console.log("🟡 Network lost - entering offline mode");
       window.dispatchEvent(new CustomEvent("voxlink-network-lost"));

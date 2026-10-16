@@ -64,11 +64,11 @@ function AddContent() {
       fromLang: lang,
       targetLang: theirLang,
     });
-    const seed = `&name=${encodeURIComponent(name)}&pd=${encodeURIComponent(theirDevice)}&pn=${encodeURIComponent(theirName)}`;
+    const seed = `&name=${encodeURIComponent(name)}&pd=${encodeURIComponent(theirDevice)}&rt=${encodeURIComponent(theirDevice)}&pn=${encodeURIComponent(theirName)}`;
     router.push(
       type === "video"
-        ? `/call/${room}?lang=${lang}&hostLang=${theirLang}&host=true${seed}`
-        : `/talk/${room}?lang=${lang}&partnerLang=${theirLang}&host=true${seed}`,
+        ? `/call/${room}?lang=${lang}&hostLang=${theirLang}&host=true&ring=1${seed}`
+        : `/talk/${room}?lang=${lang}&partnerLang=${theirLang}&host=true&ring=1${seed}`,
     );
   };
 

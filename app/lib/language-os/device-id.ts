@@ -129,6 +129,51 @@ async function writeIdbId(id: string): Promise<void> {
   });
 }
 
+// ── Known-ids history ────────────────────────────────────────────────────────
+// A device's id can DRIFT (localStorage eviction → fresh mint → later restore).
+// Callers store the id they saw (contacts, history, directory), so after drift
+// the caller dials the OLD id while the phone listens only on the NEW one — the
+// ring goes nowhere. Fix: remember EVERY id this device has used and listen on
+// ALL of them (+ their dial codes). Append-only, capped, in localStorage.
+const KNOWN_KEY = "los_known_ids";
+
+function recordKnownId(id: string): void {
+  if (!isValidId(id)) return;
+  try {
+    const raw = localStorage.getItem(KNOWN_KEY);
+    const list: string[] = raw ? JSON.parse(raw) : [];
+    if (!list.includes(id)) {
+      list.push(id);
+      localStorage.setItem(KNOWN_KEY, JSON.stringify(list.slice(-10)));
+    }
+  } catch {
+    /* storage blocked */
+  }
+}
+
+/** Every device id this device is known to have used (current first). */
+export function getKnownDeviceIds(): string[] {
+  const ids = new Set<string>();
+  try {
+    const cur = getDeviceId();
+    if (cur) ids.add(cur);
+  } catch {
+    /* ignore */
+  }
+  try {
+    const raw = localStorage.getItem(KNOWN_KEY);
+    (raw ? (JSON.parse(raw) as string[]) : []).forEach((i) => {
+      if (isValidId(i)) ids.add(i);
+    });
+  } catch {
+    /* ignore */
+  }
+  const cookie = readCookieId();
+  if (cookie) ids.add(cookie);
+  if (memoryId) ids.add(memoryId);
+  return Array.from(ids);
+}
+
 // ── Public API ───────────────────────────────────────────────────────────────
 
 export function getDeviceId(): string {
@@ -138,6 +183,7 @@ export function getDeviceId(): string {
     // 36 — a stricter gate silently discarded valid ids and re-minted new ones.
     if (stored && stored.length >= 8) {
       memoryId = stored;
+      recordKnownId(stored);
       return stored;
     }
   } catch {
@@ -157,6 +203,7 @@ export function getDeviceId(): string {
     } catch {
       /* in-memory id keeps this session consistent */
     }
+    recordKnownId(fromCookie);
     return fromCookie;
   }
 
@@ -169,6 +216,10 @@ export function getDeviceId(): string {
     // Can't persist — the in-memory id keeps this session consistent.
   }
   writeCookieId(id);
+  // Mint also seeds IndexedDB (a mint that wrote only the cookie could lose
+  // reconciliation to a stale IDB value and permanently rebind identity).
+  void writeIdbId(id);
+  recordKnownId(id);
 
   return id;
 }
@@ -191,12 +242,17 @@ export async function ensureStableDeviceId(): Promise<string> {
   const cookie = readCookieId();
   const idb = await readIdbId();
 
+  // Remember EVERY id seen across mirrors — any of them may be an old id that
+  // contacts/history still dial, so the listener must keep answering on it.
+  [local, cookie, idb, memoryId].forEach((v) => v && recordKnownId(v));
+
   // Mirrors are only written from an adopted identity, so they outrank a
   // localStorage value they disagree with. Prefer IDB, then cookie, then local.
   const winner = idb || cookie || local || memoryId || makeId();
   const changed = memoryId !== null && memoryId !== winner;
 
   memoryId = winner;
+  recordKnownId(winner);
   try {
     localStorage.setItem(STORAGE_KEY, winner);
   } catch {

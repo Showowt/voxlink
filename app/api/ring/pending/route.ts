@@ -27,13 +27,15 @@ export async function GET(req: NextRequest) {
   const admin = supabaseAdmin();
   if (!admin) return NextResponse.json({ ringing: [], canceled: [] });
 
-  const sinceIso = new Date(Date.now() - 60000).toISOString();
+  // 90s window on updated_at (the re-ring loop bumps it) covers the 60-90s iOS
+  // freeze: a late-waking callee rings as long as the caller is still ringing.
+  const sinceIso = new Date(Date.now() - 90000).toISOString();
   const { data, error } = await admin
     .from("ring_invites")
-    .select("room, to_address, from_device, from_name, from_lang, type, target_lang, status, created_at")
+    .select("room, to_address, from_device, from_name, from_lang, type, target_lang, status, updated_at")
     .in("to_address", addresses)
-    .gte("created_at", sinceIso)
-    .order("created_at", { ascending: false })
+    .gte("updated_at", sinceIso)
+    .order("updated_at", { ascending: false })
     .limit(20);
 
   if (error) {
@@ -50,7 +52,7 @@ export async function GET(req: NextRequest) {
       fromName: r.from_name || "",
       fromLang: r.from_lang || "en",
       targetLang: r.target_lang || undefined,
-      t: new Date(r.created_at).getTime(),
+      t: new Date(r.updated_at).getTime(),
     }));
   const canceled = (data || [])
     .filter((r) => r.status === "canceled" || r.status === "claimed")

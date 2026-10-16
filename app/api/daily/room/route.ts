@@ -30,6 +30,9 @@ export async function POST(request: NextRequest) {
     const roomCode = body.roomCode || "";
     const deviceId = typeof body.deviceId === "string" ? body.deviceId : "";
     const userId = typeof body.userId === "string" ? body.userId : "";
+    // The caller's gate already covers the call; gating the ANSWERER too left a
+    // one-sided room when only the callee was out of free minutes.
+    const isAnswerer = body.isHost === false;
     const roomName = `entrevoz-${roomCode.toLowerCase()}`;
 
     // ── Spend gates (MONETIZATION_PLAN Phase 0) ─────────────────────────────
@@ -46,7 +49,7 @@ export async function POST(request: NextRequest) {
     }
     const ent = await getEntitlement({ userId: userId || undefined, deviceId: deviceId || undefined });
     let maxSeconds = 14400; // premium: 4h window (re-minted on every rejoin)
-    if (!ent.entitled) {
+    if (!ent.entitled && !isAnswerer) {
       const used = await getMonthlyVideoMinutes(ent.userId, deviceId);
       const remaining = FREE_VIDEO_MINUTES() - used;
       if (remaining <= 0) {
