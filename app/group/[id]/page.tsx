@@ -6,6 +6,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useGroupCall } from '@/hooks/useGroupCall';
 import { getDeviceId } from '@/app/lib/language-os/device-id';
 import { reliablePost } from '@/app/lib/reliable-post';
+import { setInCall } from '@/app/lib/call-state';
 import type { Participant, SubtitleEntry, SttEngine, SttState } from '@/app/lib/group-call/types';
 import LearningMode, { useLearningMode, TappableCaption, LearningInsightCard } from '@/app/components/LearningMode';
 import LanguagePick from '@/app/components/LanguagePick';
@@ -719,7 +720,10 @@ export default function GroupCallPage() {
       hadOthersRef.current = true;
       othersNamesRef.current = others.map((p) => p.displayName).filter(Boolean);
     }
-  }, [gc.participants, gc.mySlotIndex]);
+    // Busy-for-incoming-rings only while others are actually in the room.
+    setInCall(gc.phase === 'active' && others.length > 0);
+  }, [gc.participants, gc.mySlotIndex, gc.phase]);
+  useEffect(() => () => setInCall(false), []);
 
   useEffect(() => {
     subtitlesRef.current = gc.subtitles;

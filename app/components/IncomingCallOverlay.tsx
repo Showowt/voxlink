@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useIncomingCall } from "@/hooks/useIncomingCall";
 import { sendCallSignal, sendCallInvite } from "@/app/lib/ring-signal";
 import { startRingtone } from "@/app/lib/ringtone";
@@ -12,7 +12,7 @@ import LanguagePick from "@/app/components/LanguagePick";
 
 // Routes where the user is already in a live session — don't interrupt them
 // with an incoming-call takeover there.
-const IN_CALL_ROUTES = ["/call/", "/talk/", "/group/", "/face-to-face", "/proximity"];
+import { getInCall } from "@/app/lib/call-state";
 
 const FLAGS: Record<string, string> = {
   en: "🇺🇸", es: "🇪🇸", fr: "🇫🇷", de: "🇩🇪", it: "🇮🇹", pt: "🇧🇷",
@@ -22,9 +22,17 @@ const FLAGS: Record<string, string> = {
 export default function IncomingCallOverlay() {
   const { invite, dismiss } = useIncomingCall();
   const router = useRouter();
-  const pathname = usePathname();
 
-  const suppressed = IN_CALL_ROUTES.some((r) => pathname?.startsWith(r));
+  // Busy = a partner is CONNECTED in a live call (set by call/talk/group
+  // pages) — never "happens to be on a call route". Route-based suppression
+  // auto-declined every ring while parked on a dead call screen.
+  const [suppressed, setSuppressed] = useState(getInCall());
+  useEffect(() => {
+    const onChange = (e: Event) => setSuppressed(!!(e as CustomEvent).detail);
+    window.addEventListener("entrevoz:in-call-changed", onChange);
+    setSuppressed(getInCall());
+    return () => window.removeEventListener("entrevoz:in-call-changed", onChange);
+  }, []);
   const active = !!invite && !suppressed;
 
   // Audible ring + haptics while a call is incoming (stops on answer/decline).

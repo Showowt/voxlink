@@ -43,6 +43,8 @@ import { setTtsSpeaking, subscribeTtsSpeaking } from "@/lib/tts-gate";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { reliablePost } from "@/app/lib/reliable-post";
 import { startRingback, stopRingback } from "@/app/lib/ringback";
+import { setInCall } from "@/app/lib/call-state";
+import { sendCallInvite } from "@/app/lib/ring-signal";
 import { addTranslation } from "@/app/lib/translation-history";
 import { checkMicPermission } from "@/app/lib/mic-permission";
 import MicReminder from "@/app/components/MicReminder";
@@ -1417,15 +1419,40 @@ function VideoCallContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoRing, inLobby]);
 
-  // Audible ringback while the callee's phone rings (stops on join/timeout).
+  // Partner declined our outgoing ring — stop the ringback and say so.
+  const [partnerDeclined, setPartnerDeclined] = useState(false);
   useEffect(() => {
-    if (!autoRing || !isHost || hasPartner || inLobby || noAnswer) {
+    const onDeclined = (e: Event) => {
+      if ((e as CustomEvent).detail?.room === roomCode) setPartnerDeclined(true);
+    };
+    window.addEventListener("entrevoz:call-declined", onDeclined);
+    return () => window.removeEventListener("entrevoz:call-declined", onDeclined);
+  }, [roomCode]);
+
+  // Publish live-call state for the incoming-call overlay's busy detection.
+  // Only a CONNECTED call counts — dead screens must never make us busy.
+  useEffect(() => {
+    setInCall(hasPartner && status !== "error");
+    return () => setInCall(false);
+  }, [hasPartner, status]);
+
+  // A failed video-room gate means the callee's phone is STILL ringing for a
+  // room we'll never join — stop their ring.
+  useEffect(() => {
+    if ((error || "").toLowerCase().includes("video minutes")) cancelOutgoingRing();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [error]);
+
+  // Audible ringback while the callee's phone rings (stops on join/timeout/
+  // decline/error).
+  useEffect(() => {
+    if (!autoRing || !isHost || hasPartner || inLobby || noAnswer || partnerDeclined || status === "error") {
       stopRingback();
       return;
     }
     startRingback();
     return () => stopRingback();
-  }, [autoRing, isHost, hasPartner, inLobby, noAnswer]);
+  }, [autoRing, isHost, hasPartner, inLobby, noAnswer, partnerDeclined, status]);
 
   // Activate Cyrano after leaving lobby if it was enabled
   useEffect(() => {
@@ -2406,7 +2433,27 @@ function VideoCallContent() {
                           unlimited and free — switch and keep talking.
                         </p>
                         <button
-                          onClick={() => {
+                          onClick={async () => {
+                            // Re-ring the partner on the AUDIO rail — switching
+                            // alone would leave them waiting in the video room.
+                            const pd = searchParams.get("pd") || "";
+                            if (pd) {
+                              try {
+                                await sendCallInvite(pd, {
+                                  room: roomCode,
+                                  type: "audio",
+                                  fromDevice: getDeviceId(),
+                                  fromName:
+                                    searchParams.get("name") ||
+                                    localStorage.getItem("entrevoz_name") ||
+                                    "Someone",
+                                  fromLang: userLang,
+                                  targetLang: expectedPartnerLang,
+                                });
+                              } catch {
+                                /* they can still join by room code */
+                              }
+                            }
                             const q = searchParams.toString();
                             router.push(`/talk/${roomCode}${q ? `?${q}` : ""}`);
                           }}
@@ -2450,11 +2497,13 @@ function VideoCallContent() {
                     aria-live="polite"
                     aria-atomic="true"
                   >
-                    {noAnswer && isHost
-                      ? "No answer — try again later"
-                      : autoRing && isHost && !hasPartner
-                        ? `Ringing ${partnerName || searchParams.get("pn") || "their phone"}…`
-                        : statusMessage}
+                    {partnerDeclined && !hasPartner
+                      ? "Call declined"
+                      : noAnswer && isHost
+                        ? "No answer — try again later"
+                        : autoRing && isHost && !hasPartner
+                          ? `Ringing ${partnerName || searchParams.get("pn") || "their phone"}…`
+                          : statusMessage}
                   </p>
                   {noAnswer && isHost && (
                     <p className="text-amber-300/80 text-sm mb-2 max-w-[280px] mx-auto">

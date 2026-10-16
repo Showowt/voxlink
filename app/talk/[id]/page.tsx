@@ -24,6 +24,7 @@ import { shareJoinLink } from "../../lib/share-link";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { reliablePost } from "@/app/lib/reliable-post";
 import { startRingback, stopRingback } from "@/app/lib/ringback";
+import { setInCall } from "@/app/lib/call-state";
 import { addTranslation } from "@/app/lib/translation-history";
 import { checkMicPermission } from "@/app/lib/mic-permission";
 import { ensureAIConsent } from "@/app/lib/ai-consent";
@@ -122,15 +123,28 @@ function TalkContent() {
   const [connectionStatus, setConnectionStatus] =
     useState<string>("Connecting...");
   const [isConnected, setIsConnected] = useState(false);
+  const [partnerDeclined, setPartnerDeclined] = useState(false);
   useEffect(() => {
-    if (!autoRing || !isHost || isConnected) {
+    const onDeclined = (e: Event) => {
+      if ((e as CustomEvent).detail?.room === roomId) setPartnerDeclined(true);
+    };
+    window.addEventListener("entrevoz:call-declined", onDeclined);
+    return () => window.removeEventListener("entrevoz:call-declined", onDeclined);
+  }, [roomId]);
+  useEffect(() => {
+    if (!autoRing || !isHost || isConnected || partnerDeclined) {
       stopRingback();
       return;
     }
     startRingback();
     return () => stopRingback();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoRing, isHost, isConnected]);
+  }, [autoRing, isHost, isConnected, partnerDeclined]);
+  // Busy only while a partner is actually connected.
+  useEffect(() => {
+    setInCall(isConnected);
+    return () => setInCall(false);
+  }, [isConnected]);
   const [isRoomFull, setIsRoomFull] = useState(false);
   const [partnerName, setPartnerName] = useState("");
   const [partnerLang, setPartnerLang] = useState<string | null>(null);
