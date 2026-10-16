@@ -99,6 +99,20 @@ export async function POST(req: NextRequest) {
     const appUrl =
       (process.env.NEXT_PUBLIC_APP_URL || "https://www.entrevoz.co").trim();
 
+    // Trial only for FIRST-TIME subscribers — unconditional trial_period_days
+    // was an infinite-free-Pro loop (cancel, resubscribe, repeat).
+    let hadSubscription = false;
+    try {
+      const prior = await stripeClient.subscriptions.list({
+        customer: customerId,
+        status: "all",
+        limit: 1,
+      });
+      hadSubscription = prior.data.length > 0;
+    } catch {
+      /* on doubt, grant the trial — kinder failure mode */
+    }
+
     const session = await stripeClient.checkout.sessions.create({
       customer: customerId,
       mode: "subscription",
@@ -107,7 +121,7 @@ export async function POST(req: NextRequest) {
       success_url: `${appUrl}/dashboard?upgraded=true`,
       cancel_url: `${appUrl}/pricing`,
       subscription_data: {
-        trial_period_days: 7,
+        ...(hadSubscription ? {} : { trial_period_days: 7 }),
         metadata: { supabase_user_id: user.id, plan },
       },
       metadata: { supabase_user_id: user.id, plan },

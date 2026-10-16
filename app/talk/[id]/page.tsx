@@ -125,6 +125,18 @@ function TalkContent() {
     useState<string>("Connecting...");
   const [isConnected, setIsConnected] = useState(false);
   const [partnerDeclined, setPartnerDeclined] = useState(false);
+  const [talkNoAnswer, setTalkNoAnswer] = useState(false);
+  // 45s no-answer cap — without it the audio dial-out rang (and re-rang)
+  // forever.
+  useEffect(() => {
+    if (!autoRing || !isHost || isConnected) {
+      setTalkNoAnswer(false);
+      return;
+    }
+    const t = setTimeout(() => setTalkNoAnswer(true), 45000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRing, isHost, isConnected]);
   useEffect(() => {
     const onDeclined = (e: Event) => {
       if ((e as CustomEvent).detail?.room === roomId) setPartnerDeclined(true);
@@ -133,14 +145,14 @@ function TalkContent() {
     return () => window.removeEventListener("entrevoz:call-declined", onDeclined);
   }, [roomId]);
   useEffect(() => {
-    if (!autoRing || !isHost || isConnected || partnerDeclined) {
+    if (!autoRing || !isHost || isConnected || partnerDeclined || talkNoAnswer) {
       stopRingback();
       return;
     }
     startRingback();
     return () => stopRingback();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoRing, isHost, isConnected, partnerDeclined]);
+  }, [autoRing, isHost, isConnected, partnerDeclined, talkNoAnswer]);
   // Busy only while a partner is actually connected.
   const talkDiagSent = useRef(false);
   useEffect(() => {
@@ -161,7 +173,7 @@ function TalkContent() {
   // the partner connects — covers callees whose socket died and rejoined.
   const ringTarget = searchParams.get("rt") || searchParams.get("pd") || "";
   useEffect(() => {
-    if (!autoRing || !isHost || !ringTarget || isConnected || partnerDeclined) return;
+    if (!autoRing || !isHost || !ringTarget || isConnected || partnerDeclined || talkNoAnswer) return;
     const iv = setInterval(() => {
       import("@/app/lib/ring-signal").then(({ sendCallInvite }) =>
         sendCallInvite(
@@ -180,7 +192,15 @@ function TalkContent() {
     }, 2500);
     return () => clearInterval(iv);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoRing, isHost, ringTarget, isConnected, partnerDeclined, roomId]);
+  }, [autoRing, isHost, ringTarget, isConnected, partnerDeclined, talkNoAnswer, roomId]);
+  // Stop ringing the callee when the audio dial times out.
+  useEffect(() => {
+    if (!talkNoAnswer || !ringTarget) return;
+    import("@/app/lib/ring-signal").then(({ sendCallSignal }) =>
+      sendCallSignal(ringTarget, "call-canceled", roomId),
+    ).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [talkNoAnswer]);
   const [isRoomFull, setIsRoomFull] = useState(false);
   const [partnerName, setPartnerName] = useState("");
   const [partnerLang, setPartnerLang] = useState<string | null>(null);

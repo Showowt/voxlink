@@ -59,7 +59,15 @@ export function isThrottled(deviceId: string, now: number): boolean {
   const times = (recent.get(deviceId) ?? []).filter(
     (t) => now - t < THROTTLE_WINDOW,
   );
+  // Over the limit: do NOT record this attempt. Recording while suppressed let
+  // the caller's 2.5s re-ring loop re-saturate the window forever — a caller
+  // who kept retrying (because calls "didn't ring") became PERMANENTLY
+  // unreachable, with healthy ringback on their side the whole time.
+  if (times.length >= THROTTLE_MAX) {
+    recent.set(deviceId, times);
+    return true;
+  }
   times.push(now);
   recent.set(deviceId, times);
-  return times.length > THROTTLE_MAX;
+  return false;
 }

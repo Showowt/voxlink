@@ -99,12 +99,18 @@ export async function GET(req: NextRequest) {
 
   const id = req.nextUrl.searchParams.get("id");
   if (id) {
+    // Ownership check: transcripts are private. Without matching the caller's
+    // deviceId to participant_1, any leaked row id read ANY call's transcript.
+    const requester = req.nextUrl.searchParams.get("deviceId") || "";
     const { data, error } = await supabase
       .from("conversations")
       .select("*")
       .eq("id", id)
       .maybeSingle();
     if (error || !data) return NextResponse.json({ call: null });
+    if (!requester || data.participant_1 !== requester) {
+      return NextResponse.json({ call: null });
+    }
     return NextResponse.json({ call: data });
   }
 

@@ -83,10 +83,12 @@ export const DAILY_ALLOWANCES = {
     free: envInt("FREE_DAILY_TTS", 10),
     premium: envInt("PREMIUM_DAILY_TTS", 2_000),
   }),
-  // Whisper clips (≤30s each): free ≈ 30 min/day of fallback STT.
+  // Whisper clips: the iOS LIVE-CALL loop sends ~1.2s clips (~50/min of
+  // speech), not 30s ones — 60/day was ~70 SECONDS of captions for a free
+  // user. Calibrated for ~30 min/day free, ~5h premium at live-loop rates.
   transcribe: () => ({
-    free: envInt("FREE_DAILY_TRANSCRIBE", 60),
-    premium: envInt("PREMIUM_DAILY_TRANSCRIBE", 600),
+    free: envInt("FREE_DAILY_TRANSCRIBE", 1500),
+    premium: envInt("PREMIUM_DAILY_TRANSCRIBE", 15000),
   }),
   // All Claude-backed helpers combined (coaching, insights, tone, summaries,
   // practice chat, translate's last-resort tier).

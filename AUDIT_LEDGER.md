@@ -1,0 +1,174 @@
+# ULTRA AUDIT LEDGER — 2026-10-16
+*55-agent adversarial audit: 42 confirmed findings (10 critical). Status below.*
+
+## Fixed this pass (deployed)
+
+- **[1] HIGH** cancelOutgoingRing / decline / switch-to-audio invite collide with a live re-ring tick on the SAME topic: subscribe() no-ops, signal is delayed 5s then lost (callee ghost-rings 45s)
+- **[2] HIGH** Receiver throttle poisoning: a throttled first invite never enters handledRooms, so the caller's 2.5s re-rings re-record into the throttle window every tick — the callee becomes indefinitely unreachable from that caller
+- **[6] CRITICAL** Webhook idempotency recorded BEFORE processing — a paid plan can be permanently lost
+- **[7] HIGH** Webhook profiles .update() matching 0 rows succeeds silently — missing profile row = paid user stays free with 200 OK
+- **[10] HIGH** Unconditional trial_period_days:7 on every checkout — infinite free Pro via cancel/resubscribe loop
+- **[13] CRITICAL** Call transcripts readable and history writable cross-user: GET by id has no ownership check, GET by deviceId leaks call log, POST allows poisoning
+- **[17] HIGH** Open signup auto-confirms arbitrary emails via admin API and mints 7-day premium trials — farmable entitlements + email squatting
+- **[31] CRITICAL** Whisper per-device budget is calibrated for 30s clips but the iOS live-call loop sends 1.2s clips — free users get ~70 seconds of captions per day, premium ~12 minutes, then captions die mid-call
+- **[34] HIGH** Budget-denied devices still burn the GLOBAL whisper budget on every rejected clip — one runaway free device can trip the kill-switch and 503 transcription for every user
+- **[39] HIGH** Talk (audio) dial-out never times out: ringback + 2.5s re-ring loop run forever, and re-rings continue AFTER the cancel signal was sent
+- **[40] HIGH** cancelOutgoingRing targets `pd` but the ring/re-ring target is `rt` — backing out of a code-dialed call never stops the callee's phone
+- **[41] HIGH** PeerJS fallback rail leaks/orphans on listener rebuild: async cleanup delivered after teardown is never invoked
+- **[42] HIGH** Auto-join leaks a live camera+mic stream when the AI-consent gate blocks the join (first-ever dial-out path), and has no unmount guard after await
+
+## DEFERRED — tracked, prioritized (fix next sessions)
+
+### [3] HIGH (ios-device-traps) Post-call 'Download recording' uses anchor-blob download — silent no-op in the iOS shell
+- **File:** `hooks/useCallRecording.ts` 158-171 (consumed at app/components/PostCallSummary.tsx:247-250 via app/call/[id]/page.tsx:3409)
+- **Evidence:** downloadRecording() creates `<a download href=blobURL>` and clicks it. The repo itself documents this exact failure in app/recordings/page.tsx:84-85: "anchor-download blob: navigation is cancelled by the WebView." The Recordings page was fixed with navigator.canShare/share, but the PostCallSummary download button still routes to this anchor path, so on iOS (the primary platform) tapping 'Download 
+- **Fix:** Proposed fix is correct but incomplete in one detail: on iOS the recorded blob is video/mp4 (per the mimeType fallback at useCallRecording.ts:27-30), yet the filename is hardcoded to .webm in useCallRecording.ts:166, recording-storage.ts:168, and even the already-fixed recordings page File name. When building the File for navigator.share (and the anchor filename), derive the extension from blob.ty
+
+### [4] HIGH (ios-device-traps) speakText speaks every translation TWICE on iOS when voices aren't loaded yet (safety timeout never cancelled)
+- **File:** `app/call/[id]/page.tsx` 104-118
+- **Evidence:** When speechSynthesis.getVoices() is empty (the normal first-use state on iOS Safari/WKWebView), speakText registers a voiceschanged listener AND a 2000ms safety setTimeout, both calling doSpeak(). onVoicesReady removes the listener but never clears the timeout, so when voiceschanged fires quickly (typical on iOS) the timeout still fires ~2s later and doSpeak() runs a second time — a second utteran
+- **Fix:** Proposed fix is correct as written; apply it in the else-branch at lines 107-118: `const fallbackTimer = setTimeout(fire, 2000);` with `let spoken = false; const fire = () => { if (spoken) return; spoken = true; clearTimeout(fallbackTimer); window.speechSynthesis.removeEventListener("voiceschanged", onVoicesReady); doSpeak(); };` and `const onVoicesReady = fire; window.speechSynthesis.addEventList
+
+### [5] HIGH (ios-device-traps) Face-to-Face has no half-duplex gate: spoken translation feeds back into the still-listening mic
+- **File:** `app/face-to-face/page.tsx` 164-192 (speak), 204-220 (handleFinalText), 328-341 (recognition auto-restart)
+- **Evidence:** handleFinalText() calls speak(translated,…) while the active speaker's SpeechRecognition stays running (continuous=true, onend auto-restarts at line 330-337). The call page (app/call/[id]/page.tsx:59-101 'Half-duplex mic gate') and talk page (ttsSpeakingRef, app/talk/[id]/page.tsx:1191-1205) both gate the mic during TTS, but F2F — the one mode guaranteed to run on a single iPhone loudspeaker at ar
+- **Fix:** Port the call-page gate, scoped correctly: (1) Add a module/ref-level speakingRef (ttsSpeakingRef). In F2F speak(): for the premium path, set speakingRef=true immediately before `await playTtsBase64(...)` (it resolves on 'ended' — see app/lib/language-os/play-tts.ts) and clear it in a finally block + 400ms hangover; for the device-voice path, do NOT rely on the synchronous call — set the ref via u
+
+### [8] HIGH (payments-entitlements) Unauthenticated client-supplied userId trusted for entitlement and metering — pro spoofing + minute-dumping onto victims
+- **File:** `app/api/daily/room/route.ts` 32, 47 (also app/api/usage/video/route.ts:26-37)
+- **Evidence:** `const userId = typeof body.userId === 'string' ? body.userId : ''` is passed straight into getEntitlement with no auth check. Anyone who learns any Pro user's UUID gets unlimited 4h video tokens billed to your Daily account. Worse, /api/usage/video POST does `addVideoMinutes(ent.userId, deviceId, minutes)` — an attacker can submit arbitrary minutes under a victim's userId, exhausting a free victi
+- **Fix:** The proposed fix is correct in direction but incomplete. (1) In /app/api/daily/room/route.ts and both POST and GET of /app/api/usage/video/route.ts, stop reading userId from the body/query entirely; call getEntitlement({ deviceId }) only — entitlement.ts already resolves deviceId → device_accounts → user_id, and device_accounts is populated at sign-in, so legitimate Pro users on linked devices are
+
+### [9] HIGH (payments-entitlements) PREMIUM_DEVICE_IDS: device id is a bearer credential that the product itself broadcasts via pd= URLs (known issue — severity assessment + cheap mitigation)
+- **File:** `lib/entitlement.ts` 39-53 (leak points: app/contacts/page.tsx:204,343; app/i/[code]/page.tsx:126; app/dial/page.tsx:160; app/components/IncomingCallOverlay.tsx:175; app/add/page.tsx:67; app/history/page.tsx:246; app/lib/native-call.ts:69)
+- **Evidence:** entitlement.ts:52 grants full premium to any request whose body/query deviceId matches PREMIUM_DEVICE_IDS — no account, no auth, checked before cache and DB. Device ids are shared in invite links, contact rows, history, and the in-call handshake. The moment a founder/tester device calls or invites anyone, the counterparty (and anyone they forward the link to) holds a permanent premium credential: 
+- **Fix:** Proposed fix is correct and the comp-via-profiles path is verified viable: entitlement.ts:65-72 resolves deviceId→userId through device_accounts, so founder/App-Review devices that sign in once with a profiles.plan='enterprise' (plan_expires_at=null) account get full premium on every hot path even when routes pass only deviceId. Two refinements: (1) Rotating the PREMIUM_DEVICE_IDS env var is NOT s
+
+### [11] CRITICAL (security-exposure) Unauthenticated full-account data deletion for any deviceId (deviceId is a leaked bearer token)
+- **File:** `app/api/account/delete/route.ts` 37-144
+- **Evidence:** POST /api/account/delete requires only { deviceId, confirmText: "DELETE" } and uses the SERVICE-ROLE client to delete the victim's contacts, conversations (call transcripts), dial_directory row, push_tokens, invites, and language data. There is no proof the caller owns the deviceId. deviceIds are NOT secret: they are embedded in shared call links as pd= (app/contacts/page.tsx:204,343; app/add/page
+- **Fix:** The proposed device_secret fix is directionally correct but incomplete in three ways. (1) Registration hijack / migration race: POST /api/directory is itself an unauthenticated upsert keyed on device_id (directory/route.ts:34-46), so today an attacker can already overwrite any device's dial_code/display_name/language — and under the proposed fix could pre-mint the secret for a victim's deviceId be
+
+### [12] CRITICAL (security-exposure) Full personal-data export for any deviceId via service role
+- **File:** `app/api/account/export/route.ts` 31-95
+- **Evidence:** GET /api/account/export?deviceId=xxx uses getServiceClient() (service role, RLS bypassed) to return the complete contacts list, language progress, SRS cards, and entrevoz imports for ANY deviceId — no ownership proof. Combined with the dial-code→deviceId resolver (GET /api/directory?code=) and pd= leakage in shared URLs, a stranger who has your dial code or ever received a call link from you can d
+- **Fix:** Proposed fix is directionally correct but incomplete: (1) A Supabase-session check against device_accounts only covers signed-in devices — device_accounts rows are created at sign-in (link-device/route.ts:39), and the app's default flow is anonymous, so session auth alone would break export for most users. The general fix is a per-device secret: generate a random secret alongside the deviceId at f
+
+### [14] CRITICAL (security-exposure) Permissive RLS + public anon key = whole conversations/contacts/dial_directory tables dumpable directly from any browser
+- **File:** `app/api/history/route.ts` 11-13 (comment), lib/supabase.ts:14-15, app/lib/language-os/supabase-client.ts:3-11
+- **Evidence:** The server routes for conversations, contacts, dial_directory, invites, group_rooms, voice_clones, language_os_progress, los_srs_cards all use the ANON key, and history/route.ts:11-13 states the security model explicitly: "Anon client + permissive RLS (mirrors contacts); no auth needed". That same anon key ships in every client bundle (NEXT_PUBLIC_SUPABASE_ANON_KEY, createBrowserClient in lib/supa
+- **Fix:** The proposed fix direction is correct (revoke anon on the sensitive tables; route server-side API handlers through the service-role client) and safe. Two refinements:
+
+1. Scope the client swap to ALL anon entry points, not just the `@/lib/supabase` singleton import. Also switch the inline anon clients in app/api/voice-clone/route.ts and app/api/group/{create,join,leave,[code]}/route.ts (they call 
+
+### [15] HIGH (security-exposure) proximity_presence RLS exposes precise lat/lng of all users and allows anyone to UPDATE/DELETE others' presence and accept others' requests
+- **File:** `supabase/migrations/003_analytics_and_rls.sql` 73-110
+- **Evidence:** SELECT policy "Users can view presence for discovery" allows anon to read all non-expired rows — including raw lat/lng columns (the API route only returns distance, but direct PostgREST reads with the public anon key return exact coordinates of every available user: real-world stalking risk). UPDATE policy is USING (true) WITH CHECK (true) and DELETE is USING (true) — anyone can delete or relocate
+- **Fix:** The proposed fix is directionally right but incomplete in two ways. (1) find_nearby_users (002_proximity_rpc_functions.sql) ALREADY returns only session_id/language/status/distance — the problem is it returns exact distance from caller-supplied, unauthenticated coordinates, so ~3 RPC calls trilaterate any user's precise location even with no table SELECT. Making it SECURITY DEFINER (needed once an
+
+### [16] HIGH (security-exposure) Unauthenticated VoIP push: anyone can ring a locked iPhone with a spoofed caller identity (iOS-only, invisible in desktop testing)
+- **File:** `app/api/push/voip/route.ts` 78-139
+- **Evidence:** POST /api/push/voip takes target (deviceId OR dial code), room, fromName, fromDevice — all attacker-controlled, no auth. Knowing only someone's shareable dial code, an attacker can fire real APNs VoIP pushes that surface as native CallKit incoming calls on the victim's closed iPhone, with any display name ("Mom"), at 30/min/IP (sustained spam = harassment and iOS may eventually kill the app's VoIP
+- **Fix:** The proposed fix is directionally right but broken in two ways. (1) Requiring fromDevice to already be in the target's contacts kills the product's core flow: dial codes exist precisely so a NEW caller who only has the short code can place a first call (stated in app/api/directory/route.ts header comment); legitimate first calls would all be rejected. (2) fromDevice is an unauthenticated, client-g
+
+### [18] HIGH (security-exposure) Spend-budget identity is client-chosen: deviceId rotation defeats all per-identity daily allowances; only global kill-switches bound the bill (and they DoS everyone)
+- **File:** `lib/budget.ts` 60-75; app/api/transcribe/route.ts:149-164; app/api/voice-dub/route.ts:46-55
+- **Evidence:** deviceBudget keys the daily allowance on a deviceId taken verbatim from the request body/form (transcribe/route.ts:127,150: identity = deviceId.length >= 8 ? deviceId : ip). An attacker sends a fresh random deviceId per request → every request gets a fresh free allowance; the only backstop is the GLOBAL cap (whisper 50k/day ≈ $150, elevenlabs 20k ≈ $100, claude 100k ≈ $25 — budget.ts:28-31). So wo
+- **Fix:** Proposed fix is directionally right; refine it: (1) In deviceBudget callers, charge BOTH budget:metric:device:<id> and budget:metric:ip:<ip> and deny if either is exhausted — but apply the IP-keyed budget only to NON-entitled identities (or give entitled ones a much higher/separate IP cap), otherwise free-tier abuse or heavy use behind one NAT (common on mobile carriers, per the repo's own comment
+
+### [19] HIGH (security-exposure) Contacts CRUD fully controlled by knowledge of ownerDeviceId — read, rename, favorite, and delete anyone's contacts
+- **File:** `app/api/contacts/route.ts` 29-52 (GET), 148-238 (PATCH/DELETE)
+- **Evidence:** GET /api/contacts?deviceId= returns select("*") of the victim's entire address book (names, languages, call counts, last_called_at) to anyone who knows the deviceId — obtainable from a shared call link (pd=), a dial code via /api/directory, or a past call. PATCH/DELETE accept ownerDeviceId from the body with no possession proof, so an attacker can silently rename contacts (phishing setup: rename t
+- **Fix:** The proposed fix is correct but incomplete in two ways. (1) It omits POST: POST (lines 56-145) is also an unauthenticated write primitive — an attacker who knows a victim's deviceId can INSERT arbitrary contacts into the victim's list with any display_name (direct phishing injection, no prior call or relationship needed) and inflate call_count/last_called_at to push their entry to the top of the f
+
+### [20] CRITICAL (silent-failure-observability) VoIP push delivery failures are triple-swallowed: APNs rejection returns HTTP 200 {delivered:false}, client fire-and-forgets, so closed-device ringing can die silently forever
+- **File:** `app/lib/native-call.ts` voip/route.ts:119,135-139; native-call.ts:115
+- **Evidence:** Route: `return NextResponse.json({ delivered: res.status === 200, status: res.status, ...(res.status !== 200 ? { apns: res.body } : {}) })` — HTTP 200 even for APNs BadDeviceToken/410-Unregistered/no_token. Client (sendVoipPush): `fetch("/api/push/voip", {...}).catch(() => {})` — never reads the body. A stale/rotated token, expired APNs cert, or unregistered device means closed iPhones simply stop
+- **Fix:** Proposed fix is directionally correct; two refinements. (a) Server (route.ts): on res.status !== 200, console.error('[push/voip] APNs reject', { status, body: res.body, target: dev||code||any }) — and also log the no_token path; parse the APNs body reason, and on 410 Unregistered (and 400 BadDeviceToken) delete the dead push_tokens row. To do that precisely, change the select at route.ts:113 from 
+
+### [21] CRITICAL (silent-failure-observability) VoIP token registration fails silently — device never rings when closed, user has no idea
+- **File:** `app/lib/native-call.ts` 54, 63
+- **Evidence:** `fetch("/api/push/register", {...}).catch(() => {})` (line 54) and `p.addListener("voipToken", (d) => register(d?.token)).catch(() => {})` (line 63). If /api/push/register 500s/503s ('Not configured') or the network drops at launch, the PushKit token is never stored. Result: CallKit ring-when-closed is permanently broken for that device with zero signal to user or ops. Only manifests in the WKWebV
+- **Fix:** The proposed fix (retry with backoff + persisted status + beacon + settings indicator) is directionally right but incomplete as written: (1) The retry MUST treat non-2xx responses as failures — currently fetch resolves on 500/503, so wrapping retries around .catch() alone would retry nothing; check res.ok and retry/record on !res.ok too. (2) Retry on app resume (visibilitychange → visible) in addi
+
+### [22] HIGH (silent-failure-observability) call-declined signal swallowed — caller keeps ringing a dead call (incl. the busy auto-decline path)
+- **File:** `app/components/IncomingCallOverlay.tsx` 58, 263
+- **Evidence:** Both the busy auto-decline (line 58) and the user Decline button (line 263) do `sendCallSignal(invite.fromDevice, "call-declined", invite.room).catch(() => {})`. sendCallSignal's own PeerJS fallback also swallows: ring-signal.ts:180 `await sendCallSignalPeer(...).catch(() => false)` with the result discarded. If Realtime AND Peer both fail (anon Realtime flaky on WKWebView resume — tonight's exact
+- **Fix:** Proposed fix (b)+(c) is right but incomplete — step 0 is mandatory or the retry is built on a false positive: (0) Fix sendCallSignalRealtime to mirror the sendCallInviteRealtime fix: add `config: { broadcast: { self: false, ack: true } }` and `const res = await channel.send(...); if (res !== "ok") { done(false); return; }` before the flush timeout. Without this, sendCallSignal "success" is meaning
+
+### [23] HIGH (silent-failure-observability) call-canceled signal swallowed — abandoned dial leaves callee's phone ghost-ringing 45s (tonight's re-ring bug class)
+- **File:** `app/talk/[id]/page.tsx` call/[id]/page.tsx:764; talk/[id]/page.tsx:293
+- **Evidence:** `sendCallSignal(target, "call-canceled", roomCode).catch(() => {})` and talk's `import("@/app/lib/ring-signal").then(({ sendCallSignal }) => sendCallSignal(target, "call-canceled", roomId)).catch(() => {})`. cancelSentRef.current is set to true BEFORE the send is known to succeed, so a failed cancel can never be retried — the one-shot guard latches on failure. On pagehide/edge-swipe (iOS) the wind
+- **Fix:** Three-part fix, in priority order: (1) PRIMARY — add a staleness watchdog to IncomingCallOverlay: the caller already re-broadcasts call-invite every 2.5s, so if no fresh invite arrives for ~8-10s, auto-dismiss the overlay. This kills ghost rings for ALL caller-death modes (app kill, crash, network loss, lost cancel) with zero delivery dependency — the most robust fix on iOS and strictly better tha
+
+### [24] HIGH (silent-failure-observability) Group call remote audio play() swallowed with NO tap-to-enable fallback — silent participants on iOS Safari (1:1 call page already has the fix)
+- **File:** `app/group/[id]/page.tsx` 281, 596
+- **Evidence:** Line 281: `el.srcObject = p.stream; el.play().catch(() => {});` on the always-mounted <audio> per participant; line 596 same on visibilitychange recovery. On iOS Safari/WKWebView, play() rejects with NotAllowedError when not gesture-bound (e.g. joining via shared link, or stream arriving after backgrounding) — that participant is permanently inaudible with zero UI. The 1:1 page handles exactly thi
+- **Fix:** Port the 1:1 needsAudioUnmute pattern with three corrections. (1) Plumbing: the failing play() is inside the memoized RemoteTile child while the flag must live in the page component — pass an onAudioBlocked callback prop to RemoteTile (alongside the existing audioRef/videoRef props) rather than setting state directly in the child. (2) Error gating: do NOT flag only name==='NotAllowedError' as prop
+
+### [25] HIGH (silent-failure-observability) AppShell boot-critical dynamic imports swallowed: device-id recovery, outbox flush, and native CallKit init can all silently not run
+- **File:** `app/components/AppShell.tsx` 30, 33, 41
+- **Evidence:** `import("../lib/language-os/device-id").then(({ ensureStableDeviceId }) => ensureStableDeviceId()).catch(() => {})`, same for installOutboxFlush (line 33) and initNativeRing (line 41). A failed chunk load — stale deployment hash cached by the WKWebView shell loading the LIVE site, or offline-at-launch — kills identity reconciliation (contacts/history stranded under orphan id), queued-write recover
+- **Fix:** Prefer eliminating the failure class over retry machinery: statically import all three modules in AppShell. They are tiny first-party code (device-id.ts 219 lines, reliable-post.ts 118 lines, native-call.ts ~117 lines plus small @capacitor/core), and device-id is already statically imported by native-call.ts and other modules — the dynamic imports buy essentially nothing while creating a boot-crit
+
+### [26] HIGH (silent-failure-observability) sendVoipPush module import swallowed in sendCallInvite — closed devices stop ringing if the chunk fails to load
+- **File:** `app/lib/ring-signal.ts` 44-46
+- **Evidence:** `import("./native-call").then(({ sendVoipPush }) => sendVoipPush(targetDeviceId, invite)).catch(() => {})` — the only path that rings a CLOSED device. A stale-deploy chunk 404 (shell caches old HTML referencing rotated chunk hashes) kills ring-when-closed for every call placed from that client, while in-app ringing still works — producing the maddening 'sometimes they don't get the call' report th
+- **Fix:** The proposed fix is correct but incomplete. (1) Static import of native-call into ring-signal.ts is safe and effective: @capacitor/core ^8.5.1 is a direct dependency, registerPlugin is only invoked at runtime behind the isNativePlatform guard (web no-op preserved), and native-call's import of ring-signal is `import type` only, so no runtime cycle. This removes the at-call-time chunk fetch entirely
+
+### [27] HIGH (silent-failure-observability) Account link-device: dedupe key latched BEFORE the fetch — one network blip means the device is never linked to the account all session
+- **File:** `hooks/useAuth.tsx` 146-152
+- **Evidence:** `sessionStorage.setItem(dedupeKey, "1"); fetch("/api/account/link-device", {...}).catch(() => {});` — the guard is written before the POST is attempted, and the catch swallows the failure, so within the session there is no retry. Unlinked device = subscription entitlements/limits applied to the wrong identity; user pays via Stripe on web and the iOS shell still shows free-tier limits (and per Appl
+- **Fix:** Fix direction is correct but needs two refinements. (1) It is not enough to move the setItem into a .then and keep the catch — fetch does not reject on HTTP errors, so the code must check res.ok explicitly: set the dedupe key only on res.ok; on !res.ok or network error leave it unset so the next applySession (SIGNED_IN, TOKEN_REFRESHED ~hourly, app foreground) retries with a FRESH access token. (2
+
+### [28] HIGH (feature-surfaces) GDPR "Export My Data" silently does nothing in the iOS app but shows "Data exported successfully"
+- **File:** `app/account/page.tsx` 236-249
+- **Evidence:** handleExport builds a Blob, creates an <a download> and calls a.click(). app/recordings/page.tsx:84-89 documents that in the iOS shell/Safari "anchor-download blob: navigation is cancelled by the WebView" and was rewritten to use the files share sheet — but the Account page still uses the anchor pattern, then unconditionally setExportSuccess(true). In the Apple-approved app the GDPR Article 15 exp
+- **Fix:** Proposed fix is correct in direction but needs two refinements. (1) Handle user cancellation: navigator.share rejects with AbortError when the user dismisses the share sheet — treat that as "no-op" (no success banner, no error), not as failure; do NOT copy the recordings page's `.catch(() => {})`, which would silently swallow real share failures and (in this flow) lead straight back to a false suc
+
+### [29] HIGH (feature-surfaces) Entire Settings page is a placebo — none of its 13 preferences are read anywhere in the app
+- **File:** `app/settings/page.tsx` 230-383 (consumers: none)
+- **Evidence:** Settings writes to localStorage key entrevoz_settings via app/lib/settings.ts, but grep shows getSettings()/AppSettings is imported ONLY by app/settings/page.tsx. primaryLanguage, targetLanguage, autoDetectLanguage, autoPlayTTS, ttsSpeed, voiceDubbingEnabled, autoJoinCalls, showCaptions, captionFontSize, cyranoEnabled, saveHistory, autoSaveContacts, analyticsOptOut — zero consumers. The app actual
+- **Fix:** Proposed fix is directionally correct; refinements: (1) Primary Language must two-way sync with entrevoz_lang — write it on change AND initialize the Settings UI from entrevoz_lang on load, otherwise Settings shows the stale "en" default while the app uses the real value. (2) Gate saveHistory inside addTranslation() in app/lib/translation-history.ts (one choke point) rather than at each of the 4+ 
+
+### [30] HIGH (feature-surfaces) Wingman has no Whisper fallback and ignores fatal speech errors — on iOS (Siri/Dictation off, the App-Review default) it spins forever in a silent restart loop showing "Listening…"
+- **File:** `hooks/useWingman.ts` 289-343
+- **Evidence:** VoxNote (app/page.tsx:665-681) and Face-to-Face (app/face-to-face/page.tsx:302-316) were both patched tonight-style to detect isFatalSpeechError(e.error) ('service-not-allowed') and switch to startWhisperCapture. useWingman.startSTT has neither: rec.onerror only handles 'not-allowed' and console.warns everything else (line 315-323), and rec.onend unconditionally restarts while isRunRef is true (li
+- **Fix:** The proposed fix is directionally correct but must also suppress the onend restart, mirroring the F2F patch (face-to-face/page.tsx:302-316). In useWingman.startSTT: (1) add a ref e.g. whisperModeRef; in rec.onerror, if (isFatalSpeechError(e.error) && whisperAvailable()) { whisperModeRef.current = true; try { rec.abort() } catch {}; start whisper capture for modeRef.current.their feeding final tran
+
+### [32] CRITICAL (caption-translate-pipeline) 402/503 from /api/transcribe mid-call on iOS: the 1:1 Whisper loop never stops, never notifies — captions silently die while the UI shows a green 'Listening' indicator
+- **File:** `hooks/useTranscription.ts` 880-886
+- **Evidence:** mr.onstop does `if (!res.ok) { if (res.status === 501) setError(...); return; }` — a 402 (device budget) or 503 (global kill-switch) is swallowed: no setError, no mode change, and the chunk cycle already restarted itself at line 859-861, so it keeps recording and POSTing a doomed clip every ~1.2s for the rest of the call. The /api/transcribe route comment (route.ts:140-142) claims 'over budget ret
+- **Fix:** Fix is directionally right but incomplete/incorrect in three ways. (1) setError + "stop the cycle" is not enough detail: the chunk timer restarts the recorder independently of the fetch result, so the 402/503 branch must call stopWhisper() AND set a dedicated suspendedRef (e.g. whisperSuspendedUntilRef timestamp) that startWhisper() checks — otherwise the visibilitychange handler (useTranscription
+
+### [33] HIGH (caption-translate-pipeline) Group call transcribeSegment swallows 402/429/503 identically — captions die silently while sttState stays 'listening'
+- **File:** `hooks/useGroupCall.ts` 1209
+- **Evidence:** transcribeSegment handles only 501 (stopWhisperEngine + markUnavailable, lines 1202-1208); everything else is `if (!res.ok) return;`. On device-budget 402 or global 503 the VAD segmenter keeps cutting and POSTing every voiced segment indefinitely, setStt remains 'listening'/'whisper' (line 1308), and neither the speaker nor the other 3 participants learn that this person's words are no longer bein
+- **Fix:** Differentiate the three statuses instead of treating them alike: (1) 402 — stop the whisper engine (stopWhisperEngine()) and set a new SttState value such as 'exhausted' (add to SttState in app/lib/group-call/types.ts and render on the speaker's own tile); do not retry until a long timer or next-day reset; honor the response's `upgrade` flag only outside the iOS shell — under the "EntrevozApp" UA 
+
+### [35] HIGH (caption-translate-pipeline) 1:1 interim translation stream can exhaust the 120/min per-IP translate rate limit by itself; finals then 429 and are silently dropped with NO retry — unlike the group engine
+- **File:** `hooks/useTranscription.ts` 505-507, 357-385 (and app/api/translate/route.ts:108)
+- **Evidence:** translateInterim debounces only 50ms (comment claims 150ms) and fires on every changed interim — continuous speech produces 3-5+ requests/sec against MAX_REQUESTS_PER_MINUTE=120 (=2/sec) shared per IP; two phones on one NAT/carrier CGNAT (the exact scenario the transcribe route's own comment at route.ts:36-39 acknowledges) share the bucket. When the limit trips, translateAPI returns null for ANY !
+- **Fix:** Proposed fix is correct in direction; three amendments. (1) When porting the group engine's final retry into streamingTranslate, the retry MUST re-check `mySeq !== finalSeqRef.current` after each attempt before applying/sending — otherwise a retried older final (2.5s later) can overwrite a newer final's caption/TTS, re-introducing the exact ordering bug finalSeqRef exists to prevent. Easiest port:
+
+### [36] HIGH (caption-translate-pipeline) Face-to-face sends uncapped context lines: one >600-char final 400s the next 8 translate requests (zod max(600) per line) — the exact bug fixed in useTranscription but still live here
+- **File:** `app/face-to-face/page.tsx` 209-211
+- **Evidence:** handleFinalText does `const context = f2fContextRef.current.slice(-8)` and pushes raw finalTranscript into the rolling buffer with no length cap. /api/translate validates `context: z.array(z.string().max(600))` (translate/route.ts:59) and returns 400 on violation. useTranscription.ts:122-128 documents this exact failure ('a single longer final used to 400 the next 8 requests — it rode along as con
+- **Fix:** Proposed fix is correct. Preferred form: export MAX_CONTEXT_LINE/capContextLine from hooks/useTranscription.ts (or move to a shared lib) and in handleFinalText do `f2fContextRef.current = [...f2fContextRef.current, capContextLine(finalTranscript)].slice(-8)`. Capping at push time is sufficient — the current turn sends `text` (zod max 5000), and the long line only enters `context` on later turns. D
+
+### [37] CRITICAL (data-integrity) Proximity re-register/heartbeat 500s while user is in_call: RLS SELECT policy hides own row, insert then violates UNIQUE(session_id)
+- **File:** `app/api/proximity/register/route.ts` 112-121 (existence check) + supabase/migrations/003_analytics_and_rls.sql:83-88
+- **Evidence:** Register uses the ANON client to check for an existing presence row: `.from("proximity_presence").select("id, session_id").eq("session_id", ...).single()`. The LIVE SELECT policy (confirmed in pg_policies) is `expires_at > now() AND status IN ('available','busy')` — it excludes 'in_call'. When /api/proximity/respond accepts a request it sets both sessions to status='in_call' (respond/route.ts:143-
+- **Fix:** Proposed fix (b) does NOT work and must not be used: Postgres applies SELECT policies to UPDATE commands whose WHERE clause reads existing rows, so `.update(...).eq('session_id', ...)` cannot see the in_call row despite UPDATE USING(true) — it updates 0 rows and the code falls back to INSERT → same 23505. The same rule breaks DELETE (removePresence silently no-ops on in_call rows) and PATCH /api/p
+
+### [38] HIGH (data-integrity) Repo migrations are not the live schema: 19 live tables have NO migration, and migrations 004/005/006_stripe describe objects that do not exist in prod (subscriptions, usage, profiles.name) — applying them to a fresh env breaks signup
+- **File:** `supabase/migrations/` 004_billing_schema.sql, 005_profiles.sql:7-14,29-41, 006_stripe_integration.sql:36-53
+- **Evidence:** Verified against live DB zeqzygfxcmaettmbkusr: tables with code writers but no migration anywhere in the repo: contacts, conversations, invites, dial_directory, group_rooms, group_messages, push_tokens (DDL only in native/NATIVE_RING.md), device_accounts, voice_clones, feature_usage, language_os_progress, los_srs_cards, los_entrevoz_imports, plus analytics_events, diag_events, messages, translatio
+- **Fix:** The proposed baseline fix is correct in direction but incomplete. Corrected plan: (1) `supabase link --project-ref zeqzygfxcmaettmbkusr && supabase db pull` to generate a baseline from live — note the CLI will also prompt `supabase migration repair` because live already has 10 recorded migration versions (20260504225501, 20260505003158, 20260505063006, 20260505085050, 20260505185733, 2026051306133
+
+## Refuted (audited, not real)
+
+- Foreground rebuild() reuses the still-leaving channel: Realtime ring rail goes deaf on EVERY OTHER app-switch (healthy-socket case) — REFUTED
+- Dial-code decline/cancel and declined-from-CallKit forwarding swallowed inside native-call listener — The cited `.catch(() => {})` swallows at /Users/philmcgill/machinemind/machinemind-builds/voxlink/app/lib/native-call.ts:76 and 80-85 have no realistic trigger, and the stated severity is wrong. (1) L
+- All WhatsApp invite buttons are dead in the iOS app (window.open is a no-op in the Capacitor shell) — host then enters an empty room believing the inv — The cited window.open('https://wa.me/...') call sites all exist as described, but the premise that window.open is a no-op in the Capacitor shell is contradicted by the shell's own vendored source. Thi
+- voice_clones upsert never refreshes expires_at — after the first 24h every call re-clones the voice (direct ElevenLabs spend, ~$0.50-1.00/call) — The upsert at app/api/voice-clone/route.ts:189-195 does omit expires_at, but the finding's trigger is impossible: the only caller (hooks/useVoiceDubbing.ts:96) generates sessionKey as `session-${Date.

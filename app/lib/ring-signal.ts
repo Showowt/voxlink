@@ -25,6 +25,29 @@ export interface CallInvite {
   t: number;
 }
 
+
+// The re-ring loop keeps a transient channel alive on `ring-<target>` for ~1s
+// of every 2.5s cycle. supabase.channel() DEDUPES by topic: creating "again"
+// returns the live instance, whose subscribe() is then a silent no-op — the
+// cancel/decline/invite never sent and the 5s cap ate it. If a joined channel
+// already exists for the topic, send on it directly and DON'T tear it down
+// (its owner will); otherwise do the normal create/subscribe/send/teardown.
+function findJoinedChannel(
+  supabase: NonNullable<ReturnType<typeof createBrowserClient>>,
+  target: string,
+) {
+  try {
+    const topic = `realtime:${ringChannelName(target)}`;
+    return (
+      supabase
+        .getChannels()
+        .find((c) => c.topic === topic && c.state === "joined") || null
+    );
+  } catch {
+    return null;
+  }
+}
+
 export function ringChannelName(deviceId: string): string {
   return `ring-${deviceId}`;
 }
@@ -60,6 +83,21 @@ async function sendCallInviteRealtime(
 ): Promise<boolean> {
   const supabase = createBrowserClient();
   if (!supabase || !targetDeviceId) return false;
+
+  // Reuse a live channel on this topic (re-ring loop collision — see helper).
+  const existing = findJoinedChannel(supabase, targetDeviceId);
+  if (existing) {
+    try {
+      const res = await existing.send({
+        type: "broadcast",
+        event: "call-invite",
+        payload: { ...invite, t: Date.now() },
+      });
+      return res === "ok";
+    } catch {
+      return false;
+    }
+  }
 
   const channel = supabase.channel(ringChannelName(targetDeviceId), {
     config: { broadcast: { self: false, ack: true } },
@@ -188,6 +226,20 @@ async function sendCallSignalRealtime(
 ): Promise<boolean> {
   const supabase = createBrowserClient();
   if (!supabase || !targetDeviceId) return false;
+
+  const existing = findJoinedChannel(supabase, targetDeviceId);
+  if (existing) {
+    try {
+      const res = await existing.send({
+        type: "broadcast",
+        event,
+        payload: { room, t: Date.now() },
+      });
+      return res === "ok";
+    } catch {
+      return false;
+    }
+  }
 
   const channel = supabase.channel(ringChannelName(targetDeviceId), {
     config: { broadcast: { self: false } },

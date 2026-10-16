@@ -140,12 +140,8 @@ export async function POST(req: NextRequest) {
     // allowance + global kill-switch; over budget returns the same shape as
     // other soft failures so the client's capture loop stops gracefully
     // instead of erroring.
-    if (!(await serviceBudgetOk("whisper"))) {
-      return NextResponse.json(
-        { error: "Transcription temporarily unavailable", fallback: true },
-        { status: 503 },
-      );
-    }
+    // Per-device budget FIRST — a budget-denied device must not keep burning
+    // the GLOBAL kill-switch counter.
     const ent = await getEntitlement({ deviceId: deviceId || undefined });
     const identity = deviceId.length >= 8 ? deviceId : ip;
     const allowance = DAILY_ALLOWANCES.transcribe();
@@ -160,6 +156,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "Daily transcription allowance used", fallback: true, upgrade: !ent.entitled },
         { status: 402 },
+      );
+    }
+    if (!(await serviceBudgetOk("whisper"))) {
+      return NextResponse.json(
+        { error: "Transcription temporarily unavailable", fallback: true },
+        { status: 503 },
       );
     }
 

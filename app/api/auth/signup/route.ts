@@ -49,6 +49,14 @@ function adminClient() {
 }
 
 export async function POST(request: NextRequest) {
+  // Signup mints auto-confirmed accounts + 7-day trials — farmable without a
+  // cap. 5/hour/IP is generous for humans, hostile to scripts.
+  const signupIp = request.headers.get("x-forwarded-for")?.split(",")[0] || "unknown";
+  const { checkRateLimit } = await import("@/lib/rate-limit");
+  const signupRl = await checkRateLimit(`signup:${signupIp}`, 5, 3600000);
+  if (!signupRl.allowed) {
+    return NextResponse.json({ error: "Too many signups — try later" }, { status: 429 });
+  }
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
   if (!checkLimit(ip, 10)) {
     return NextResponse.json(

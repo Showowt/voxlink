@@ -296,7 +296,7 @@ function CallsView() {
     setOpenId(id);
     if (!transcripts[id]) {
       try {
-        const r = await fetch(`/api/history?id=${encodeURIComponent(id)}`);
+        const r = await fetch(`/api/history?id=${encodeURIComponent(id)}&deviceId=${encodeURIComponent(getDeviceId())}`);
         const d = await r.json();
         const t = Array.isArray(d?.call?.transcript) ? d.call.transcript : [];
         setTranscripts((prev) => ({ ...prev, [id]: t }));

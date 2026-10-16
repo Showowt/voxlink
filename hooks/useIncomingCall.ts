@@ -50,7 +50,12 @@ export function useIncomingCall() {
         return;
       }
       if (inviteRef.current) return; // already ringing for another call
-      if (isThrottled(p.fromDevice, Date.now())) return; // spam throttle
+      if (isThrottled(p.fromDevice, Date.now())) {
+        // Suppress this call's re-rings too — otherwise each 2.5s re-ring
+        // re-enters the throttle path (and a mid-ring expiry would ring late).
+        handledRooms.add(p.room);
+        return;
+      }
       handledRooms.add(p.room);
       inviteRef.current = p;
       setInvite(p);
@@ -131,6 +136,7 @@ export function useIncomingCall() {
       ).filter(Boolean);
 
       const cleanups: Array<() => void> = [];
+      let buildTornDown = false; // late async peer cleanups must still run
       for (const address of addresses) {
         let peerCleanup: (() => void) | null = null;
         let peerStarted = false;
@@ -142,7 +148,7 @@ export function useIncomingCall() {
             if (event === "call-canceled") cancelInvite(room);
             else if (event === "call-declined") handleDeclined(room);
           }).then((cleanup) => {
-            if (cancelled) cleanup();
+            if (cancelled || buildTornDown) cleanup();
             else peerCleanup = cleanup;
           });
         };
@@ -191,7 +197,10 @@ export function useIncomingCall() {
           peerCleanup?.();
         });
       }
-      return () => cleanups.forEach((c) => c());
+      return () => {
+        buildTornDown = true;
+        cleanups.forEach((c) => c());
+      };
     };
 
     const rebuild = (reason: string) => {

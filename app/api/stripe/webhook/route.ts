@@ -64,12 +64,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ received: true, skipped: true });
   }
 
-  // Store event for idempotency
-  await supabase.from("stripe_events").insert({
-    id: event.id,
-    type: event.type,
-    data: event.data as unknown as Record<string, unknown>,
-  });
+  // NOTE: the idempotency record is written AFTER successful processing (end
+  // of this handler). Recording it first meant a failed attempt returned 500,
+  // Stripe retried, and the retry was skipped as a "duplicate" — a PAID plan
+  // permanently lost on one transient error.
 
   switch (event.type) {
     case "checkout.session.completed": {
@@ -83,13 +81,11 @@ export async function POST(req: NextRequest) {
       );
       const expiresAt = new Date(sub.current_period_end * 1000).toISOString();
 
+      // Upsert: .update() matching ZERO rows (profile row missing) succeeds
+      // silently — a paid user would stay free with a 200 OK.
       const { error: updateErr } = await supabase
         .from("profiles")
-        .update({
-          plan,
-          plan_expires_at: expiresAt,
-        })
-        .eq("id", userId);
+        .upsert({ id: userId, plan, plan_expires_at: expiresAt }, { onConflict: "id" });
       if (updateErr) {
         console.error("[Webhook] Profile update failed:", updateErr);
         return NextResponse.json({ error: "Profile update failed" }, { status: 500 });
@@ -110,11 +106,14 @@ export async function POST(req: NextRequest) {
 
       const { error: updateErr2 } = await supabase
         .from("profiles")
-        .update({
-          plan: isActive ? (plan ?? "pro") : "free",
-          plan_expires_at: isActive ? expiresAt : null,
-        })
-        .eq("id", userId);
+        .upsert(
+          {
+            id: userId,
+            plan: isActive ? (plan ?? "pro") : "free",
+            plan_expires_at: isActive ? expiresAt : null,
+          },
+          { onConflict: "id" },
+        );
       if (updateErr2) {
         console.error("[Webhook] Profile update failed:", updateErr2);
         return NextResponse.json({ error: "Profile update failed" }, { status: 500 });
@@ -144,6 +143,13 @@ export async function POST(req: NextRequest) {
       break;
     }
   }
+
+  // Processing succeeded — NOW record for idempotency.
+  await supabase.from("stripe_events").insert({
+    id: event.id,
+    type: event.type,
+    data: event.data as unknown as Record<string, unknown>,
+  });
 
   return NextResponse.json({ received: true });
 }

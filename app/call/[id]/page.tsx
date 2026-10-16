@@ -759,7 +759,9 @@ function VideoCallContent() {
   const cancelSentRef = useRef(false);
   const cancelOutgoingRing = useCallback(() => {
     if (cancelSentRef.current || hadPartnerRef.current) return;
-    const target = searchParams.get("pd") || "";
+    // rt carries the ORIGINAL ring address (dial code when unresolved) — pd
+    // alone made backing out of a code-dialed call leave a 45s ghost ring.
+    const target = searchParams.get("rt") || searchParams.get("pd") || "";
     if (!target || !isHost) return;
     cancelSentRef.current = true;
     sendCallSignal(target, "call-canceled", roomCode).catch(() => {});
@@ -1423,6 +1425,12 @@ function VideoCallContent() {
     (async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        if (!ensureAIConsent()) {
+          // Consent sheet is showing — release the camera we just grabbed
+          // (handleLobbyJoin would have refused and leaked the live tracks).
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
         handleLobbyJoin({
           stream,
           userLang,
