@@ -33,10 +33,25 @@ function uuidish(s: unknown): s is string {
   return typeof s === "string" && /^[0-9a-f-]{32,40}$/i.test(s);
 }
 
+// Founder/tester devices: full entitlement without an account. Comma-separated
+// device ids in PREMIUM_DEVICE_IDS (Vercel env). Keeps the team and App Review
+// from being throttled by the free-tier caps they're supposed to be testing.
+function premiumDeviceAllowlist(): Set<string> {
+  return new Set(
+    (process.env.PREMIUM_DEVICE_IDS || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length >= 8),
+  );
+}
+
 export async function getEntitlement(opts: {
   userId?: string | null;
   deviceId?: string | null;
 }): Promise<Entitlement> {
+  if (opts.deviceId && premiumDeviceAllowlist().has(opts.deviceId)) {
+    return { entitled: true, plan: "pro", trialing: false, userId: null };
+  }
   const admin = supabaseAdmin();
   if (!admin) return FREE;
 

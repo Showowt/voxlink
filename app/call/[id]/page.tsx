@@ -2391,6 +2391,38 @@ function VideoCallContent() {
                 <RoomFullScreen onBack={() => router.push("/")} />
               ) : status === "error" ? (
                 (() => {
+                  // Free-tier video allowance exhausted is NOT a network
+                  // failure — a scary "Connection Failed" screen here read as
+                  // the app being broken. Offer the free path instead.
+                  if ((error || "").toLowerCase().includes("video minutes")) {
+                    return (
+                      <div className="max-w-sm mx-auto text-center">
+                        <div className="text-5xl mb-4">🎙️</div>
+                        <h2 className="text-white text-2xl font-bold mb-2">
+                          Free video minutes used
+                        </h2>
+                        <p className="text-white/60 text-sm mb-6">
+                          Audio calls with live translated captions are
+                          unlimited and free — switch and keep talking.
+                        </p>
+                        <button
+                          onClick={() => {
+                            const q = searchParams.toString();
+                            router.push(`/talk/${roomCode}${q ? `?${q}` : ""}`);
+                          }}
+                          className="w-full py-4 rounded-xl bg-[#00E5A0] text-black font-bold text-base mb-3 min-h-[52px]"
+                        >
+                          Switch to Audio Call
+                        </button>
+                        <button
+                          onClick={() => router.push("/")}
+                          className="w-full py-3 rounded-xl border border-white/15 text-white/70 text-sm min-h-[48px]"
+                        >
+                          Go Back
+                        </button>
+                      </div>
+                    );
+                  }
                   const errorType = detectErrorType(error || "Unknown error");
                   if (errorType === "permission_denied") {
                     return (
