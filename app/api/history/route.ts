@@ -124,5 +124,42 @@ export async function GET(req: NextRequest) {
     console.error("[history GET]", error.message);
     return NextResponse.json({ calls: [] });
   }
-  return NextResponse.json({ calls: data || [] });
+
+  // Enrich from the dial directory: a partner whose name never travelled over
+  // the in-call handshake (common for link-joiners who skipped the name
+  // prompt) still has a directory row — use its display_name, and ALWAYS
+  // attach their dial code so the UI can render a callable identity instead
+  // of a dead "Unknown".
+  const calls = data || [];
+  try {
+    const partnerIds = Array.from(
+      new Set(
+        calls
+          .map((c) => c.participant_2)
+          .filter((p) => typeof p === "string" && p.length >= 8 && p !== "unknown"),
+      ),
+    );
+    if (partnerIds.length) {
+      const { supabaseAdmin } = await import("@/lib/supabase-admin");
+      const admin = supabaseAdmin();
+      if (admin) {
+        const { data: dirs } = await admin
+          .from("dial_directory")
+          .select("device_id, display_name, dial_code")
+          .in("device_id", partnerIds);
+        const byId = new Map((dirs || []).map((d) => [d.device_id, d]));
+        for (const c of calls as Array<Record<string, unknown>>) {
+          const dir = byId.get(c.participant_2 as string);
+          if (!dir) continue;
+          if (!c.partner_name && meaningfulName(dir.display_name)) {
+            c.partner_name = meaningfulName(dir.display_name);
+          }
+          c.partner_code = dir.dial_code || null;
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[history GET] enrich failed:", e);
+  }
+  return NextResponse.json({ calls });
 }

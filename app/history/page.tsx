@@ -4,6 +4,10 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { BackButton } from "@/app/components/ui/BackButton";
 import { getLanguage } from "@/app/lib/languages";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
+import { useRouter } from "next/navigation";
+import { sendCallInvite } from "@/app/lib/ring-signal";
+import { generateRoomCode } from "@/app/lib/room-code";
+import { formatDialCode } from "@/app/lib/dial-code";
 import {
   getHistory,
   getFavorites,
@@ -193,6 +197,7 @@ interface CallRow {
   participant_1: string;
   participant_2: string;
   partner_name: string | null;
+  partner_code: string | null;
   language_pair: string | null;
   mode: string;
   duration_seconds: number | null;
@@ -216,7 +221,35 @@ function formatDuration(s: number | null): string {
 }
 
 function CallsView() {
+  const router = useRouter();
   const [calls, setCalls] = useState<CallRow[]>([]);
+  // Call the person back by their device id — same ring flow as Contacts.
+  // This is what turns a history row from a tombstone into a relationship.
+  const callBack = async (c: CallRow, type: "video" | "audio") => {
+    const code = generateRoomCode();
+    const myLang = localStorage.getItem("entrevoz_lang") || "en";
+    const myName = localStorage.getItem("entrevoz_name") || "Someone";
+    const theirLang = (c.language_pair || "").split("-")[1] || "en";
+    try {
+      await sendCallInvite(c.participant_2, {
+        room: code,
+        type,
+        fromDevice: getDeviceId(),
+        fromName: myName,
+        fromLang: myLang,
+        targetLang: theirLang,
+      });
+    } catch {
+      /* ring is best-effort — they can still join from the room */
+    }
+    const pn = c.partner_name ? `&pn=${encodeURIComponent(c.partner_name)}` : "";
+    const seed = `&name=${encodeURIComponent(myName)}&pd=${encodeURIComponent(c.participant_2)}${pn}`;
+    router.push(
+      type === "video"
+        ? `/call/${code}?lang=${myLang}&hostLang=${theirLang}&host=true${seed}`
+        : `/talk/${code}?lang=${myLang}&partnerLang=${theirLang}&host=true${seed}`,
+    );
+  };
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
   const [transcripts, setTranscripts] = useState<Record<string, TurnRow[]>>({});
@@ -290,7 +323,13 @@ function CallsView() {
   return (
     <div className="space-y-2.5">
       {calls.map((c) => {
-        const name = c.partner_name || "Unknown";
+        const name =
+          c.partner_name ||
+          (c.partner_code ? `Code ${formatDialCode(c.partner_code)}` : "Unknown");
+        const callable =
+          typeof c.participant_2 === "string" &&
+          c.participant_2.length >= 8 &&
+          c.participant_2 !== "unknown";
         const turns = transcripts[c.id] || [];
         return (
           <div
@@ -301,12 +340,12 @@ function CallsView() {
                 "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)",
             }}
           >
-            <button
-              onClick={() => openCall(c.id)}
-              className="w-full text-left p-3.5 sm:p-4"
-              aria-label={`Call with ${name}`}
-            >
-              <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 p-3.5 sm:p-4">
+              <button
+                onClick={() => openCall(c.id)}
+                className="flex-1 min-w-0 text-left"
+                aria-label={`Call with ${name}`}
+              >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <span className="text-lg">{c.mode === "audio" ? "🎙️" : c.mode === "group" ? "👥" : "🎥"}</span>
                   <div className="min-w-0">
@@ -317,9 +356,37 @@ function CallsView() {
                     </p>
                   </div>
                 </div>
-                <span className="text-white/25 text-xs shrink-0">{openId === c.id ? "▲" : "▼"}</span>
-              </div>
-            </button>
+              </button>
+              <span className="flex items-center gap-1.5 shrink-0">
+                {callable && (
+                  <>
+                    <button
+                      onClick={() => void callBack(c, "video")}
+                      className="w-9 h-9 min-w-[36px] rounded-lg bg-[#00C896]/15 border border-[#00C896]/30 text-[#00C896] text-sm flex items-center justify-center hover:bg-[#00C896]/25 transition-colors"
+                      aria-label={`Video call ${name} back`}
+                      title="Call back (video)"
+                    >
+                      🎥
+                    </button>
+                    <button
+                      onClick={() => void callBack(c, "audio")}
+                      className="w-9 h-9 min-w-[36px] rounded-lg bg-white/[0.06] border border-white/10 text-white/70 text-sm flex items-center justify-center hover:bg-white/[0.12] transition-colors"
+                      aria-label={`Audio call ${name} back`}
+                      title="Call back (audio)"
+                    >
+                      📞
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={() => openCall(c.id)}
+                  className="text-white/25 text-xs p-1"
+                  aria-label="Toggle transcript"
+                >
+                  {openId === c.id ? "▲" : "▼"}
+                </button>
+              </span>
+            </div>
             {openId === c.id && (
               <div className="px-4 pb-4 border-t border-white/[0.06] pt-3 space-y-2 max-h-64 overflow-y-auto">
                 {turns.length === 0 ? (

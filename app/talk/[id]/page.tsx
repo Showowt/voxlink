@@ -92,7 +92,13 @@ function TalkContent() {
 
   // User configuration from URL params
   const isHost = searchParams.get("host") === "true";
-  const userName = searchParams.get("name") || "User";
+  // Fall back to the saved profile name when the entry path carried no ?name=
+  // (link-joiners, direct URLs). Without this, our side announces no identity
+  // over the in-call handshake and the partner's history shows "Unknown".
+  const userName =
+    searchParams.get("name") ||
+    (typeof window !== "undefined" && localStorage.getItem("entrevoz_name")) ||
+    "User";
   const userLang = searchParams.get("lang") || "en";
   // Default target language — every connection surface seeds the partner's
   // language (&partnerLang= from dial/contacts//add//i, &hostLang= from the

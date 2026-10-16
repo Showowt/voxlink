@@ -639,7 +639,13 @@ function VideoCallContent() {
   }, [roomCode, router]);
 
   const isHost = searchParams.get("host") === "true";
-  const userName = searchParams.get("name") || "User";
+  // Fall back to the saved profile name when the entry path carried no ?name=
+  // (link-joiners, direct URLs). Without this, our side announces no identity
+  // over the in-call handshake and the partner's history shows "Unknown".
+  const userName =
+    searchParams.get("name") ||
+    (typeof window !== "undefined" && localStorage.getItem("entrevoz_name")) ||
+    "User";
   // Guest: if hostLang is provided, default to opposite language so translation works immediately
   const hostLang = searchParams.get("hostLang");
   const langParam = searchParams.get("lang");
