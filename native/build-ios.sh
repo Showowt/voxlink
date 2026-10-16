@@ -5,6 +5,8 @@
 #   ASC_KEY_PATH=/path/AuthKey_XXXX.p8 ASC_KEY_ID=XXXX bash native/build-ios.sh
 # ASC_ISSUER_ID defaults to the team's known issuer id.
 set -euo pipefail
+# Point at full Xcode without needing `sudo xcode-select` (CLT can't build iOS).
+export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 cd "$(dirname "$0")/../ios/App"
 
 ASC_ISSUER_ID="${ASC_ISSUER_ID:-18ea1a6b-9f32-4076-b95b-56b7f0955a4c}"
@@ -20,6 +22,7 @@ xcodebuild clean archive \
   -configuration Release \
   -destination 'generic/platform=iOS' \
   -archivePath build/App.xcarchive \
+  -skipPackagePluginValidation \
   -allowProvisioningUpdates \
   -authenticationKeyPath "$ASC_KEY_PATH" \
   -authenticationKeyID "$ASC_KEY_ID" \
