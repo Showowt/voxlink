@@ -172,3 +172,66 @@
 - Dial-code decline/cancel and declined-from-CallKit forwarding swallowed inside native-call listener — The cited `.catch(() => {})` swallows at /Users/philmcgill/machinemind/machinemind-builds/voxlink/app/lib/native-call.ts:76 and 80-85 have no realistic trigger, and the stated severity is wrong. (1) L
 - All WhatsApp invite buttons are dead in the iOS app (window.open is a no-op in the Capacitor shell) — host then enters an empty room believing the inv — The cited window.open('https://wa.me/...') call sites all exist as described, but the premise that window.open is a no-op in the Capacitor shell is contradicted by the shell's own vendored source. Thi
 - voice_clones upsert never refreshes expires_at — after the first 24h every call re-clones the voice (direct ElevenLabs spend, ~$0.50-1.00/call) — The upsert at app/api/voice-clone/route.ts:189-195 does omit expires_at, but the finding's trigger is impossible: the only caller (hooks/useVoiceDubbing.ts:96) generates sessionKey as `session-${Date.
+
+# ═══ PERFECT-CALL-CONNECTION AUDIT (2026-10-16, 36 agents) ═══
+*19 confirmed (7 critical), 11 refuted. 11 fixed this pass.*
+
+## Fixed (deployed)
+
+- **[1] HIGH** Hole #1: 60s TTL is too short against the exact failure this system exists to fix (iOS frozen 60-90s) — caller must keep
+- **[2] HIGH** Hole #5: claimed status + re-poll re-ring — after accept, the persisted row plus a second device (dial-code shared) can 
+- **[3] CRITICAL** CORE BUG — callee listens on the CURRENT device id only, never on its historical/mirror ids, so any drift = silent no-ri
+- **[4] CRITICAL** deriveDialCode(newId) != deriveDialCode(oldId) — a dial-code call ALSO misses during drift (dial code is not drift-stabl
+- **[7] HIGH** getDeviceId() mint path writes cookie but NOT IndexedDB, letting a transient mint win reconciliation and permanently reb
+- **[8] CRITICAL** Asymmetric video-minutes gate: CALLEE blocked by 402 while CALLER sits in a dead one-sided room (top ACCEPT→CONNECTED fa
+- **[11] CRITICAL** Store-and-forward MUST hook the SAME foreground triggers as the listener rebuild — and useIncomingCall is MISSING the na
+- **[12] CRITICAL** Capacitor App plugin DOES expose a native appStateChange/resume event and it is more reliable than web visibilitychange 
+- **[13] HIGH** iOS Safari/WKWebView quirk: visibilitychange is unreliable on lock-screen and cross-app transitions — HTTP pull must not
+- **[14] HIGH** Dead-event bug: self-healing emits voxlink-* events but AppShell listens for entrevoz-* — hard-recovery reload never fir
+- **[15] HIGH** Two send surfaces (i/[code] callNow, add call) navigate WITHOUT ring=1/rt/pd — no re-ring loop ever runs, so the DB row 
+
+## DEFERRED (tracked)
+
+### [5] HIGH (identity-consistency) History call-back dials participant_2, which was captured under whatever id the PARTNER had at call time — if the partne
+- `app/history/page.tsx`
+- Fix: The proposed fix's PRIMARY claim is FALSE against the current code and must not be relied on as-is. It asserts "if the callee listens on all its historical ids, a stored old participant_2/contact_device_id still reaches it... requires no migration." But the callee does NOT listen on historical ids anywhere:
+- Live subs
+
+### [6] HIGH (identity-consistency) Directory upsert is keyed on device_id, so a drifted id creates a SECOND directory row — the old dial code keeps resolvi
+- `app/api/directory/route.ts`
+- Fix: Fix the DRIFT, not the directory key. The decisive, minimal fix is upstream in device-id.ts: make identity invariant so a second directory row never appears and old_code never goes stale.
+
+PRIMARY FIX (collapses the whole finding): Eliminate the sync-mint-before-reconcile window in getDeviceId(). Today it checks localS
+
+### [9] CRITICAL (accept-to-connect) No media watchdog on the Daily path: both sides show 'Connected!' on signaling join while TURN-relayed media never arriv
+- `app/lib/daily-connection.ts`
+- Fix: The proposed fix is directionally correct (add a ~12s media-arrival watchdog; gate the 'connected' UI/ringback-stop on hasRemoteStream, not hasPartner alone) but is INCOMPLETE in two load-bearing ways:
+
+1. ARM THE WATCHDOG INSIDE daily-connection.ts, keyed off first signaling-join — NOT off page.tsx's onStatusChange. R
+
+### [10] HIGH (accept-to-connect) Consent sheet silently aborts the Daily join → one-sided room if only one party has granted AI consent
+- `app/call/[id]/page.tsx`
+- Fix: Proposed fix part (a) is WRONG and must not ship. It asserts "Daily video/audio is not an AI third-party send." The consent sheet itself (AIConsentSheet.tsx:78-87) explicitly discloses Daily.co as a recipient of "Live call audio and video," and the gate comment (page.tsx:1399-1400) states "joining sends call media to D
+
+### [16] CRITICAL (e2e-realworld-coverage) No test proves the HTTP pull backbone works when the Realtime socket NEVER recovers — broadcast and postgres_changes bot
+- `hooks/useIncomingCall.ts`
+- Fix: Add native/e2e-saf-http-pull-only.mjs (new, non-redundant — it strengthens the existing e2e-store-forward-ring-test.mjs, which already proves HTTP pull on wake but LETS THE SOCKET RECOVER before asserting). Corrections to the proposed fix:
+
+1. DROP the postgres_changes premise. The shipped useIncomingCall.ts uses only 
+
+### [17] HIGH (e2e-realworld-coverage) No test covers invite delivery across callee IDENTITY DRIFT — the durable mirror can re-address the device mid-flight an
+- `app/lib/language-os/device-id.ts`
+- Fix: Keep the new test file native/e2e-saf-identity-drift.mjs and its two assertions, but correct these points:
+
+1) FRAME IT HONESTLY AS A REGRESSION GUARD, NOT A RED REPRO. Against current code the test PASSES: ensureStableDeviceId (device-id.ts:200-206) writes `winner` into localStorage BEFORE dispatching `device-id-resto
+
+### [18] HIGH (e2e-realworld-coverage) No test proves a callee on a STALE cached bundle is force-updated — the first real failure was a zombie service worker p
+- `public/sw.js`
+- Fix: The gap is real; add native/e2e-saf-stale-bundle.mjs, but fix these defects in the proposed test:
+
+PART A (self-destruct proof) — two corrections:
+- RACE: After register('/sw.js') the sequence install->skipWaiting->activate runs, and unregister()/cache-eviction happen DURING activate asynchronously. A single reload() t
+
+### [19] HIGH (e2e-realworld-coverage) No test asserts TTL / expiry semantics — an invite older than 60s must NOT ring, and a re-ring past TTL must be ignored,
+- `hooks/useIncomingCall.ts`
+- Fix: Add native/e2e-saf-ttl.mjs (pure-HTTP core + optional browser arm, matching e2e-invite-test.mjs / e2e-store-forward-ring-test.mjs). The finding's instinct is correct, but it must be rewritten against the ACTUAL mechanism: TTL = a created_at >= now()-60s read-window in /api/ring/pending (NOT an expires_at column, and NO
