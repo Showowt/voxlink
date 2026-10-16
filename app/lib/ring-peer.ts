@@ -88,7 +88,7 @@ export async function startRingPeerListener(
 
   peer.on("error", (err: { type?: string }) => {
     // `unavailable-id` = another tab/instance already holds this ring id — fine,
-    // it will handle invites. Other errors: leave the peer; PeerJS self-retries.
+    // it will handle invites.
     if (err?.type === "unavailable-id" && !destroyed) {
       destroyed = true;
       try {
@@ -100,8 +100,34 @@ export async function startRingPeerListener(
     }
   });
 
+  // PeerJS does NOT auto-reconnect to its signaling server (the old comment
+  // claiming it "self-retries" was wrong) — one iOS background cycle left
+  // this fallback rail permanently deaf. Reconnect when disconnected while
+  // visible, and on foreground return.
+  peer.on("disconnected", () => {
+    if (destroyed || !peer || peer.destroyed) return;
+    if (document.visibilityState !== "visible") return; // resume handler covers it
+    try {
+      peer.reconnect();
+    } catch {
+      /* dead peer — foreground handler rebuilds */
+    }
+  });
+  const onPeerVisibility = () => {
+    if (document.visibilityState !== "visible" || destroyed) return;
+    if (peer && peer.disconnected && !peer.destroyed) {
+      try {
+        peer.reconnect();
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+  document.addEventListener("visibilitychange", onPeerVisibility);
+
   return () => {
     destroyed = true;
+    document.removeEventListener("visibilitychange", onPeerVisibility);
     try {
       peer?.destroy();
     } catch {

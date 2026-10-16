@@ -8,9 +8,21 @@ import { startRingPeerListener } from "@/app/lib/ring-peer";
 import { deriveDialCode } from "@/app/lib/dial-code";
 import { isBlocked, isThrottled } from "@/app/lib/call-block";
 
-// Subscribes this device to its own ring channel and surfaces an incoming call
-// invite. Mounted once, app-wide (see IncomingCallOverlay). One invite at a
-// time; stale invites (>60s) are ignored.
+// Subscribes this device to its own ring channels and surfaces incoming call
+// invites. Mounted once, app-wide (see IncomingCallOverlay).
+//
+// LIFECYCLE IS THE WHOLE GAME on iOS: WKWebView freezes JS and kills the
+// Realtime websocket on every lock/background — and a zombie socket still
+// REPORTS 'joined' while being deaf. The original one-shot subscription left
+// phones unreachable after any background cycle ("caller rings, callee's
+// phone never rings"). This version rebuilds its subscriptions:
+//   - unconditionally after returning from >3s hidden (zombies lie),
+//   - on pageshow / network 'online',
+//   - on CLOSED / CHANNEL_ERROR / TIMED_OUT with capped backoff (never while
+//     hidden — frozen timers would burst-fire on resume),
+//   - on 'entrevoz:device-id-restored' (identity recovery re-addresses us).
+// Dedupe state (handledRooms etc.) lives OUTSIDE rebuilds so caller re-rings
+// after a rebuild don't double-ring.
 export function useIncomingCall() {
   const [invite, setInvite] = useState<CallInvite | null>(null);
   const inviteRef = useRef<CallInvite | null>(null);
@@ -20,27 +32,24 @@ export function useIncomingCall() {
     const supabase = createBrowserClient();
     if (!supabase) return;
 
-    let deviceId = "";
-    try {
-      deviceId = getDeviceId();
-    } catch {
-      return;
-    }
-    if (!deviceId) return;
-
     let cancelled = false;
-    const handledRooms = new Set<string>();
-    const cleanups: Array<() => void> = [];
 
-    // Shared receiver for BOTH transports + BOTH addresses (device id + code).
+    // ── Dedupe state survives rebuilds ───────────────────────────────────────
+    const handledRooms = new Set<string>();
+    const claimedDevices = new Set<string>();
+    const declinedRooms = new Set<string>();
+
     const receiveInvite = (p: CallInvite) => {
       if (cancelled) return;
       if (!p?.room || !p?.fromDevice) return;
       if (Date.now() - (p.t || 0) > 60000) return; // stale — ignore
       if (isBlocked(p.fromDevice)) return; // silenced caller
-      if (isThrottled(p.fromDevice, Date.now())) return; // spam throttle
-      if (handledRooms.has(p.room)) return; // dedupe across transports/addresses
+      if (handledRooms.has(p.room)) {
+        // Re-broadcast of a ring we're already showing — ignore quietly.
+        return;
+      }
       if (inviteRef.current) return; // already ringing for another call
+      if (isThrottled(p.fromDevice, Date.now())) return; // spam throttle
       handledRooms.add(p.room);
       inviteRef.current = p;
       setInvite(p);
@@ -51,11 +60,6 @@ export function useIncomingCall() {
         setInvite(null);
       }
     };
-
-    // Someone claimed OUR invite — surface a "X just joined" celebration so
-    // the inviter can call them while excitement is peak. Deduped by device
-    // (the signal can arrive on both listening addresses).
-    const claimedDevices = new Set<string>();
     const handleInviteClaimed = (p?: {
       name?: string;
       deviceId?: string;
@@ -79,11 +83,6 @@ export function useIncomingCall() {
         /* ignore */
       }
     };
-
-    // The callee declined OUR outgoing call — tell whatever page is showing
-    // "Waiting for partner…" (the caller shouldn't wait forever). Deduped
-    // because the signal can arrive on both transports/addresses.
-    const declinedRooms = new Set<string>();
     const handleDeclined = (room?: string) => {
       if (!room || declinedRooms.has(room)) return;
       declinedRooms.add(room);
@@ -96,39 +95,46 @@ export function useIncomingCall() {
       }
     };
 
-    // Listen on BOTH the device id (used by saved contacts) and the short dial
-    // code (used by "dial a code" / QR), so either reaches this device.
-    const addresses = Array.from(
-      new Set([deviceId, deriveDialCode(deviceId)]),
-    ).filter(Boolean);
+    // ── Subscription machinery (rebuildable) ─────────────────────────────────
+    let teardownCurrent: (() => void) | null = null;
+    let rebuilding = false;
+    let lastBuildAt = 0;
+    let retryCount = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const RETRY_DELAYS = [1000, 2000, 5000, 5000, 5000];
 
-    for (const address of addresses) {
-      let peerCleanup: (() => void) | null = null;
-      let peerStarted = false;
+    const scheduleRetry = () => {
+      if (cancelled || retryTimer) return;
+      if (document.visibilityState === "hidden") return; // resume handler covers us
+      if (retryCount >= RETRY_DELAYS.length) return; // give up until next resume
+      const delay = RETRY_DELAYS[retryCount++];
+      retryTimer = setTimeout(() => {
+        retryTimer = null;
+        rebuild("retry");
+      }, delay);
+    };
 
-      const channel = supabase.channel(ringChannelName(address), {
-        config: { broadcast: { self: false } },
-      });
-      channel.on("broadcast", { event: "call-invite" }, (msg) =>
-        receiveInvite(msg.payload as CallInvite),
-      );
-      channel.on("broadcast", { event: "call-canceled" }, (msg) =>
-        cancelInvite((msg.payload as { room?: string })?.room),
-      );
-      channel.on("broadcast", { event: "call-declined" }, (msg) =>
-        handleDeclined((msg.payload as { room?: string })?.room),
-      );
-      channel.on("broadcast", { event: "invite-claimed" }, (msg) =>
-        handleInviteClaimed(
-          msg.payload as { name?: string; deviceId?: string; lang?: string; t?: number },
-        ),
-      );
-      channel.subscribe((status) => {
-        // Realtime unavailable (anon disabled) → PeerJS fallback for this address.
-        if (
-          (status === "CHANNEL_ERROR" || status === "TIMED_OUT") &&
-          !peerStarted
-        ) {
+    const build = () => {
+      const deviceId = (() => {
+        try {
+          return getDeviceId();
+        } catch {
+          return "";
+        }
+      })();
+      if (!deviceId) return () => {};
+
+      const addresses = Array.from(
+        new Set([deviceId, deriveDialCode(deviceId)]),
+      ).filter(Boolean);
+
+      const cleanups: Array<() => void> = [];
+      for (const address of addresses) {
+        let peerCleanup: (() => void) | null = null;
+        let peerStarted = false;
+
+        const startPeerFallback = () => {
+          if (peerStarted || cancelled) return;
           peerStarted = true;
           startRingPeerListener(address, receiveInvite, (event, room) => {
             if (event === "call-canceled") cancelInvite(room);
@@ -137,22 +143,117 @@ export function useIncomingCall() {
             if (cancelled) cleanup();
             else peerCleanup = cleanup;
           });
-        }
-      });
+        };
 
-      cleanups.push(() => {
-        try {
-          supabase.removeChannel(channel);
-        } catch {
-          /* ignore */
-        }
-        peerCleanup?.();
-      });
-    }
+        const channel = supabase.channel(ringChannelName(address), {
+          config: { broadcast: { self: false } },
+        });
+        channel.on("broadcast", { event: "call-invite" }, (msg) =>
+          receiveInvite(msg.payload as CallInvite),
+        );
+        channel.on("broadcast", { event: "call-canceled" }, (msg) =>
+          cancelInvite((msg.payload as { room?: string })?.room),
+        );
+        channel.on("broadcast", { event: "call-declined" }, (msg) =>
+          handleDeclined((msg.payload as { room?: string })?.room),
+        );
+        channel.on("broadcast", { event: "invite-claimed" }, (msg) =>
+          handleInviteClaimed(
+            msg.payload as { name?: string; deviceId?: string; lang?: string; t?: number },
+          ),
+        );
+        channel.subscribe((status) => {
+          if (cancelled) return;
+          if (status === "SUBSCRIBED") {
+            retryCount = 0; // healthy again
+            return;
+          }
+          if (
+            status === "CHANNEL_ERROR" ||
+            status === "TIMED_OUT" ||
+            status === "CLOSED"
+          ) {
+            // Second rail + scheduled rebuild. CLOSED was previously
+            // unhandled — the exact state a dead iOS socket leaves behind.
+            startPeerFallback();
+            scheduleRetry();
+          }
+        });
+
+        cleanups.push(() => {
+          try {
+            supabase.removeChannel(channel);
+          } catch {
+            /* ignore */
+          }
+          peerCleanup?.();
+        });
+      }
+      return () => cleanups.forEach((c) => c());
+    };
+
+    const rebuild = (reason: string) => {
+      if (cancelled || rebuilding) return;
+      // Throttle rebuild storms (visibility+online+pageshow can co-fire).
+      if (Date.now() - lastBuildAt < 2000) return;
+      rebuilding = true;
+      lastBuildAt = Date.now();
+      try {
+        teardownCurrent?.();
+        teardownCurrent = build();
+        console.log(`[Ring] listeners rebuilt (${reason})`);
+      } finally {
+        rebuilding = false;
+      }
+    };
+
+    // Initial build.
+    lastBuildAt = Date.now();
+    teardownCurrent = build();
+
+    // ── Resume/recovery triggers ─────────────────────────────────────────────
+    let hiddenAt = 0;
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAt = Date.now();
+        return;
+      }
+      // Returning to foreground: a zombie socket still claims 'joined', so if
+      // we were hidden long enough for iOS to have frozen us, rebuild
+      // UNCONDITIONALLY — one cheap round trip buys a working ring channel.
+      if (hiddenAt && Date.now() - hiddenAt > 3000) {
+        retryCount = 0;
+        rebuild("foreground");
+      }
+      hiddenAt = 0;
+    };
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) {
+        retryCount = 0;
+        rebuild("bfcache-restore");
+      }
+    };
+    const onOnline = () => {
+      retryCount = 0;
+      rebuild("online");
+    };
+    const onIdRestored = () => {
+      retryCount = 0;
+      rebuild("device-id-restored");
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("entrevoz:device-id-restored", onIdRestored);
 
     return () => {
       cancelled = true;
-      cleanups.forEach((c) => c());
+      if (retryTimer) clearTimeout(retryTimer);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("entrevoz:device-id-restored", onIdRestored);
+      teardownCurrent?.();
     };
   }, []);
 

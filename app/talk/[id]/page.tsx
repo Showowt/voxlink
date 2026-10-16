@@ -145,6 +145,31 @@ function TalkContent() {
     setInCall(isConnected);
     return () => setInCall(false);
   }, [isConnected]);
+
+  // RE-RING loop (see call page): re-send the audio invite every 2.5s until
+  // the partner connects — covers callees whose socket died and rejoined.
+  const ringTarget = searchParams.get("rt") || searchParams.get("pd") || "";
+  useEffect(() => {
+    if (!autoRing || !isHost || !ringTarget || isConnected || partnerDeclined) return;
+    const iv = setInterval(() => {
+      import("@/app/lib/ring-signal").then(({ sendCallInvite }) =>
+        sendCallInvite(
+          ringTarget,
+          {
+            room: roomId,
+            type: "audio",
+            fromDevice: getDeviceId(),
+            fromName: userName,
+            fromLang: userLang,
+            targetLang: defaultTargetLang,
+          },
+          { skipPush: true },
+        ),
+      ).catch(() => {});
+    }, 2500);
+    return () => clearInterval(iv);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRing, isHost, ringTarget, isConnected, partnerDeclined, roomId]);
   const [isRoomFull, setIsRoomFull] = useState(false);
   const [partnerName, setPartnerName] = useState("");
   const [partnerLang, setPartnerLang] = useState<string | null>(null);

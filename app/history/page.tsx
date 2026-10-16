@@ -243,7 +243,7 @@ function CallsView() {
       /* ring is best-effort — they can still join from the room */
     }
     const pn = c.partner_name ? `&pn=${encodeURIComponent(c.partner_name)}` : "";
-    const seed = `&name=${encodeURIComponent(myName)}&pd=${encodeURIComponent(c.participant_2)}${pn}`;
+    const seed = `&name=${encodeURIComponent(myName)}&pd=${encodeURIComponent(c.participant_2)}&rt=${encodeURIComponent(c.participant_2)}${pn}`;
     router.push(
       type === "video"
         ? `/call/${code}?lang=${myLang}&hostLang=${theirLang}&host=true&ring=1${seed}`

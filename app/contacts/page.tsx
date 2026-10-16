@@ -198,7 +198,7 @@ export default function ContactsPage() {
     });
     // Only seed pd for a real device id — a code can't be saved as a partner.
     const seed =
-      `&name=${encodeURIComponent(myName)}` +
+      `&name=${encodeURIComponent(myName)}&rt=${encodeURIComponent(ringTarget)}` +
       (isCodeContact(c)
         ? ''
         : `&pd=${encodeURIComponent(c.contact_device_id)}&pn=${encodeURIComponent(c.display_name)}`);

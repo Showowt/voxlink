@@ -765,6 +765,21 @@ function VideoCallContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomCode, isHost]);
 
+  // Navigating away (edge-swipe back, in-app nav) without End/pagehide left
+  // the callee ringing a ghost for 45s. Delayed timer survives StrictMode's
+  // mount-unmount-mount (remount clears it); a real unmount lets it fire.
+  const unmountCancelRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (unmountCancelRef.current) {
+      clearTimeout(unmountCancelRef.current);
+      unmountCancelRef.current = null;
+    }
+    return () => {
+      unmountCancelRef.current = setTimeout(() => cancelOutgoingRing(), 100);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Seed the partner's identity from the URL (set by dial/contacts/add/accept)
   // so contact-save + history work even if the in-call handshake never lands.
   useEffect(() => {
@@ -1443,6 +1458,37 @@ function VideoCallContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [error]);
 
+  // RE-RING loop: Realtime broadcast 'ok' only means the SERVER accepted it —
+  // a callee whose socket died (iOS lock/background) receives nothing, and
+  // there is no delivery ack. Their device rejoins its channels within a few
+  // seconds of returning to the foreground, so keep re-sending the invite
+  // every 2.5s while we're waiting; the receiver dedupes by room. Push fires
+  // only on the first attempt (dial page already sent it).
+  const ringTarget = searchParams.get("rt") || searchParams.get("pd") || "";
+  useEffect(() => {
+    if (!autoRing || !isHost || !ringTarget) return;
+    if (hasPartner || inLobby || noAnswer || partnerDeclined || status === "error") return;
+    const iv = setInterval(() => {
+      void sendCallInvite(
+        ringTarget,
+        {
+          room: roomCode,
+          type: "video",
+          fromDevice: getDeviceId(),
+          fromName:
+            searchParams.get("name") ||
+            localStorage.getItem("entrevoz_name") ||
+            "Someone",
+          fromLang: userLang,
+          targetLang: expectedPartnerLang,
+        },
+        { skipPush: true },
+      );
+    }, 2500);
+    return () => clearInterval(iv);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRing, isHost, ringTarget, hasPartner, inLobby, noAnswer, partnerDeclined, status, roomCode]);
+
   // Audible ringback while the callee's phone rings (stops on join/timeout/
   // decline/error).
   useEffect(() => {
@@ -1463,7 +1509,9 @@ function VideoCallContent() {
   }, [inLobby, cyrano]);
 
   const handleLobbyBack = useCallback(() => {
+    cancelOutgoingRing(); // backing out must stop the callee's phone
     router.push("/");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2434,19 +2482,24 @@ function VideoCallContent() {
                         </p>
                         <button
                           onClick={async () => {
-                            // Re-ring the partner on the AUDIO rail — switching
-                            // alone would leave them waiting in the video room.
-                            const pd = searchParams.get("pd") || "";
+                            // Re-ring the partner on the AUDIO rail in a NEW
+                            // room — the receiver dedupes invites per room, so
+                            // reusing the video room's code silently dropped
+                            // the audio invite.
+                            const pd = searchParams.get("pd") || ringTarget;
+                            const { generateRoomCode } = await import("@/app/lib/room-code");
+                            const audioRoom = generateRoomCode();
+                            const myName =
+                              searchParams.get("name") ||
+                              localStorage.getItem("entrevoz_name") ||
+                              "Someone";
                             if (pd) {
                               try {
                                 await sendCallInvite(pd, {
-                                  room: roomCode,
+                                  room: audioRoom,
                                   type: "audio",
                                   fromDevice: getDeviceId(),
-                                  fromName:
-                                    searchParams.get("name") ||
-                                    localStorage.getItem("entrevoz_name") ||
-                                    "Someone",
+                                  fromName: myName,
                                   fromLang: userLang,
                                   targetLang: expectedPartnerLang,
                                 });
@@ -2454,8 +2507,8 @@ function VideoCallContent() {
                                 /* they can still join by room code */
                               }
                             }
-                            const q = searchParams.toString();
-                            router.push(`/talk/${roomCode}${q ? `?${q}` : ""}`);
+                            const seed = `lang=${userLang}&partnerLang=${expectedPartnerLang}&host=true&ring=1&name=${encodeURIComponent(myName)}${pd ? `&pd=${encodeURIComponent(pd)}&rt=${encodeURIComponent(pd)}` : ""}`;
+                            router.push(`/talk/${audioRoom}?${seed}`);
                           }}
                           className="w-full py-4 rounded-xl bg-[#00E5A0] text-black font-bold text-base mb-3 min-h-[52px]"
                         >

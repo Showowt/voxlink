@@ -8,7 +8,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const BLOCK_KEY = "entrevoz_blocked";
-const THROTTLE_MAX = 3; // rings allowed from one source…
+const THROTTLE_MAX = 8; // rings allowed from one source… (retrying a call is NORMAL behavior — 3 silently ate the 4th attempt)
 const THROTTLE_WINDOW = 60000; // …per 60s
 
 function readBlocked(): string[] {

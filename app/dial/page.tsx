@@ -155,11 +155,12 @@ export default function DialPage() {
     // the resolved partner identity so the room saves the contact + history
     // without depending on the in-call handshake.
     const nameParam = `&name=${encodeURIComponent(name)}`;
-    const partnerParam = resolved
-      ? `&pd=${encodeURIComponent(resolved.deviceId)}${
-          resolved.displayName ? `&pn=${encodeURIComponent(resolved.displayName)}` : ""
-        }`
-      : "";
+    const partnerParam =
+      (resolved
+        ? `&pd=${encodeURIComponent(resolved.deviceId)}${
+            resolved.displayName ? `&pn=${encodeURIComponent(resolved.displayName)}` : ""
+          }`
+        : "") + `&rt=${encodeURIComponent(resolved?.deviceId || code)}`;
     router.push(
       type === "video"
         ? `/call/${room}?lang=${lang}&host=true&ring=1${langParam}${nameParam}${partnerParam}`

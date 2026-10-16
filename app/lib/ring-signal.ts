@@ -35,12 +35,16 @@ export function ringChannelName(deviceId: string): string {
 export async function sendCallInvite(
   targetDeviceId: string,
   invite: Omit<CallInvite, "t">,
+  opts?: { skipPush?: boolean },
 ): Promise<boolean> {
   // Also fire a VoIP push (best-effort) so a CLOSED device rings via native
   // CallKit — runs in parallel with the in-app Realtime/PeerJS invite.
-  import("./native-call")
-    .then(({ sendVoipPush }) => sendVoipPush(targetDeviceId, invite))
-    .catch(() => {});
+  // Re-ring loops pass skipPush so the push fires once, not every 2.5s.
+  if (!opts?.skipPush) {
+    import("./native-call")
+      .then(({ sendVoipPush }) => sendVoipPush(targetDeviceId, invite))
+      .catch(() => {});
+  }
 
   const viaRealtime = await sendCallInviteRealtime(targetDeviceId, invite);
   if (viaRealtime) return true;
@@ -77,12 +81,21 @@ async function sendCallInviteRealtime(
     channel.subscribe(async (status) => {
       if (status === "SUBSCRIBED") {
         try {
-          await channel.send({
+          // channel.send RESOLVES 'ok' | 'timed out' | 'error' — it does not
+          // throw. Treating any resolution as success skipped the PeerJS
+          // fallback in exactly the failure cases that matter.
+          const res = await channel.send({
             type: "broadcast",
             event: "call-invite",
             payload: { ...invite, t: Date.now() },
           });
-          // Let the message flush before we tear the channel down.
+          if (res !== "ok") {
+            done(false);
+            return;
+          }
+          // Let the message flush before we tear the channel down. NOTE:
+          // 'ok' is a SERVER ack — a broadcast to zero joined listeners
+          // still acks. The caller-side re-ring loop covers that gap.
           setTimeout(() => done(true), 600);
         } catch {
           done(false);

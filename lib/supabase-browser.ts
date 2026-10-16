@@ -23,7 +23,12 @@ export function createBrowserClient() {
     return browserClient;
   }
 
-  browserClient = createSupabaseBrowserClient(supabaseUrl, supabaseAnonKey);
+  browserClient = createSupabaseBrowserClient(supabaseUrl, supabaseAnonKey, {
+    // 10s heartbeat (default ~25s): after iOS kills the websocket, this is
+    // how fast the client NOTICES and reconnects — the deaf window for
+    // incoming call rings tracks this directly.
+    realtime: { heartbeatIntervalMs: 10000 },
+  });
   return browserClient;
 }
 
