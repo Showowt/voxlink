@@ -12,6 +12,10 @@
     {
       "path": "/api/cron/warm",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/ring-cleanup",
+      "schedule": "17 * * * *"
     }
   ]
 }
