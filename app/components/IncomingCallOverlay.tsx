@@ -13,6 +13,7 @@ import LanguagePick from "@/app/components/LanguagePick";
 // Routes where the user is already in a live session — don't interrupt them
 // with an incoming-call takeover there.
 import { getInCall } from "@/app/lib/call-state";
+import { diag } from "@/app/lib/diag";
 
 const FLAGS: Record<string, string> = {
   en: "🇺🇸", es: "🇪🇸", fr: "🇫🇷", de: "🇩🇪", it: "🇮🇹", pt: "🇧🇷",
@@ -233,6 +234,7 @@ export default function IncomingCallOverlay() {
 
   const accept = () => {
     const { room, type, fromLang, fromDevice, fromName } = invite;
+    diag("invite-accepted", { room, from: fromDevice, type });
     dismiss();
     // Seed the lobby with THIS device's own language as the default (not a
     // caller-imposed preset — the lobby still lets the callee change it), and
@@ -260,6 +262,7 @@ export default function IncomingCallOverlay() {
   };
 
   const decline = () => {
+    diag("invite-declined", { room: invite.room, from: invite.fromDevice });
     sendCallSignal(invite.fromDevice, "call-declined", invite.room).catch(() => {});
     dismiss();
   };

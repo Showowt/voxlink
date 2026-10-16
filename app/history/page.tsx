@@ -6,6 +6,7 @@ import { getLanguage } from "@/app/lib/languages";
 import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { useRouter } from "next/navigation";
 import { sendCallInvite } from "@/app/lib/ring-signal";
+import { diag } from "@/app/lib/diag";
 import { generateRoomCode } from "@/app/lib/room-code";
 import { formatDialCode } from "@/app/lib/dial-code";
 import {
@@ -230,6 +231,7 @@ function CallsView() {
     const myLang = localStorage.getItem("entrevoz_lang") || "en";
     const myName = localStorage.getItem("entrevoz_name") || "Someone";
     const theirLang = (c.language_pair || "").split("-")[1] || "en";
+    diag("invite-sent", { room: code, target: c.participant_2, type, surface: "history" });
     try {
       await sendCallInvite(c.participant_2, {
         room: code,

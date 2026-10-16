@@ -7,6 +7,7 @@ import { ringChannelName, type CallInvite } from "@/app/lib/ring-signal";
 import { startRingPeerListener } from "@/app/lib/ring-peer";
 import { deriveDialCode } from "@/app/lib/dial-code";
 import { isBlocked, isThrottled } from "@/app/lib/call-block";
+import { diag } from "@/app/lib/diag";
 
 // Subscribes this device to its own ring channels and surfaces incoming call
 // invites. Mounted once, app-wide (see IncomingCallOverlay).
@@ -53,6 +54,7 @@ export function useIncomingCall() {
       handledRooms.add(p.room);
       inviteRef.current = p;
       setInvite(p);
+      diag("invite-received", { room: p.room, from: p.fromDevice, type: p.type });
     };
     const cancelInvite = (room?: string) => {
       if (inviteRef.current && inviteRef.current.room === room) {
@@ -202,6 +204,7 @@ export function useIncomingCall() {
         teardownCurrent?.();
         teardownCurrent = build();
         console.log(`[Ring] listeners rebuilt (${reason})`);
+        if (reason !== "retry") diag("ring-rebuilt", { reason });
       } finally {
         rebuilding = false;
       }

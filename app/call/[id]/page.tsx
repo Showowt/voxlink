@@ -44,6 +44,7 @@ import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { reliablePost } from "@/app/lib/reliable-post";
 import { startRingback, stopRingback } from "@/app/lib/ringback";
 import { setInCall } from "@/app/lib/call-state";
+import { diag } from "@/app/lib/diag";
 import { sendCallInvite } from "@/app/lib/ring-signal";
 import { addTranslation } from "@/app/lib/translation-history";
 import { checkMicPermission } from "@/app/lib/mic-permission";
@@ -1403,7 +1404,9 @@ function VideoCallContent() {
       // Store cyrano preference in ref - activation handled by useEffect
       cyranoEnabledOnJoinRef.current = settings.cyranoEnabled;
       setInLobby(false);
+      diag("joined-room", { room: roomCode, autoRing: searchParams.get("ring") === "1", type: "video" });
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
@@ -1427,8 +1430,9 @@ function VideoCallContent() {
           videoEnabled: true,
           cyranoEnabled: false,
         });
-      } catch {
-        /* permission not granted yet — fall back to the lobby UI */
+      } catch (e) {
+        // iOS tap-gate or hardware denial — fall back to the lobby UI.
+        diag("auto-join-blocked", { room: roomCode, err: e instanceof Error ? e.name : "unknown" });
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1446,10 +1450,19 @@ function VideoCallContent() {
 
   // Publish live-call state for the incoming-call overlay's busy detection.
   // Only a CONNECTED call counts — dead screens must never make us busy.
+  const partnerDiagSent = useRef(false);
   useEffect(() => {
     setInCall(hasPartner && status !== "error");
+    if (hasPartner && !partnerDiagSent.current) {
+      partnerDiagSent.current = true;
+      diag("partner-connected", { room: roomCode, type: "video" });
+    }
+    if (status === "error" && error) {
+      diag("call-error", { room: roomCode, error: String(error).slice(0, 120) });
+    }
     return () => setInCall(false);
-  }, [hasPartner, status]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasPartner, status, error]);
 
   // A failed video-room gate means the callee's phone is STILL ringing for a
   // room we'll never join — stop their ring.

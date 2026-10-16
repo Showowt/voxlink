@@ -13,6 +13,7 @@ import {
   isValidDialCode,
 } from "@/app/lib/dial-code";
 import { sendCallInvite } from "@/app/lib/ring-signal";
+import { diag } from "@/app/lib/diag";
 import { generateRoomCode } from "@/app/lib/room-code";
 import { registerDirectory, resolveDialCode } from "@/app/lib/directory";
 import LanguagePick from "@/app/components/LanguagePick";
@@ -139,6 +140,7 @@ export default function DialPage() {
       });
     }
 
+    diag("invite-sent", { room, target: resolved?.deviceId || code, type, surface: "dial" });
     // Ring the code's owner, then enter the room as host.
     await sendCallInvite(code, {
       room,

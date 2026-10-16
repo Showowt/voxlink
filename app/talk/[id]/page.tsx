@@ -25,6 +25,7 @@ import { getDeviceId } from "@/app/lib/language-os/device-id";
 import { reliablePost } from "@/app/lib/reliable-post";
 import { startRingback, stopRingback } from "@/app/lib/ringback";
 import { setInCall } from "@/app/lib/call-state";
+import { diag } from "@/app/lib/diag";
 import { addTranslation } from "@/app/lib/translation-history";
 import { checkMicPermission } from "@/app/lib/mic-permission";
 import { ensureAIConsent } from "@/app/lib/ai-consent";
@@ -141,10 +142,20 @@ function TalkContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoRing, isHost, isConnected, partnerDeclined]);
   // Busy only while a partner is actually connected.
+  const talkDiagSent = useRef(false);
   useEffect(() => {
     setInCall(isConnected);
+    if (isConnected && !talkDiagSent.current) {
+      talkDiagSent.current = true;
+      diag("partner-connected", { room: roomId, type: "audio" });
+    }
     return () => setInCall(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConnected]);
+  useEffect(() => {
+    diag("joined-room", { room: roomId, autoRing, type: "audio" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // RE-RING loop (see call page): re-send the audio invite every 2.5s until
   // the partner connects — covers callees whose socket died and rejoined.

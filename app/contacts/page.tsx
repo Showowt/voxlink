@@ -8,6 +8,7 @@ import { BackButton } from '@/app/components/ui/BackButton';
 // always empty.
 import { getDeviceId } from '@/app/lib/language-os/device-id';
 import { sendCallInvite } from '@/app/lib/ring-signal';
+import { diag } from '@/app/lib/diag';
 import { generateRoomCode } from '@/app/lib/room-code';
 import { normalizeDialCode, isValidDialCode, formatDialCode } from '@/app/lib/dial-code';
 import { resolveDialCode } from '@/app/lib/directory';
@@ -188,6 +189,7 @@ export default function ContactsPage() {
     // to send. A code-sentinel contact rings by its dial code (the code IS an
     // address); a real contact rings by device id.
     const ringTarget = isCodeContact(c) ? codeOf(c) : c.contact_device_id;
+    diag('invite-sent', { room: code, target: ringTarget, type, surface: 'contacts' });
     await sendCallInvite(ringTarget, {
       room: code,
       type,
