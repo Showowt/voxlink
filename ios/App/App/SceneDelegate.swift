@@ -29,7 +29,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 // (Plugins.EntrevozCall undefined), so the VoIP token never registered and
 // every closed-app ring push died with no_token.
 final class EntrevozBridgeViewController: CAPBridgeViewController {
-    override open func capacitorDidLoad() {
+    override func capacitorDidLoad() {
         bridge?.registerPluginInstance(EntrevozCallPlugin())
     }
 }
