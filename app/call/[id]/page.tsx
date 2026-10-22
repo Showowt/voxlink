@@ -9,6 +9,7 @@ import {
   type ConnectionQuality,
 } from "../../lib/peer-connection";
 import { DailyConnection } from "../../lib/daily-connection";
+import { useWakeLock } from "@/hooks/useWakeLock";
 import { getSpeechCode, getFlag, getLanguage } from "../../lib/languages";
 import type {
   CaptionData,
@@ -677,6 +678,9 @@ function VideoCallContent() {
   // State
   const [status, setStatus] = useState<CallStatus>("loading");
   const [statusMessage, setStatusMessage] = useState("Iniciando...");
+  // Keep the screen awake while in the call (ringing → connected) so iOS doesn't
+  // auto-lock and suspend the WebView, freezing the Daily connection.
+  useWakeLock(!inLobby && status !== "error");
   const [error, setError] = useState<string | null>(null);
   const [hasPartner, setHasPartner] = useState(false);
   const [hasRemoteStream, setHasRemoteStream] = useState(false);
@@ -1223,6 +1227,11 @@ function VideoCallContent() {
         // Light: connection survived — refresh Daily's own tracks (they may be
         // dead after the OS seized the mic/cam) and resume playback.
         peer.refreshLocalMedia(!isMutedRef.current, !isVideoOffRef.current);
+        // CRITICAL: if we were still WAITING, a 'participant-joined' may have
+        // fired (and been missed) while we were suspended but the SFU stayed
+        // alive — re-scan now, or a resumed host stays blind to a partner who
+        // already joined (the HA96H5 asymmetry).
+        peer.resyncParticipants?.();
         remoteVideoRef.current?.play().catch(() => setNeedsAudioUnmute(true));
         // Re-arm: daily-js often still reports "joined" right after resume and
         // only notices the dead socket seconds later — check again shortly.
@@ -1573,8 +1582,15 @@ function VideoCallContent() {
     };
   }, [hasPartner, status]);
 
-  // "No answer" feedback — a host who's been waiting alone for 45s isn't left
-  // staring at a spinner forever (they may be offline / didn't pick up).
+  // "No answer" feedback — a host who's been waiting alone isn't left staring at
+  // a spinner forever. WAKE-AWARE: a CLOSED web callee woken by a push must
+  // receive it → open the app → tap Accept → lobby → getUserMedia → join, which
+  // was observed to take 60-125s. The old 45s window gave up — and CANCELED the
+  // persisted ring — before they could arrive, so even a perfect wake failed.
+  // Wait 90s, and on timeout do NOT cancel the stored invite: leave it ringing
+  // so a late callee can still pull it and join while we remain on this screen.
+  // Ringback + the 2.5s re-ring both stop via the noAnswer deps; an explicit End
+  // / lobby-back / page unload still cancels the ring (those call sites remain).
   useEffect(() => {
     if (hasPartner || inLobby || !isHost) {
       setNoAnswer(false);
@@ -1582,8 +1598,7 @@ function VideoCallContent() {
     }
     const t = setTimeout(() => {
       setNoAnswer(true);
-      cancelOutgoingRing(); // stop the callee's phone ringing for a dead call
-    }, 45000);
+    }, 90000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasPartner, inLobby, isHost, status]);

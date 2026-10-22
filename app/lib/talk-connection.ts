@@ -1,5 +1,6 @@
 import Peer, { DataConnection } from "peerjs";
 import { RoomSignal } from "./room-signal";
+import { diag } from "./diag";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ENTREVOZ TALK CONNECTION v2.0 - Bulletproof Face-to-Face Mode
@@ -96,6 +97,19 @@ export class TalkConnection {
   private lastPongTime: number = Date.now();
   private connectionHealthy: boolean = false;
 
+  // Colombia relay-first escalation (mirrors peer-connection.ts): symmetric NAT
+  // (Claro / Tigo / Movistar — effectively all CO mobile) can't form a direct
+  // path, so the data channel silently never opens even though TURN relay
+  // candidates were offered. Start 'all' (fast on wifi/fiber); if the data
+  // channel isn't open after 10s, rebuild forcing relay-only so it goes through
+  // TURN instead of dying on doomed direct candidates. This is what makes the
+  // AUDIO FALLBACK actually reliable when video (Daily) fails.
+  private useRelayOnly: boolean = false;
+  private relayEscalationTimer: NodeJS.Timeout | null = null;
+  private static readonly RELAY_ESCALATION_MS = 10000;
+  private iceServersRef: RTCIceServer[] = [];
+  private serverRef: { host: string; port: number; secure: boolean; path: string } | null = null;
+
   constructor(callbacks?: TalkConnectionCallbacks) {
     if (callbacks) {
       this.callbacks = callbacks;
@@ -146,6 +160,9 @@ export class TalkConnection {
       const servers = [
         { host: "0.peerjs.com", port: 443, secure: true, path: "/" },
       ];
+      // Kept for the relay-only rebuild if escalation fires.
+      this.iceServersRef = iceServers;
+      this.serverRef = servers[0];
 
       let connected = false;
       let lastError: Error | null = null;
@@ -169,7 +186,7 @@ export class TalkConnection {
               port: server.port,
               secure: server.secure,
               path: server.path,
-              config: { iceServers, iceCandidatePoolSize: 10 },
+              config: this.buildPeerConfig(iceServers),
               debug: 1,
             });
 
@@ -209,7 +226,7 @@ export class TalkConnection {
               port: server.port,
               secure: server.secure,
               path: server.path,
-              config: { iceServers, iceCandidatePoolSize: 10 },
+              config: this.buildPeerConfig(iceServers),
               debug: 1,
             });
             await this.waitForPeerOpen();
@@ -261,6 +278,9 @@ export class TalkConnection {
         this.startConnectionAttempts();
       }
 
+      // Colombia: if the data channel hasn't opened in 10s, force relay-only.
+      this.armRelayEscalation();
+
       return true;
     } catch (error: unknown) {
       const errorMessage =
@@ -268,6 +288,92 @@ export class TalkConnection {
       console.error("[Entrevoz] Initialization error:", error);
       this.setStatus("failed", errorMessage);
       return false;
+    }
+  }
+
+  // Shared PeerJS RTCPeerConnection config — honors the relay-only escalation.
+  private buildPeerConfig(iceServers: RTCIceServer[]) {
+    return {
+      iceServers,
+      iceCandidatePoolSize: 10,
+      iceTransportPolicy: (this.useRelayOnly
+        ? "relay"
+        : "all") as RTCIceTransportPolicy,
+    };
+  }
+
+  // After the signaling peer is up, start a 10s timer: if the data channel still
+  // isn't open (symmetric NAT ate the direct path), rebuild relay-only.
+  private armRelayEscalation(): void {
+    // Only the GUEST (the side driving the data connection) escalates: a guest
+    // relay candidate pairs with the host's relay candidate (already in its
+    // 'all' set), so forcing the guest relay-only is sufficient for both-sides
+    // symmetric NAT and avoids churning the host peer id while it merely waits.
+    if (this._isHost) return;
+    if (this.useRelayOnly) return; // already relay-only, nothing to escalate to
+    if (this.relayEscalationTimer) clearTimeout(this.relayEscalationTimer);
+    this.relayEscalationTimer = setTimeout(() => {
+      this.relayEscalationTimer = null;
+      if (this.isDestroyed || this._status === "connected") return;
+      if (this.dataConnection?.open) return;
+      console.log(
+        "[Entrevoz Talk] No data channel after 10s — escalating to relay-only (Colombia mode)",
+      );
+      diag("talk-relay-escalation", { room: this.roomId, isHost: this._isHost });
+      void this.rebuildPeerRelayOnly();
+    }, TalkConnection.RELAY_ESCALATION_MS);
+  }
+
+  private clearRelayEscalation(): void {
+    if (this.relayEscalationTimer) {
+      clearTimeout(this.relayEscalationTimer);
+      this.relayEscalationTimer = null;
+    }
+  }
+
+  // Rebuild the PeerJS peer forcing relay-only ICE, then re-drive the connection.
+  // A fresh peer id avoids an 'unavailable-id' race reclaiming the old one; the
+  // host re-advertises the new id over RoomSignal so the guest retargets it.
+  private async rebuildPeerRelayOnly(): Promise<void> {
+    if (this.isDestroyed || this.useRelayOnly) return;
+    const server = this.serverRef;
+    if (!server) return;
+    this.useRelayOnly = true;
+
+    this.cleanupDataConnection();
+    if (this.peer) {
+      try { this.peer.destroy(); } catch { /* ignore */ }
+      this.peer = null;
+    }
+
+    const rid = Math.random().toString(36).substring(2, 8);
+    this._peerId = this._isHost
+      ? `ev-${this.roomId}-rh-${rid}`
+      : `ev-${this.roomId}-rg-${rid}`;
+
+    try {
+      this.peer = new Peer(this._peerId, {
+        host: server.host,
+        port: server.port,
+        secure: server.secure,
+        path: server.path,
+        config: this.buildPeerConfig(this.iceServersRef),
+        debug: 1,
+      });
+      await this.waitForPeerOpen();
+      if (this.isDestroyed) return;
+      this.setupPeerListeners();
+      this.roomSignal?.updatePeerId(this._peerId);
+      console.log("[Entrevoz Talk] Rebuilt relay-only:", this._peerId);
+      if (this._isHost) {
+        this.setStatus("waiting", "Waiting for partner...");
+      } else {
+        this.connectionAttemptCount = 0;
+        this.attemptLoopActive = false;
+        this.startConnectionAttempts();
+      }
+    } catch (err) {
+      console.error("[Entrevoz Talk] Relay-only rebuild failed:", err);
     }
   }
 
@@ -483,6 +589,7 @@ export class TalkConnection {
       console.log("[Entrevoz] Data channel OPEN with:", conn.peer);
 
       this.stopConnectionAttempts();
+      this.clearRelayEscalation(); // connected — no need to escalate
       this.reconnectAttempts = 0;
       this.connectionHealthy = true;
       this.lastPongTime = Date.now();
@@ -713,7 +820,7 @@ export class TalkConnection {
             port: server.port,
             secure: server.secure,
             path: server.path,
-            config: { iceServers, iceCandidatePoolSize: 10 },
+            config: this.buildPeerConfig(iceServers),
             debug: 1,
           });
           await this.waitForPeerOpen();
@@ -727,12 +834,37 @@ export class TalkConnection {
     }, 8000);
   }
 
+  // Foreground resume after an iOS WKWebView suspension. While WAITING (no
+  // partner yet) the suspend freezes the guest's attempt-loop setTimeout chain
+  // and often kills the PeerJS signaling socket, so the callee never finishes
+  // connecting even though the caller is still ringing — and the page's
+  // reload-based recovery skips this case (it only fires once a partner existed).
+  // Revive the socket and re-drive attempts.
+  resume(): void {
+    if (this.isDestroyed || this._status === "connected") return;
+    try {
+      if (this.peer && !this.peer.destroyed && this.peer.disconnected) {
+        this.peer.reconnect();
+      }
+    } catch {
+      /* ignore — health check / attempt loop will retry */
+    }
+    // Guest re-drives connection against the (revived) peer; the frozen loop may
+    // be dead, so reset its guard + budget and restart.
+    if (!this._isHost) {
+      this.attemptLoopActive = false;
+      this.connectionAttemptCount = 0;
+      this.startConnectionAttempts();
+    }
+  }
+
   disconnect(): void {
     console.log("[Entrevoz] Disconnecting...");
     this.isDestroyed = true;
 
     this.stopKeepAlive();
     this.stopConnectionAttempts();
+    this.clearRelayEscalation();
 
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);

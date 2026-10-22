@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { TalkConnection, TalkMessage } from "../../lib/talk-connection";
+import { useWakeLock } from "@/hooks/useWakeLock";
 import { getSpeechCode, getFlag } from "../../lib/languages";
 import type {
   SpeechRecognitionEvent,
@@ -126,14 +127,18 @@ function TalkContent() {
   const [isConnected, setIsConnected] = useState(false);
   const [partnerDeclined, setPartnerDeclined] = useState(false);
   const [talkNoAnswer, setTalkNoAnswer] = useState(false);
-  // 45s no-answer cap — without it the audio dial-out rang (and re-rang)
-  // forever.
+  // Keep the screen awake while ringing/connected so iOS doesn't auto-lock and
+  // suspend the WebView (which freezes PeerJS and strands the call).
+  useWakeLock(!talkNoAnswer && !partnerDeclined);
+  // 90s no-answer cap — a push-woken closed phone needs 60-125s to open + join,
+  // so 45s abandoned before they could arrive. Longer window; the invite is left
+  // ringing (see below) so a late pickup still connects.
   useEffect(() => {
     if (!autoRing || !isHost || isConnected) {
       setTalkNoAnswer(false);
       return;
     }
-    const t = setTimeout(() => setTalkNoAnswer(true), 45000);
+    const t = setTimeout(() => setTalkNoAnswer(true), 90000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoRing, isHost, isConnected]);
@@ -326,12 +331,11 @@ function TalkContent() {
   }, [roomId, isHost]);
   useEffect(() => {
     if (!isHost) return;
-    const t = setTimeout(() => {
-      if (!hadPartnerRef.current) cancelOutgoingRing();
-    }, 45000);
+    // No timed auto-cancel: leave the persisted invite ringing so a push-woken
+    // callee can still answer while we remain on this screen (matches the 90s
+    // no-answer window). Only an explicit page unload / End cancels the ring.
     window.addEventListener("pagehide", cancelOutgoingRing);
     return () => {
-      clearTimeout(t);
       window.removeEventListener("pagehide", cancelOutgoingRing);
     };
   }, [isHost, cancelOutgoingRing]);
@@ -1159,8 +1163,13 @@ function TalkContent() {
     const attemptRecovery = () => {
       if (recoveringRef.current || !mountedRef.current) return;
       if (typeof navigator !== "undefined" && !navigator.onLine) return; // wait for 'online'
-      if (!hadPartnerRef.current) return; // never connected — nothing to recover
       if (isConnectedRef.current) return; // connection survived
+      // Lightweight first: revive the connection engine (reconnect the dead
+      // signaling socket + re-drive attempts). This covers the WAITING case —
+      // a callee suspended before ever connecting — which the reload path below
+      // skips entirely (it only fires once a partner existed).
+      connectionRef.current?.resume();
+      if (!hadPartnerRef.current) return; // waiting: resume() is enough, no reload
       recoveringRef.current = true;
       setTimeout(() => {
         if (!mountedRef.current || isConnectedRef.current) {

@@ -3,9 +3,35 @@ import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { getEntitlement } from "@/lib/entitlement";
 import { serviceBudgetOk } from "@/lib/budget";
 import { getMonthlyVideoMinutes, FREE_VIDEO_MINUTES } from "@/lib/video-minutes";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 const DAILY_API_KEY = process.env.DAILY_API_KEY;
 const DAILY_API_URL = "https://api.daily.co/v1";
+
+// Server-side telemetry when a video gate DENIES a join — the only way to tell
+// a "both joined, no media" failure caused by a gate (one side 402/503'd into a
+// dead room) from an SFU/connect failure. Fire-and-forget; never blocks.
+async function logGateHit(
+  deviceId: string,
+  roomCode: string,
+  kind: "budget" | "minutes",
+  side: "host" | "answerer",
+  status: number,
+): Promise<void> {
+  try {
+    const admin = supabaseAdmin();
+    if (!admin) return;
+    await admin.from("diag_events").insert({
+      device_id: deviceId ? deviceId.slice(0, 64) : null,
+      step: "gate-hit",
+      room: roomCode ? roomCode.slice(0, 24) : null,
+      detail: { service: "daily", kind, side, status },
+      ua: "server",
+    });
+  } catch {
+    /* telemetry must never break a call */
+  }
+}
 
 // Rate limiting
 const RATE_LIMIT = 10;
@@ -41,7 +67,15 @@ export async function POST(request: NextRequest) {
     // FREE_VIDEO_MINUTES per month; the token's eject_at_token_exp makes the
     // remaining allowance a HARD server-side cap (not client-honor-system).
     // Audio calls are unaffected (they run on free P2P, never through here).
-    if (!(await serviceBudgetOk("daily"))) {
+    //
+    // The global budget kill-switch gates NEW calls at the HOST (who creates the
+    // room). The ANSWERER is joining a room the host already opened — 503'ing
+    // them just leaves a one-sided dead room ("both tapped Join, media never
+    // connects"), the exact asymmetry the minute gate below was fixed to avoid.
+    // So the answerer bypasses the global budget gate (host-gating already caps
+    // new-call volume).
+    if (!isAnswerer && !(await serviceBudgetOk("daily"))) {
+      void logGateHit(deviceId, roomCode, "budget", "host", 503);
       return NextResponse.json(
         { error: "Video temporarily unavailable — audio calls still work", videoLimit: true },
         { status: 503 },
@@ -53,6 +87,7 @@ export async function POST(request: NextRequest) {
       const used = await getMonthlyVideoMinutes(ent.userId, deviceId);
       const remaining = FREE_VIDEO_MINUTES() - used;
       if (remaining <= 0) {
+        void logGateHit(deviceId, roomCode, "minutes", "host", 402);
         return NextResponse.json(
           {
             error: "Free video minutes used for this month — audio calls are unlimited",

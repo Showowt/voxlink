@@ -100,20 +100,31 @@ class SelfHealingSystem {
   // ─────────────────────────────────────────────────────────────────────────────
 
   private async registerServiceWorker() {
-    // Service worker INTENTIONALLY no longer registered. A stale-serving SW
-    // kept installed phones on old JS so fixes never landed — catastrophic for
-    // a continuously-shipped real-time calling app. We now actively unregister
-    // any leftover SW and clear its caches on load. (sw.js is a self-destruct
-    // stub that handles phones whose stale bundle still re-registers the old
-    // SW, since browsers fetch sw.js fresh independent of the app bundle.)
+    // A stale-SERVING SW (the old stale-while-revalidate sw.js) kept installed
+    // phones on old JS so fixes never landed — catastrophic for a continuously
+    // shipped real-time calling app. So we KILL the legacy caching worker and
+    // clear its caches on every load. But we must KEEP /push-sw.js — the
+    // push-only worker that wakes a closed phone for incoming calls (it has NO
+    // fetch handler and caches nothing, so it can't cause the stale-bundle bug).
     if ("serviceWorker" in navigator) {
       try {
         const regs = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(regs.map((r) => r.unregister().catch(() => false)));
+        await Promise.all(
+          regs.map(async (r) => {
+            const url =
+              r.active?.scriptURL ||
+              r.waiting?.scriptURL ||
+              r.installing?.scriptURL ||
+              "";
+            if (url.includes("/push-sw.js")) return; // keep the wake worker
+            await r.unregister().catch(() => false);
+          }),
+        );
       } catch {
         /* ignore */
       }
       try {
+        // Caches are always safe to clear — push-sw.js never caches app code.
         if (typeof caches !== "undefined") {
           const names = await caches.keys();
           await Promise.all(names.map((n) => caches.delete(n)));

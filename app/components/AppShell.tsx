@@ -6,6 +6,8 @@ import ErrorBoundary from "./ErrorBoundary";
 import BottomNav from "./BottomNav";
 import IncomingCallOverlay from "./IncomingCallOverlay";
 import AIConsentSheet from "./AIConsentSheet";
+import NotificationEnablePrompt from "./NotificationEnablePrompt";
+import PhoneCapturePrompt from "./PhoneCapturePrompt";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // APP SHELL - Wraps entire app with error handling and self-healing
@@ -63,10 +65,32 @@ export default function AppShell({ children }: AppShellProps) {
     }
     import("../lib/language-os/device-id")
       .then(({ ensureStableDeviceId }) => ensureStableDeviceId())
+      // Once identity is stable, (re)register this browser's Web Push
+      // subscription so a CLOSED/backgrounded web phone can be woken for calls.
+      // Silent + idempotent: only acts if notification permission was already
+      // granted (the first grant comes from the NotificationEnablePrompt button).
+      .then(() =>
+        import("../lib/web-push-client").then(({ ensureWebPushSubscribed }) =>
+          ensureWebPushSubscribed(),
+        ),
+      )
       .catch(() => {});
     import("../lib/reliable-post")
       .then(({ installOutboxFlush }) => installOutboxFlush())
       .catch(() => {});
+
+    // If the device id is recovered/changes mid-session, re-register the Web
+    // Push subscription under the new id (the stored sub's device_id would
+    // otherwise be stale and a caller dialing the new id wouldn't wake it).
+    const onIdRestored = () => {
+      import("../lib/web-push-client")
+        .then(({ ensureWebPushSubscribed }) => ensureWebPushSubscribed())
+        .catch(() => {});
+    };
+    window.addEventListener("entrevoz:device-id-restored", onIdRestored);
+    return () => {
+      window.removeEventListener("entrevoz:device-id-restored", onIdRestored);
+    };
   }, []);
 
   // Native shell only: register the VoIP token + handle CallKit answers so the
@@ -178,6 +202,8 @@ export default function AppShell({ children }: AppShellProps) {
       </div>
       <BottomNav />
       <IncomingCallOverlay />
+      <NotificationEnablePrompt />
+      <PhoneCapturePrompt />
       <AIConsentSheet />
     </ErrorBoundary>
   );

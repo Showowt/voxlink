@@ -10,6 +10,7 @@ import type {
   ConnectionQuality,
   PeerCallbacks,
 } from "./peer-connection";
+import { diag } from "./diag";
 
 export class DailyConnection {
   private call: DailyCall | null = null;
@@ -28,6 +29,13 @@ export class DailyConnection {
   private keepAliveInterval: ReturnType<typeof setInterval> | null = null;
   private lastPongTime = Date.now();
   private statsInterval: ReturnType<typeof setInterval> | null = null;
+  // Liveness while WAITING for a partner. Without this, a host that misses the
+  // single 'participant-joined' event (native WKWebView suspended during a long
+  // ring, or a silently-dead SFU socket) is stranded in 'waiting' forever and
+  // never connects — the primary "both joined, no media" root cause.
+  private waitWatchdog: ReturnType<typeof setInterval> | null = null;
+  private waitStartedAt = 0;
+  private waitBeaconed = false;
 
   constructor(callbacks: PeerCallbacks) {
     this.callbacks = callbacks;
@@ -71,6 +79,12 @@ export class DailyConnection {
         // 402 = free monthly video minutes exhausted (audio stays unlimited) —
         // surface a distinct message so the UI can offer the audio call path.
         const errBody = await roomRes.json().catch(() => ({}) as { error?: string; videoLimit?: boolean });
+        diag("daily-join-failed", {
+          room: this.roomId,
+          status: roomRes.status,
+          reason: errBody.videoLimit ? "video-limit" : "room-create",
+          isHost: this.isHost,
+        });
         if (roomRes.status === 402 && errBody.videoLimit) {
           throw new Error(errBody.error || "Free video minutes used — audio calls are unlimited");
         }
@@ -86,6 +100,21 @@ export class DailyConnection {
       const roomUrl = roomData.url;
       const roomToken = roomData.token;
       console.log("[Daily] Room URL:", roomUrl);
+
+      // Daily permits only ONE call object per page. A fast re-dial / navigation
+      // between rooms can leave a previous instance alive → createCallObject
+      // throws "Duplicate DailyIframe instances are not allowed" and the new call
+      // never joins (seen in diag as daily-join-failed on rapid redials). Tear
+      // down any lingering instance before creating ours.
+      try {
+        const existing = DailyIframe.getCallInstance();
+        if (existing) {
+          try { await existing.leave(); } catch { /* ignore */ }
+          try { existing.destroy(); } catch { /* ignore */ }
+        }
+      } catch {
+        /* getCallInstance unsupported — ignore */
+      }
 
       // Create the Daily call object — let Daily manage its OWN mic and camera.
       // Do NOT pass our localStream tracks here. Sharing audio tracks between
@@ -115,6 +144,7 @@ export class DailyConnection {
       });
 
       console.log("[Daily] Joined room successfully");
+      diag("daily-joined", { room: this.roomId, isHost: this.isHost });
 
       // Check if partner is already in the room
       const participants = this.call.participants();
@@ -123,8 +153,10 @@ export class DailyConnection {
       );
       if (remoteParticipants.length > 0) {
         this.handleParticipantJoined(remoteParticipants[0]);
-      } else if (isHost) {
-        this.setStatus("waiting", "Waiting for partner...");
+      } else {
+        if (isHost) this.setStatus("waiting", "Waiting for partner...");
+        // Re-poll for the partner instead of trusting one event (both roles).
+        this.startWaitWatchdog();
       }
 
       return true;
@@ -132,6 +164,7 @@ export class DailyConnection {
       const errorMessage =
         err instanceof Error ? err.message : "Connection failed";
       console.error("[Daily] Init error:", err);
+      diag("daily-join-failed", { room: this.roomId, reason: errorMessage.slice(0, 80), isHost: this.isHost });
       this.setStatus("failed", errorMessage);
       this.callbacks.onError?.(errorMessage);
       return false;
@@ -146,14 +179,19 @@ export class DailyConnection {
       if (this.isDestroyed || !event) return;
       const participant = event.participant;
       if (participant.local) return; // Ignore ourselves
-      // Enforce the 1:1 cap — a 3rd person opening the link would otherwise
-      // corrupt the two-way call. Only bind the FIRST remote participant.
-      const remotes = Object.values(this.call?.participants() ?? {}).filter(
-        (p) => !p.local,
-      );
-      if (remotes.length > 1) {
-        console.warn("[Daily] Room already full — ignoring extra participant");
-        return;
+      // Enforce the 1:1 cap ONLY once we're already connected to a partner —
+      // then a genuine 3rd person opening the link is rejected. BEFORE we
+      // connect, remotes.length>1 is almost always a stale/ghost participant
+      // lingering from a prior attempt alongside the REAL arrival; ignoring it
+      // would strand us in 'waiting' forever, so bind the newcomer.
+      if (this._status === "connected") {
+        const remotes = Object.values(this.call?.participants() ?? {}).filter(
+          (p) => !p.local,
+        );
+        if (remotes.length > 1) {
+          console.warn("[Daily] Room already full — ignoring extra participant");
+          return;
+        }
       }
       this.handleParticipantJoined(participant);
     });
@@ -214,6 +252,7 @@ export class DailyConnection {
     this.call.on("left-meeting", () => {
       if (this.isDestroyed) return;
       console.warn("[Daily] left-meeting — connection died (interruption?)");
+      diag("daily-left-meeting", { room: this.roomId, hadPartner: !!this.remoteStream });
       this.setStatus("reconnecting", "Reconnecting…");
     });
 
@@ -300,9 +339,77 @@ export class DailyConnection {
     }
   }
 
+  // ── Waiting watchdog ─────────────────────────────────────────────────────
+  // While we have no remote participant, re-poll every 3s instead of relying on
+  // a single 'participant-joined' event (which a suspended native WKWebView or a
+  // dead SFU socket can drop). Two jobs: (1) notice a partner we missed by
+  // re-scanning participants(); (2) notice a silently-dead SFU and rejoin.
+  private startWaitWatchdog(): void {
+    this.stopWaitWatchdog();
+    this.waitStartedAt = Date.now();
+    this.waitBeaconed = false;
+    this.waitWatchdog = setInterval(() => {
+      if (this.isDestroyed || !this.call) {
+        this.stopWaitWatchdog();
+        return;
+      }
+      if (this._status === "connected") {
+        this.stopWaitWatchdog();
+        return;
+      }
+      const state = this.getMeetingState();
+      // SFU died silently (no 'left-meeting' processed on a frozen WebView) →
+      // full rejoin, which re-scans participants on the way back in.
+      if (state !== "joined-meeting" && state !== "joining-meeting") {
+        this.stopWaitWatchdog();
+        void this.recover();
+        return;
+      }
+      // Alive but maybe we missed the join event — re-scan for a remote.
+      const remotes = Object.values(this.call.participants() ?? {}).filter(
+        (p) => !p.local,
+      );
+      if (remotes.length > 0) {
+        this.handleParticipantJoined(remotes[0]);
+        return;
+      }
+      // Still alone after ~25s — beacon once so a genuine no-show is visible in
+      // telemetry and distinguishable from a connect bug.
+      if (!this.waitBeaconed && Date.now() - this.waitStartedAt > 25000) {
+        this.waitBeaconed = true;
+        diag("waiting-no-partner", { room: this.roomId, isHost: this.isHost });
+      }
+    }, 3000);
+  }
+
+  private stopWaitWatchdog(): void {
+    if (this.waitWatchdog) {
+      clearInterval(this.waitWatchdog);
+      this.waitWatchdog = null;
+    }
+  }
+
+  // Public: re-scan for a remote participant we may have MISSED (e.g. a
+  // 'participant-joined' dropped while a native WKWebView was suspended but the
+  // SFU stayed alive). Idempotent — onPartnerJoined re-firing is harmless. The
+  // call page invokes this on resume when the meeting survived (light path).
+  resyncParticipants(): void {
+    if (this.isDestroyed || !this.call || this._status === "connected") return;
+    try {
+      const remotes = Object.values(this.call.participants() ?? {}).filter(
+        (p) => !p.local,
+      );
+      if (remotes.length > 0) this.handleParticipantJoined(remotes[0]);
+    } catch {
+      /* ignore */
+    }
+  }
+
   private handleParticipantJoined(participant: DailyParticipant): void {
+    this.stopWaitWatchdog(); // partner found — stop re-polling
     const name = participant.user_name || "Partner";
     console.log("[Daily] Partner joined:", name);
+    diag("daily-partner-seen", { room: this.roomId });
     this.callbacks.onPartnerJoined?.(name);
     this.callbacks.onPartnerInfo?.({ name });
     this.setStatus("connected", "Connected!");
@@ -460,6 +567,7 @@ export class DailyConnection {
     // Quietly discard the dead call object (do NOT use disconnect() — that
     // marks the instance destroyed and mutes callbacks).
     this.stopKeepAlive();
+    this.stopWaitWatchdog();
     if (this.statsInterval) {
       clearInterval(this.statsInterval);
       this.statsInterval = null;
@@ -482,16 +590,19 @@ export class DailyConnection {
 
     // Full re-join with the same identity/room. connect() re-fetches the room
     // (get-or-create) + a fresh meeting token and rebuilds all listeners.
-    return this.connect(this.roomId, this.isHost, this.userName, "video", undefined, {
+    const ok = await this.connect(this.roomId, this.isHost, this.userName, "video", undefined, {
       deviceId: this.deviceId,
       lang: this.lang,
     });
+    diag("daily-recover", { room: this.roomId, result: ok ? "rejoined" : "failed" });
+    return ok;
   }
 
   disconnect(): void {
     console.log("[Daily] Disconnecting...");
     this.isDestroyed = true;
     this.stopKeepAlive();
+    this.stopWaitWatchdog();
     if (this.statsInterval) {
       clearInterval(this.statsInterval);
       this.statsInterval = null;

@@ -15,6 +15,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { getDeviceId } from '@/app/lib/language-os/device-id';
+import { diag } from '@/app/lib/diag';
 import { useReducer, useRef, useEffect } from 'react';
 import type { Dispatch } from 'react';
 import Peer, { DataConnection, MediaConnection } from 'peerjs';
@@ -47,6 +48,12 @@ const LIVE_XLATE_MIN_WORDS = 3;
 const LIVE_XLATE_PER_MIN = 30; // per-receiver budget; finals are never budgeted
 const CONTEXT_LINES = 5; // speaker's previous lines sent as translation context
 const MAX_CONNECT_ATTEMPTS = 8;
+// Per-slot MEDIA watchdog: the data channel has its own retry loop, but once it
+// opens the media peer.call() fires ONCE. If that media leg's ICE fails (while
+// data stays healthy, so the heartbeat never flags it) the tile stays blank
+// forever. Re-call a few times if no stream arrives.
+const MEDIA_WATCHDOG_MS = 6000;
+const MAX_MEDIA_ATTEMPTS = 3;
 const WHISPER_SILENCE_END_MS = 900;
 const WHISPER_MIN_VOICE_MS = 300;
 const WHISPER_IDLE_ROTATE_MS = 5000;
@@ -455,12 +462,21 @@ function createGroupEngine(dispatch: Dispatch<Action>): GroupEngine {
   // ── Call state ──
   let phase: CallPhase = 'lobby';
   let left = false;
+  // Connect-funnel telemetry (mirrors the 1:1 funnel so group failures are
+  // visible): joined-room (phase active) → partner-connected (first remote peer
+  // media) → group-peer-seen per slot; call-error on phase error. Once-guards.
+  let groupJoinBeaconed = false;
+  let anyPeerConnected = false;
   let peer: Peer | null = null;
   let peerReconnects = 0;
   let localStream: MediaStream | null = null;
   const dataConns = new Map<number, DataConnection>();
   const mediaConns = new Map<number, MediaConnection>();
   const roster = new Map<number, RosterEntry>();
+  // Per-slot media watchdog state (see MEDIA_WATCHDOG_MS).
+  const mediaStreamSlots = new Set<number>(); // slots whose remote media arrived
+  const mediaRetryTimer = new Map<number, ReturnType<typeof setTimeout>>();
+  const mediaRetries = new Map<number, number>();
   let roomCode = '';
   let mySlot = -1;
   let myLang = 'en';
@@ -510,6 +526,12 @@ function createGroupEngine(dispatch: Dispatch<Action>): GroupEngine {
 
   function setPhase(p: CallPhase, error?: string) {
     phase = p;
+    if (p === 'active' && !groupJoinBeaconed) {
+      groupJoinBeaconed = true;
+      diag('joined-room', { room: roomCode, surface: 'group', type: 'group' });
+    } else if (p === 'error') {
+      diag('call-error', { room: roomCode, surface: 'group', error: (error || '').slice(0, 120) });
+    }
     dispatch({ type: 'SET_PHASE', phase: p, error });
   }
 
@@ -1450,6 +1472,9 @@ function createGroupEngine(dispatch: Dispatch<Action>): GroupEngine {
   function removeParticipant(slot: number) {
     const r = roster.get(slot);
     if (r?.connectTimer) clearTimeout(r.connectTimer);
+    clearMediaWatchdog(slot);
+    mediaStreamSlots.delete(slot);
+    mediaRetries.delete(slot);
     roster.delete(slot);
     lastSeen.delete(slot);
     silentPoor.delete(slot);
@@ -1514,6 +1539,17 @@ function createGroupEngine(dispatch: Dispatch<Action>): GroupEngine {
     }
     mc.on('stream', (remote: MediaStream) => {
       if (mediaConns.get(slot) !== mc) return;
+      // Media arrived — stop the media watchdog for this slot.
+      mediaStreamSlots.add(slot);
+      clearMediaWatchdog(slot);
+      // Per-peer media arrived = this slot connected. First one overall is the
+      // group analog of partner-connected (both-joined-no-media is visible when
+      // joined-room fires but this never does).
+      diag('group-peer-seen', { room: roomCode, slot });
+      if (!anyPeerConnected) {
+        anyPeerConnected = true;
+        diag('partner-connected', { room: roomCode, surface: 'group', type: 'group' });
+      }
       dispatch({
         type: 'PARTICIPANT_PATCH',
         slotIndex: slot,
@@ -1537,9 +1573,42 @@ function createGroupEngine(dispatch: Dispatch<Action>): GroupEngine {
     try {
       const mc = peer.call(remotePeerId, localStream, { metadata: { type: 'group', roomCode, slotIndex: mySlot } });
       adoptMediaConn(slot, mc);
+      armMediaWatchdog(slot, remotePeerId);
     } catch (err) {
       console.error('[GroupCall] Media call failed', err);
     }
+  }
+
+  function clearMediaWatchdog(slot: number) {
+    const t = mediaRetryTimer.get(slot);
+    if (t) {
+      clearTimeout(t);
+      mediaRetryTimer.delete(slot);
+    }
+  }
+
+  // If the remote media stream hasn't arrived MEDIA_WATCHDOG_MS after the call,
+  // the media leg's ICE likely failed (data channel is fine) — tear the dead
+  // media conn down and re-call, a few times, so the tile doesn't stay blank.
+  function armMediaWatchdog(slot: number, remotePeerId: string) {
+    clearMediaWatchdog(slot);
+    const t = setTimeout(() => {
+      mediaRetryTimer.delete(slot);
+      if (left || phase !== 'active') return;
+      if (mediaStreamSlots.has(slot)) return; // media arrived — done
+      if (!dataConns.get(slot)?.open) return; // data gone — data retry handles it
+      if (roster.get(slot)?.peerId !== remotePeerId) return; // slot reassigned
+      const n = mediaRetries.get(slot) ?? 0;
+      if (n >= MAX_MEDIA_ATTEMPTS) return;
+      mediaRetries.set(slot, n + 1);
+      console.warn(`[GroupCall] no media for slot ${slot} — re-calling (${n + 1}/${MAX_MEDIA_ATTEMPTS})`);
+      diag('group-media-retry', { room: roomCode, slot, attempt: n + 1 });
+      const old = mediaConns.get(slot);
+      mediaConns.delete(slot); // clear the guard so startMediaCall re-fires
+      try { old?.close(); } catch { /* already closed */ }
+      startMediaCall(slot, remotePeerId); // re-call + re-arm
+    }, MEDIA_WATCHDOG_MS);
+    mediaRetryTimer.set(slot, t);
   }
 
   function scheduleAttempt(slot: number, delay: number) {
@@ -1631,6 +1700,9 @@ function createGroupEngine(dispatch: Dispatch<Action>): GroupEngine {
     mediaConns.delete(slot);
     try { dc?.close(); } catch { /* already closed */ }
     try { mc?.close(); } catch { /* already closed */ }
+    clearMediaWatchdog(slot);
+    mediaStreamSlots.delete(slot);
+    mediaRetries.delete(slot); // fresh media-retry budget for the new link
     silentPoor.delete(slot);
     lastSeen.set(slot, Date.now());
     r.attempts = 0;
@@ -1773,6 +1845,10 @@ function createGroupEngine(dispatch: Dispatch<Action>): GroupEngine {
     dataConns.clear();
     mediaConns.forEach((mc) => { try { mc.close(); } catch { /* ignore */ } });
     mediaConns.clear();
+    mediaRetryTimer.forEach((t) => clearTimeout(t));
+    mediaRetryTimer.clear();
+    mediaStreamSlots.clear();
+    mediaRetries.clear();
     try { peer?.destroy(); } catch { /* ignore */ }
     peer = null;
   }

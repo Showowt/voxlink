@@ -16,6 +16,20 @@ const ALLOWED_STEPS = new Set([
   "ring-rebuilt",
   "app-load",
   "foreground",
+  "web-push-subscribed",
+  // Media-connect funnel (video=Daily) — so a "both joined, no media" failure is
+  // readable per-arrow from data instead of invisible:
+  //   joined-room → daily-joined → daily-partner-seen → partner-connected
+  "daily-joined", // SFU join succeeded
+  "daily-join-failed", // room/token/join threw (detail.reason / detail.status)
+  "daily-partner-seen", // remote participant-joined fired (media should follow)
+  "daily-recover", // interruption recovery attempt (detail.result)
+  "daily-left-meeting", // SFU connection died (interruption)
+  "waiting-no-partner", // host/answerer alone >25s after join (genuine no-show vs bug)
+  "gate-hit", // server-side video gate denied a join (detail.kind budget|minutes, side)
+  "talk-relay-escalation", // audio/talk forced relay-only after 10s (Colombia symmetric NAT)
+  "group-peer-seen", // group mesh: a remote peer's media arrived (detail.slot)
+  "group-media-retry", // group mesh: media leg re-called after no stream (detail.slot, attempt)
 ]);
 
 // POST /api/diag — call-chain telemetry from real devices (see app/lib/diag.ts).

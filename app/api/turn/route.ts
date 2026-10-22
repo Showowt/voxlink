@@ -109,8 +109,11 @@ async function getMeteredTurn(): Promise<RTCIceServer[] | null> {
 
 async function getTwilioTurn(): Promise<RTCIceServer[] | null> {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  if (!accountSid || !authToken) return null;
+  // Prefer a scoped API Key (SK… + secret); fall back to the master Auth Token.
+  const authUser = process.env.TWILIO_API_KEY_SID || accountSid;
+  const authPass =
+    process.env.TWILIO_API_KEY_SECRET || process.env.TWILIO_AUTH_TOKEN;
+  if (!accountSid || !authUser || !authPass) return null;
 
   try {
     const res = await fetch(
@@ -119,8 +122,7 @@ async function getTwilioTurn(): Promise<RTCIceServer[] | null> {
         method: "POST",
         headers: {
           Authorization:
-            "Basic " +
-            Buffer.from(`${accountSid}:${authToken}`).toString("base64"),
+            "Basic " + Buffer.from(`${authUser}:${authPass}`).toString("base64"),
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body: "Ttl=86400",

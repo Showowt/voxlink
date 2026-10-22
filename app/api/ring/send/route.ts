@@ -50,6 +50,42 @@ export async function POST(req: NextRequest) {
       .insert({ room, to_address: toAddress, status: "ringing", created_at: nowIso, ...fields });
     // 23505 = row already exists in a terminal state — intentionally not revived.
     if (insErr && insErr.code !== "23505") console.error("[ring/send] insert", insErr.message);
+    // FIRST ring for this room+address (a fresh insert — NOT a 2.5s re-ring tick,
+    // which hits the UPDATE branch above, and NOT a terminal row). Fire the
+    // out-of-band WEB PUSH so a CLOSED / backgrounded web phone wakes and rings.
+    // The push wakes the tab; its SW nudges it to pull this very invite. This is
+    // the web counterpart to the native VoIP push and the piece that was missing.
+    if (!insErr) {
+      try {
+        const { sendRingWebPush } = await import("@/app/lib/web-push");
+        await sendRingWebPush(toAddress, {
+          room,
+          type: fields.type === "audio" ? "audio" : "video",
+          fromName: fields.from_name || undefined,
+          fromLang: fields.from_lang || undefined,
+          fromDevice: fields.from_device,
+        });
+      } catch (e) {
+        console.error("[ring/send] webpush", e);
+      }
+      // Premium WhatsApp/SMS "tap to answer" — reaches a callee whose app is
+      // FULLY closed with zero setup on their end. All gating (premium caller +
+      // callee has a saved phone + callee not already in-app + rate-limit) is
+      // inside maybeSendCallWhatsApp; it no-ops unless Twilio is configured.
+      try {
+        const { maybeSendCallWhatsApp } = await import("@/app/lib/ring-whatsapp");
+        await maybeSendCallWhatsApp({
+          toAddress,
+          room,
+          type: fields.type === "audio" ? "audio" : "video",
+          fromDevice: fields.from_device,
+          fromName: fields.from_name,
+          fromLang: fields.from_lang,
+        });
+      } catch (e) {
+        console.error("[ring/send] whatsapp", e);
+      }
+    }
   }
   return NextResponse.json({ ok: true });
 }

@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useGroupCall } from '@/hooks/useGroupCall';
+import { useWakeLock } from '@/hooks/useWakeLock';
 import { getDeviceId } from '@/app/lib/language-os/device-id';
 import { reliablePost } from '@/app/lib/reliable-post';
 import { setInCall } from '@/app/lib/call-state';
@@ -516,6 +517,9 @@ export default function GroupCallPage() {
 
   const gc = useGroupCall();
   const learning = useLearningMode();
+  // Keep the screen awake while joining/active so iOS doesn't auto-lock and
+  // suspend the WebView, freezing the mesh connections.
+  useWakeLock(gc.phase === 'active' || gc.phase === 'joining');
 
   // The initial language must match on server and client (URL or 'en'); the
   // device default is applied after mount. Computing it during render made the

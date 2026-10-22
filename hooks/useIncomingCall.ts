@@ -306,10 +306,23 @@ export function useIncomingCall() {
       void pullPending();
       rebuild("device-id-restored");
     };
+    // The push-only service worker posts this when a call push arrives (closed/
+    // backgrounded wake) — pull the persisted invite IMMEDIATELY so the phone
+    // rings the instant the tab is woken, without waiting for the 4s poll.
+    const onSwMessage = (e: MessageEvent) => {
+      if ((e.data as { type?: string })?.type === "entrevoz-ring-wake") {
+        retryCount = 0;
+        void pullPending();
+        rebuild("push-wake");
+      }
+    };
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pageshow", onPageShow);
     window.addEventListener("online", onOnline);
     window.addEventListener("entrevoz:device-id-restored", onIdRestored);
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.addEventListener("message", onSwMessage);
+    }
 
     // iOS WKWebView: web visibilitychange is unreliable on lock/unlock and
     // app-switch. The Capacitor App plugin's native appStateChange fires
@@ -341,6 +354,9 @@ export function useIncomingCall() {
       window.removeEventListener("pageshow", onPageShow);
       window.removeEventListener("online", onOnline);
       window.removeEventListener("entrevoz:device-id-restored", onIdRestored);
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.removeEventListener("message", onSwMessage);
+      }
       appListener?.remove();
       teardownCurrent?.();
     };

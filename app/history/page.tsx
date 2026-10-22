@@ -199,6 +199,10 @@ interface CallRow {
   participant_2: string;
   partner_name: string | null;
   partner_code: string | null;
+  // The partner's CURRENT device id (drift-healed server-side): equals
+  // participant_2 when the stored id is still live, or the re-resolved live id
+  // when the partner re-registered under a new id. Dial THIS, not the frozen id.
+  partner_current_device?: string | null;
   language_pair: string | null;
   mode: string;
   duration_seconds: number | null;
@@ -231,9 +235,12 @@ function CallsView() {
     const myLang = localStorage.getItem("entrevoz_lang") || "en";
     const myName = localStorage.getItem("entrevoz_name") || "Someone";
     const theirLang = (c.language_pair || "").split("-")[1] || "en";
-    diag("invite-sent", { room: code, target: c.participant_2, type, surface: "history" });
+    // Dial the partner's CURRENT device (drift-healed), falling back to the
+    // stored id — so a partner who reinstalled under a new id is still reachable.
+    const target = c.partner_current_device || c.participant_2;
+    diag("invite-sent", { room: code, target, type, surface: "history" });
     try {
-      await sendCallInvite(c.participant_2, {
+      await sendCallInvite(target, {
         room: code,
         type,
         fromDevice: getDeviceId(),
@@ -245,7 +252,7 @@ function CallsView() {
       /* ring is best-effort — they can still join from the room */
     }
     const pn = c.partner_name ? `&pn=${encodeURIComponent(c.partner_name)}` : "";
-    const seed = `&name=${encodeURIComponent(myName)}&pd=${encodeURIComponent(c.participant_2)}&rt=${encodeURIComponent(c.participant_2)}${pn}`;
+    const seed = `&name=${encodeURIComponent(myName)}&pd=${encodeURIComponent(target)}&rt=${encodeURIComponent(target)}${pn}`;
     router.push(
       type === "video"
         ? `/call/${code}?lang=${myLang}&hostLang=${theirLang}&host=true&ring=1${seed}`

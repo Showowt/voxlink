@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { normalizeDialCode } from "@/app/lib/dial-code";
 
 export const dynamic = "force-dynamic";
 
@@ -64,10 +65,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ found: false }, { status: 429 });
   }
 
-  const code = (req.nextUrl.searchParams.get("code") || "")
-    .toUpperCase()
-    .replace(/[^0-9A-Z]/g, "")
-    .slice(0, 12);
+  // Use the SAME canonicalization as the client (dial-code.ts) so a human who
+  // mis-types an ambiguous character the alphabet forbids (0/O/1/I/L) doesn't
+  // get a false "code not found" from a client/server normalization mismatch.
+  const code = normalizeDialCode(req.nextUrl.searchParams.get("code") || "");
   if (!code) return NextResponse.json({ found: false });
 
   const { data, error } = await supabase

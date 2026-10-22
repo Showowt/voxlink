@@ -154,13 +154,66 @@ export async function GET(req: NextRequest) {
           .select("device_id, display_name, dial_code")
           .in("device_id", partnerIds);
         const byId = new Map((dirs || []).map((d) => [d.device_id, d]));
+
+        // DRIFT HEALING: a partner whose stored id is NO LONGER in the directory
+        // has re-registered under a NEW device id (reinstall / storage wipe) —
+        // History would otherwise dial the dead old id forever. Re-resolve by
+        // display_name, but ONLY when it maps to exactly ONE current device
+        // (unambiguous) so we never mis-dial a different person with the same name.
+        const driftedNames = Array.from(
+          new Set(
+            calls
+              .filter(
+                (c) =>
+                  typeof c.participant_2 === "string" &&
+                  c.participant_2.length >= 8 &&
+                  c.participant_2 !== "unknown" &&
+                  !byId.has(c.participant_2) &&
+                  meaningfulName(c.partner_name),
+              )
+              .map((c) => meaningfulName(c.partner_name) as string),
+          ),
+        );
+        const byName = new Map<string, { device_id: string; dial_code: string | null }>();
+        if (driftedNames.length) {
+          const { data: nameRows } = await admin
+            .from("dial_directory")
+            .select("device_id, display_name, dial_code, updated_at")
+            .in("display_name", driftedNames)
+            .order("updated_at", { ascending: false });
+          const distinct = new Map<string, Set<string>>();
+          const latest = new Map<string, { device_id: string; dial_code: string | null }>();
+          for (const r of nameRows || []) {
+            const n = r.display_name as string;
+            if (!distinct.has(n)) {
+              distinct.set(n, new Set());
+              latest.set(n, { device_id: r.device_id, dial_code: r.dial_code });
+            }
+            distinct.get(n)!.add(r.device_id);
+          }
+          Array.from(distinct.entries()).forEach(([n, set]) => {
+            if (set.size === 1) byName.set(n, latest.get(n)!); // unambiguous only
+          });
+        }
+
         for (const c of calls as Array<Record<string, unknown>>) {
           const dir = byId.get(c.participant_2 as string);
-          if (!dir) continue;
-          if (!c.partner_name && meaningfulName(dir.display_name)) {
-            c.partner_name = meaningfulName(dir.display_name);
+          if (dir) {
+            if (!c.partner_name && meaningfulName(dir.display_name)) {
+              c.partner_name = meaningfulName(dir.display_name);
+            }
+            c.partner_code = dir.dial_code || null;
+            c.partner_current_device = c.participant_2; // stored id is still live
+          } else {
+            // Stored id drifted out of the directory — use the unambiguous
+            // name re-resolution if we found one; otherwise leave as-is.
+            const nm = meaningfulName(c.partner_name);
+            const rr = nm ? byName.get(nm) : undefined;
+            if (rr) {
+              c.partner_current_device = rr.device_id;
+              c.partner_code = rr.dial_code || null;
+            }
           }
-          c.partner_code = dir.dial_code || null;
         }
       }
     }
