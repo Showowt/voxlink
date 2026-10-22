@@ -78,7 +78,13 @@ const body = (p) => p.evaluate(() => document.body.innerText);
 const a = await newPage({ consent: true, stubSpeech: true });
 await a.page.goto(`${BASE}/`, { waitUntil: "networkidle2", timeout: 45000 });
 await new Promise((r) => setTimeout(r, 2500));
-// Voice tab, then the record button
+// Home is calls-first since the nav overhaul: open the Translate tab,
+// then the Voice tab, then the record button.
+await a.page.evaluate(() => {
+  const top = [...document.querySelectorAll("button")].find((b) => /^translate$/i.test(b.innerText.trim()));
+  top?.click();
+});
+await new Promise((r) => setTimeout(r, 800));
 await a.page.evaluate(() => {
   const tab = [...document.querySelectorAll("button")].find((b) => /voice/i.test(b.innerText));
   tab?.click();
@@ -144,6 +150,12 @@ await c.page.evaluate(() => {
 });
 await new Promise((r) => setTimeout(r, 800));
 // Tap an AI feature (voice tab mic) → sheet must REAPPEAR
+// (calls-first home: the translator lives under the Translate tab)
+await c.page.evaluate(() => {
+  const top = [...document.querySelectorAll("button")].find((b) => /^translate$/i.test(b.innerText.trim()));
+  top?.click();
+});
+await new Promise((r) => setTimeout(r, 600));
 await c.page.evaluate(() => {
   const tab = [...document.querySelectorAll("button")].find((b) => /voice/i.test(b.innerText));
   tab?.click();

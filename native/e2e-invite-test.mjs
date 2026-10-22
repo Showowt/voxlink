@@ -108,11 +108,11 @@ if (momCode) {
 // 4) Manual-add branches
 await post(`${BASE}/api/directory`, {
   deviceId: CARLOS_ID,
-  dialCode: "QACARL",
+  dialCode: "QACAR2",
   displayName: "Carlos QA",
   language: "es",
 });
-const res = await j(`${BASE}/api/directory?code=QACARL`);
+const res = await j(`${BASE}/api/directory?code=QACAR2`);
 const addResolved = await post(`${BASE}/api/contacts`, {
   ownerDeviceId: PHIL_ID,
   contactDeviceId: res.d.deviceId,
