@@ -29,6 +29,21 @@ xcodebuild clean archive \
   -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
   COMPILER_INDEX_STORE_ENABLE=NO
 
+# Preflight: build 12 shipped a bundle whose LaunchScreen lookup threw at launch
+# (SplashScreen plugin → UIStoryboard → SIGABRT on every open, see
+# native/crash-build12-launch.txt). Never upload a bundle that would do that.
+APP_BUNDLE="build/App.xcarchive/Products/Applications/App.app"
+echo "▸ preflight: verifying archive bundle…"
+for SB in LaunchScreen Main; do
+  if [ ! -e "$APP_BUNDLE/Base.lproj/$SB.storyboardc" ]; then
+    echo "❌ $SB.storyboardc missing from the app bundle — the app would crash at launch. Upload aborted."
+    exit 1
+  fi
+done
+BUILD_NUM=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_BUNDLE/Info.plist")
+MARKETING=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_BUNDLE/Info.plist")
+echo "  bundle OK — $MARKETING ($BUILD_NUM), storyboards present"
+
 echo "▸ exporting + uploading to App Store Connect…"
 xcodebuild -exportArchive \
   -archivePath build/App.xcarchive \
