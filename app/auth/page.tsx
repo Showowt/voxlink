@@ -34,6 +34,12 @@ function AuthContent() {
     if (user) router.replace(next);
   }, [user, router, next]);
 
+  // Prefill the email when arriving from the reset flow (/auth?email=...).
+  useEffect(() => {
+    const e = params.get("email");
+    if (e) setEmail(e);
+  }, [params]);
+
   const handleSubmit = async () => {
     if (!email || !password) {
       setError("Email and password required");
@@ -218,6 +224,15 @@ function AuthContent() {
               onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm placeholder-white/25 focus:outline-none focus:border-[#00E5A0]/40 transition-colors min-h-[48px]"
             />
+
+            {mode === "signin" && (
+              <a
+                href={`/forgot-password${email ? `?email=${encodeURIComponent(email)}` : ""}`}
+                className="text-white/40 text-xs text-right -mt-1 hover:text-[#00E5A0]/80 transition-colors"
+              >
+                Forgot password? / ¿Olvidaste tu contraseña?
+              </a>
+            )}
 
             {error && (
               <p className="text-red-400 text-xs text-center" role="alert">
